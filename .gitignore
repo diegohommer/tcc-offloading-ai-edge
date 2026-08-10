@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AppleDouble sidecar files (seen on some Docker-Desktop bind mounts)
+._*
+
+# RecServe's utils.load_sentiment_dataset() caches each split at repo root
+# as ./<dataset>_test via datasets.save_to_disk()
+/*_test/
+
+# Generated experiment output
+results/traces/
+

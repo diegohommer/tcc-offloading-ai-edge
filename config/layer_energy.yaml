@@ -1,0 +1,134 @@
+# Layer energy tables, transcribed from the TCC master document, section 6.
+# All numbers are measured values from published sources, calibrated to
+# decoder-LLM decode-phase inference (0.5B-70B+ class models). They do NOT
+# describe the tiny encoder classifiers (66M-355M params) shipped by
+# default in third_party/recserve -- see third_party/recserve/NOTICE.md and
+# the root README for that caveat.
+#
+# Locked base (section 4): phase=decode, batch=1 where available, boundary
+# = chip/module (no PUE), unit = J per output token. Free variable:
+# precision. Fog/cloud batch=1 is not available in the literature surveyed;
+# their "isolated_query" / "production" regimes are used instead, each
+# tagged with its own batch so nothing gets silently compared across
+# incompatible regimes.
+
+meta:
+  base:
+    phase: decode
+    boundary: chip_or_module
+    unit: J_per_output_token
+    free_variable: precision
+
+layers:
+  user:
+    hardware: "Snapdragon 8 Elite Gen 5 (SM8850) - OnePlus 15 / Xiaomi 17"
+    source: "Cai et al., Is Your NPU Ready for LLMs?, arXiv:2607.05475"
+    regime: "batch=1, decode isolated from prefill, device cooled, airplane mode, repeated trials"
+    models:
+      llama3.2_1b:
+        precision: W4
+        decode_J_per_token: {cpu: 0.074, gpu_adreno: 0.11, npu_hexagon_mllm: 0.086}
+        best_backend_decode: cpu
+        decode_throughput_tok_s: {cpu: 72}
+      qwen2.5_1.5b:
+        precision: W4
+        decode_J_per_token: {cpu: 0.097, gpu_adreno: 0.14, npu_hexagon_mllm: 0.087}
+        best_backend_decode: cpu
+      llama3.2_3b:
+        precision: W4
+        decode_J_per_token: {cpu: 0.21, gpu_adreno: 0.25, npu_hexagon_genie: 0.71}
+        best_backend_decode: cpu
+        decode_throughput_tok_s: {cpu: 31}
+    notes: >
+      Prefill costs 1-2 orders of magnitude less than decode and runs best
+      on NPU (>2000 tok/s for the 1B model), but no exact prefill J/token
+      value is tabulated in the source. Report by best backend per phase.
+
+  onu:
+    hardware: "NVIDIA Jetson AGX Orin 64GB, 204.8 GB/s, MAXN"
+    source: "Kubwimana and Huang (NVIDIA), EdgeReasoning, arXiv:2511.01866"
+    regime: "batch=1, vLLM, prefill/decode measured separately via tegrastats/jtop, Zenodo artifact"
+    models:
+      qwen2.5_1.5b:
+        decode_J_per_token: {fp16: 0.51, w4: 0.22}
+        decode_throughput_tok_s: {fp16: 38, w4: 74}
+      llama3.1_8b:
+        decode_J_per_token: {fp16: 2.71, w4: 0.98}
+        decode_throughput_tok_s: {fp16: 9.0, w4: 26}
+      qwen2.5_14b:
+        decode_J_per_token: {fp16: 5.30, w4: 1.89}
+        decode_throughput_tok_s: {fp16: 5.0, w4: 15}
+    notes: >
+      Decode dominates >=99% of time and energy (prefill:decode latency
+      ratio 1:192 to 1:569); confirms the memory-bound regime (FLOPs:bytes
+      ~1375 on Orin). Relevant range for the ONU layer is 1.5B-8B.
+
+  fog:
+    hardware_class: "T4 / L4 / A30 / A2 / A16 / L40S -- any edge-datacenter class GPU with the best available measurement for a 7-13B model"
+    primary_source: "Watt Counts, arXiv:2604.09048 (A30 PCIe 24GB, 165W TDP, NVML @10Hz, GPU boundary, 16-bit)"
+    primary_point:
+      hardware: A30
+      model: SOLAR-10.7B-Instruct
+      decode_J_per_token: 0.3785
+      caveats:
+        - "batch=1000 server scenario, not decode-isolated"
+        - "no phase separation"
+        - "outlier flagged by Watt Counts authors: 21GB model near the 24GB card limit"
+    cross_check:
+      source: "WattGPU, arXiv:2607.02391 (predictive model built on the Watt Counts dataset, not an independent new measurement; read via alphaxiv.org mirror)"
+      hardware: A30
+      model: "Llama 3.1 8B"
+      decode_J_per_token_upper_bound: 0.625
+      derivation: "25W (Figure 1 mean power at the ITL<=25ms SLA filter) * 0.025s -- the 25ms is an SLA threshold used to filter which GPUs are 'viable' on the chart, not a measured ITL, so this is a ceiling, not a point estimate."
+      note: "Supports the memory-pressure-outlier reading: an 8B model that fits comfortably in 24GB comes in well under the SOLAR-10.7B point."
+    pending:
+      source: "arXiv:2603.20224 (L40S, batch=1 explicit, Llama 8B)"
+      status: "Full text read; decode J/token value exists only as a figure (MT-Bench, Figure 3), not as text/table. Manual figure reading is pending -- top fog priority (see section 11 of the master doc)."
+
+  cloud:
+    hardware_class: "A100 / H100 / B200 -- any hyperscale class GPU with the best available measurement for a 65B+ model"
+    isolated_query_regime:
+      source: "Samsi et al., arXiv:2310.03003"
+      hardware: A100
+      batch: 64
+      decode_J_per_token_range: [3, 4]
+      note: "batch=1 is not published anywhere in the literature surveyed for this GPU class; treated as the closest available point to an isolated-query regime."
+    production_regime:
+      source: "Oviedo et al. (Joule), arXiv:2509.20241, Table 1, Llama 3.1 70B"
+      ml_energy_v3:
+        J_per_query: 144
+        Wh_per_query: 0.04
+        hardware: 4xH100
+        precision: BF16
+        avg_output_tokens: 361
+        derived_J_per_token: 0.3989
+      caravaca_2025:
+        J_per_query: 180
+        Wh_per_query: 0.05
+    out_of_production_regime:
+      source: "AI Energy Score (2025), same table"
+      J_per_query: 3636
+      Wh_per_query: 1.01
+      note: "No batching, no serving engine -- ~20-25x more expensive per query than the production regime for the same model."
+    unconfirmed:
+      description: "218 mJ/token analytical estimator, searched for in From Tokens to Watt-hours (arXiv:2607.26571) and the Joule paper; not found in either. Excluded until the source is located."
+    pending:
+      description: "MLPerf Inference Power (MLCommons): tried via results viewer, GitHub code repo, and an AMD v5.1 submission blog; none yielded a J/token number for Llama2-70B. Per-version result repos (e.g. mlcommons/inference_results_v5.1) not yet opened directly. Top cloud priority (section 11)."
+
+link:
+  description: "ONU/PON access-network hop energy -- three orders of magnitude below inference terms, second-order for routing decisions."
+  onu_power_active_W: 3.98
+  onu_power_dozing_W: 1.2
+  onu_power_sleep_W: 0.4
+  onu_share_of_ftth_consumption_pct: 60
+  per_hop_energy_J: 0.1
+  sources:
+    - "Loading-Aware TDMA Sleep (MDPI Sustainability), https://www.mdpi.com/2071-1050/14/16/10238"
+    - "Sarigiannidis et al., IET Networks 2016, https://ietresearch.onlinelibrary.wiley.com/doi/10.1049/iet-net.2015.0087"
+    - "FTTH EE analysis (PMC), https://pmc.ncbi.nlm.nih.gov/articles/PMC12526558/"
+
+environment:
+  pue:
+    hyperscale: 1.1
+    average: 1.5
+  applies_to: [fog, cloud]
