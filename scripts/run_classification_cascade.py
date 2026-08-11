@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Run the vendored RecServe classification cascade over a dataset and
-record a per-query trace (JSONL): which layers were visited, how many
-prompt tokens each layer saw, confidence, latency, and correctness.
+"""Run the vendored RecServe classification cascade, extended to the
+4-tier user/onu/fog/cloud architecture (Pakpahan and Hwang, IEEE Access
+vol. 14, 2026), over a dataset and record a per-query trace (JSONL): which
+layers were visited, how many prompt tokens each layer saw, confidence,
+latency, and correctness.
 
 This is the "Part 1, functional" half of the section 12 experimental
 design: produce a real trace from a real run. The energy pricing of that
@@ -26,9 +28,13 @@ sys.path.insert(0, str(ROOT / "third_party" / "recserve"))
 from recserve_trace.traced_recursive_serve import TracedRecursiveServe  # noqa: E402
 from utils import load_sentiment_dataset  # noqa: E402  (vendored RecServe module)
 
-END_MODEL = "azizbarank/distilroberta-base-sst2-distilled"
-EDGE_MODEL = "textattack/roberta-base-SST-2"
-CLOUD_MODEL = "howey/roberta-large-sst2"
+# Increasing-capability ladder mirroring the 4-tier reference architecture.
+# The cloud-tier model is the exact DeBERTa-large checkpoint RecServe's own
+# paper (Section VII-C, Fig. 5) uses as a cloud-side swap-in.
+USER_MODEL = "azizbarank/distilroberta-base-sst2-distilled"
+ONU_MODEL = "textattack/roberta-base-SST-2"
+FOG_MODEL = "howey/roberta-large-sst2"
+CLOUD_MODEL = "Tomor0720/deberta-large-finetuned-sst2"
 
 LABEL_MAP = {0: "NEGATIVE", 1: "POSITIVE"}
 
@@ -52,12 +58,14 @@ def main() -> None:
     if args.limit:
         dataset = dataset.select(range(min(args.limit, len(dataset))))
 
-    print("Loading pipelines (end/edge/cloud) ...")
-    service = TracedRecursiveServe(END_MODEL, EDGE_MODEL, CLOUD_MODEL, beta=args.beta, device=args.device)
+    print("Loading pipelines (user/onu/fog/cloud) ...")
+    service = TracedRecursiveServe(
+        USER_MODEL, ONU_MODEL, FOG_MODEL, CLOUD_MODEL, beta=args.beta, device=args.device
+    )
 
     correct = 0
-    layer_visits = {"end": 0, "edge": 0, "cloud": 0}
-    layer_final = {"end": 0, "edge": 0, "cloud": 0}
+    layer_visits = {"user": 0, "onu": 0, "fog": 0, "cloud": 0}
+    layer_final = {"user": 0, "onu": 0, "fog": 0, "cloud": 0}
     total_latency_s = 0.0
 
     with open(out_path, "w") as f:

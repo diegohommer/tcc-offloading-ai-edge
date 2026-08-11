@@ -1,15 +1,26 @@
 """Thin instrumentation layer around the vendored RecServe cascade.
 
 RecServe (third_party/recserve) makes its offloading decision by escalating
-through end -> edge -> cloud tiers based on a beta-quantile confidence
-threshold, but it does not expose *how* a given query was routed: it only
-returns the final (label, confidence) and mutates internal history state.
+through tiers based on a beta-quantile confidence threshold, but it does
+not expose *how* a given query was routed: it only returns the final
+(label, confidence) and mutates internal history state, and its shipped
+code only implements 3 tiers (end/edge/cloud).
+
+This module re-implements RecursiveServe's routing loop with a 4th tier
+inserted, so the tier names and count match the reference architecture
+(Pakpahan and Hwang, IEEE Access vol. 14, 2026): user -> onu -> fog ->
+cloud, corresponding to Customer/Edge(ONU)/Fog(OLT)/Cloud in that paper's
+Fig. 1. These are also exactly the layer keys used by
+config/layer_energy.yaml, so a hop's tier name doubles as its energy-table
+lookup key -- no separate tier-to-layer mapping is needed (contrast with
+the 3-tier version, which had to proxy RecServe's "cloud" tier onto the
+"fog" energy layer for lack of a 4th tier).
 
 For the energy-costing pipeline we need, per query, the full path taken
 (which layers ran, how many prompt tokens each one saw, how long each hop
-took). This module re-implements RecursiveServe's routing loop against the
-same three pipelines while recording that path, instead of monkeypatching
-or forking the vendored code.
+took). This module re-implements RecursiveServe's routing loop against
+four pipelines while recording that path, instead of monkeypatching or
+forking the vendored code.
 """
 from __future__ import annotations
 
@@ -27,8 +38,8 @@ if str(THIRD_PARTY_RECSERVE) not in sys.path:
 
 from utils import clean_text  # noqa: E402  (vendored RecServe module)
 
-# Tier order mirrors RecServe's escalation chain: end -> edge -> cloud.
-NEXT_TIER = {"end": "edge", "edge": "cloud"}
+# Tier order mirrors the 4-tier reference architecture: user -> onu -> fog -> cloud.
+NEXT_TIER = {"user": "onu", "onu": "fog", "fog": "cloud"}
 MAX_INPUT_TOKENS = 512  # matches the pipeline's truncation=True, max_length=512
 
 
@@ -65,8 +76,9 @@ class TracedRecursiveServe:
 
     def __init__(
         self,
-        end_model_name: str,
-        edge_model_name: str,
+        user_model_name: str,
+        onu_model_name: str,
+        fog_model_name: str,
         cloud_model_name: str,
         beta: float = 0.3,
         max_history_size: int = 10000,
@@ -74,13 +86,18 @@ class TracedRecursiveServe:
     ):
         self.beta = beta
         self.max_history_size = max_history_size
-        self.model_names = {"end": end_model_name, "edge": edge_model_name, "cloud": cloud_model_name}
+        self.model_names = {
+            "user": user_model_name,
+            "onu": onu_model_name,
+            "fog": fog_model_name,
+            "cloud": cloud_model_name,
+        }
         self.pipelines = {
             tier: pipeline("sentiment-analysis", model=name, device=device, top_k=1)
             for tier, name in self.model_names.items()
         }
         self.tokenizers = {tier: AutoTokenizer.from_pretrained(name) for tier, name in self.model_names.items()}
-        self.confidence_history: dict[str, list[float]] = {"end": [], "edge": [], "cloud": []}
+        self.confidence_history: dict[str, list[float]] = {tier: [] for tier in self.model_names}
 
     def _count_tokens(self, tier: str, text: str) -> int:
         encoded = self.tokenizers[tier](text, truncation=True, max_length=MAX_INPUT_TOKENS)
@@ -107,7 +124,7 @@ class TracedRecursiveServe:
     def predict(self, input_text: str) -> QueryTrace:
         text = clean_text(input_text)
         trace = QueryTrace(input_text=text)
-        tier = "end"
+        tier = "user"
 
         while True:
             predicted_label, confidence, latency_s = self._classify_at(tier, text)

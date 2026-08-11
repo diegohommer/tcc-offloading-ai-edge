@@ -12,29 +12,35 @@ energy tables measured from published sources.
 ## Current state: a classification harness, not the thesis's generative cascade
 
 The published open-source RecServe implementation (`third_party/recserve/`,
-vendored unmodified) only does **sentiment classification**: three
-encoder-only classifiers (distilroberta / roberta-base / roberta-large,
-66M-355M parameters) escalating via a beta-quantile confidence threshold,
-with no token generation and no decode phase. The thesis's actual target
-(see the master document, section 12) needs a **generative** cascade of
-four decoder LLMs (user/ONU/fog/cloud, 0.5B-70B+) with prompt/output token
-counts per layer.
+vendored unmodified) only does **sentiment classification** with **three**
+tiers (end/edge/cloud), no token generation, and no decode phase. This
+repo's instrumented wrapper (`src/recserve_trace/`) extends that to the
+thesis's **four**-tier architecture — user / onu / fog / cloud, matching
+Pakpahan and Hwang (IEEE Access vol. 14, 2026) Fig. 1 — using four
+encoder-only classifiers of increasing capability (distilroberta /
+roberta-base / roberta-large / deberta-large, 66M-400M parameters)
+escalating via the same beta-quantile confidence threshold RecServe (and
+Pakpahan's own architecture) uses, one tier at a time. The thesis's actual
+target (see the master document, section 12) needs a **generative** cascade
+of four decoder LLMs (0.5B-70B+) with prompt/output token counts per layer.
 
 This repository sits at that midpoint, by explicit decision:
 
-1. **Real and working now:** run RecServe's classification cascade end to
+1. **Real and working now:** run the 4-tier classification cascade end to
    end, recording a per-query trace — layer visited, prompt tokens (via
    each model's own tokenizer), confidence, latency. This validates the
    beta-quantile escalation mechanism and the whole trace-to-energy
-   pipeline.
+   pipeline. Tier names (`user`/`onu`/`fog`/`cloud`) are the same keys used
+   by `config/layer_energy.yaml`, so a hop's tier doubles as its energy
+   lookup key directly, with no tier-to-layer proxy indirection.
 2. **Deliberately not fabricated:** the layer energy tables
    (`config/layer_energy.yaml`) were measured on decoder LLMs doing
-   multi-token decode, not on RecServe's tiny classifiers — no published
-   energy measurement exists for distilroberta/roberta-base/roberta-large.
-   So no "real" energy number is invented for the classification cascade.
-   An optional, clearly-labeled proxy (`--smoke-test-energy`) maps
-   RecServe's end/edge/cloud tiers onto three of the four layers and prices
-   the forward pass as if it were decode, solely to exercise the cost
+   multi-token decode, not on these tiny classifiers — no published energy
+   measurement exists for distilroberta/roberta-base/roberta-large/
+   deberta-large. So no "real" energy number is invented for the
+   classification cascade. An optional, clearly-labeled proxy
+   (`--smoke-test-energy`) prices each tier's forward pass as if it were
+   decode on that tier's representative model, solely to exercise the cost
    formulas end to end — never to cite as a thesis result.
 3. **Not built yet:** the real generative cascade (four decoder models,
    per-layer precision choice, local quantized and/or hosted-API execution).
@@ -78,8 +84,9 @@ python scripts/compute_energy_report.py results/traces/sst2_test.jsonl --smoke-t
 ```
 
 Models (`distilroberta-base-sst2-distilled`, `roberta-base-SST-2`,
-`roberta-large-sst2`) download automatically from the Hugging Face Hub on
-first use. `--device -1` (default) runs on CPU; this environment has no GPU.
+`roberta-large-sst2`, `deberta-large-finetuned-sst2`) download automatically
+from the Hugging Face Hub on first use. `--device -1` (default) runs on CPU;
+this environment has no GPU.
 
 ## Next steps (not implemented here)
 

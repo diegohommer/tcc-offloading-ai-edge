@@ -6,19 +6,20 @@ IMPORTANT CAVEAT -- read before trusting any number this prints:
 RecServe's shipped cascade classifies (single forward pass, no generation),
 while every entry in config/layer_energy.yaml was measured on decoder LLMs
 doing multi-token decode (0.5B-70B+ class models) against classifiers that
-are 66M-355M params. There is no published energy measurement for
-distilroberta/roberta-base/roberta-large at all. So this script does NOT
-invent one. What it reports:
+are 66M-400M params. There is no published energy measurement for
+distilroberta/roberta-base/roberta-large/deberta-large at all. So this
+script does NOT invent one. What it reports:
 
   1. Real, measured metrics from the actual run: latency, tokens processed,
      escalation path, accuracy. These are trustworthy.
   2. An OPTIONAL, clearly-labeled energy proxy (--smoke-test-energy) that
-     maps RecServe's end/edge/cloud tiers onto three of the four energy
-     layers (user/onu/fog) and prices each hop's prompt tokens as if they
-     were decode tokens on that layer's representative model. This exists
-     only to exercise the section-5 arithmetic end to end before the real
-     generative cascade exists -- it is explicitly NOT a thesis result, and
-     the report says so every time it's used.
+     prices each hop's prompt tokens as if they were decode tokens on that
+     tier's representative model (the trace's tier names are now the same
+     user/onu/fog/cloud keys used by config/layer_energy.yaml, one real
+     layer per tier -- no proxy substitution needed at the tier level
+     anymore). This exists only to exercise the section-5 arithmetic end
+     to end before the real generative cascade exists -- it is explicitly
+     NOT a thesis result, and the report says so every time it's used.
 
 Example:
     python scripts/compute_energy_report.py results/traces/sst2_test.jsonl
@@ -36,27 +37,33 @@ sys.path.insert(0, str(ROOT / "src"))
 from energy.cost import LayerVisit, aggregate_J_per_token, cascade_cost_J  # noqa: E402
 from energy.layer_energy import LayerEnergyTable  # noqa: E402
 
-# RecServe tier -> (energy layer, representative model, precision) used ONLY
-# for the smoke-test energy proxy. Picked as the smallest / most-local model
+# Trace tier -> representative (model, precision) used ONLY for the
+# smoke-test energy proxy. Picked as the smallest / most-local model
 # tabulated for each layer, since RecServe's classifiers are themselves tiny
-# relative to what these tables measure.
-TIER_TO_LAYER = {
-    "end": ("user", "llama3.2_1b", "cpu"),
-    "edge": ("onu", "qwen2.5_1.5b", "w4"),
-    "cloud": ("fog", None, None),  # fog uses the primary A30 point directly, no per-model table
+# relative to what these tables measure. Tier names now equal the
+# layer_energy.yaml layer keys directly (user/onu/fog/cloud), so unlike the
+# old 3-tier version, no tier is priced against the wrong layer.
+TIER_TO_MODEL = {
+    "user": ("llama3.2_1b", "cpu"),
+    "onu": ("qwen2.5_1.5b", "w4"),
+    # fog and cloud don't use a per-model table -- see LayerEnergyTable
+    # methods below, keyed directly off the layer's primary/isolated point.
 }
 
 
 def smoke_test_energy_for_hop(energy_table: LayerEnergyTable, tier: str, tokens_prompt: int) -> float:
-    layer, model_key, precision = TIER_TO_LAYER[tier]
-    if layer == "fog":
+    if tier == "fog":
         e_dec = energy_table.fog_primary_J_per_token()
+    elif tier == "cloud":
+        lo, hi = energy_table.cloud_isolated_query_J_per_token()
+        e_dec = (lo + hi) / 2  # isolated-query (closest to batch=1) regime, midpoint of the published range
     else:
-        e_dec = energy_table.decode_point(layer, model_key, precision).decode_J_per_token
+        model_key, precision = TIER_TO_MODEL[tier]
+        e_dec = energy_table.decode_point(tier, model_key, precision).decode_J_per_token
     # Proxy: treat the classifier's single forward pass over the prompt as if
     # every prompt token were a decode step on the mapped layer's model. This
     # is an admitted approximation solely to exercise the cost formula.
-    visit = LayerVisit(layer=layer, tokens_prompt=tokens_prompt, tokens_gen=tokens_prompt, E_dec_J_per_token=e_dec)
+    visit = LayerVisit(layer=tier, tokens_prompt=tokens_prompt, tokens_gen=tokens_prompt, E_dec_J_per_token=e_dec)
     return visit.E_dec_J_per_token * visit.tokens_gen
 
 
