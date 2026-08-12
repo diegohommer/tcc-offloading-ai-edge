@@ -1,6 +1,6 @@
 """Thin instrumentation layer around the vendored RecServe cascade.
 
-RecServe (src/third_party/recserve) makes its offloading decision by escalating
+RecServe (src/recserve/vendor) makes its offloading decision by escalating
 through tiers based on a beta-quantile confidence threshold, but it does
 not expose *how* a given query was routed: it only returns the final
 (label, confidence) and mutates internal history state, and its shipped
@@ -32,9 +32,9 @@ from pathlib import Path
 import numpy as np
 from transformers import AutoTokenizer, pipeline
 
-THIRD_PARTY_RECSERVE = Path(__file__).resolve().parents[1] / "third_party" / "recserve"
-if str(THIRD_PARTY_RECSERVE) not in sys.path:
-    sys.path.insert(0, str(THIRD_PARTY_RECSERVE))
+VENDORED_RECSERVE = Path(__file__).resolve().parent / "vendor"
+if str(VENDORED_RECSERVE) not in sys.path:
+    sys.path.insert(0, str(VENDORED_RECSERVE))
 
 from utils import clean_text  # noqa: E402  (vendored RecServe module)
 

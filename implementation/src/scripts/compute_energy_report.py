@@ -22,7 +22,7 @@ script does NOT invent one. What it reports:
      NOT a thesis result, and the report says so every time it's used.
 
 Example:
-    python scripts/compute_energy_report.py results/traces/sst2_test.jsonl
+    python src/scripts/compute_energy_report.py results/traces/sst2_test.jsonl
 """
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+SRC = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SRC))
 
 from energy.cost import LayerVisit, aggregate_J_per_token, cascade_cost_J  # noqa: E402
 from energy.layer_energy import LayerEnergyTable  # noqa: E402

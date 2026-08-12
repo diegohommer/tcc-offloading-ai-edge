@@ -8,7 +8,7 @@ repo elsewhere; they won't come with it.
 
 - `RecServe.pdf` — Wu et al., *Recursive Offloading for LLM Serving in
   Multi-tier Networks*, arXiv:2505.16502. Primary baseline; the vendored
-  code in `src/third_party/recserve/` implements this paper.
+  code in `implementation/src/recserve/vendor/` implements this paper.
 - `TieredPONLLM.pdf` — Pakpahan and Hwang, *Enabling Software-Defined
   Tiered LLM Inference Continuum on Passive Optical Network*, IEEE
   Access vol. 14, 2026, doi:10.1109/ACCESS.2026.3651558. Reference

@@ -7,10 +7,10 @@ latency, and correctness.
 
 This is the "Part 1, functional" half of the section 12 experimental
 design: produce a real trace from a real run. The energy pricing of that
-trace (Part 2) is a separate step -- see compute_energy_report.py.
+trace (Part 2) is a separate step -- see src/scripts/compute_energy_report.py.
 
 Example:
-    python scripts/run_classification_cascade.py --dataset sst2 --limit 40
+    python src/recserve/run_classification_cascade.py --dataset sst2 --limit 40
 """
 from __future__ import annotations
 
@@ -21,11 +21,12 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "src" / "third_party" / "recserve"))
+SRC = Path(__file__).resolve().parents[1]
+ROOT = SRC.parent
+sys.path.insert(0, str(SRC))
+sys.path.insert(0, str(SRC / "recserve" / "vendor"))
 
-from recserve_trace.traced_recursive_serve import TracedRecursiveServe  # noqa: E402
+from recserve.traced_recursive_serve import TracedRecursiveServe  # noqa: E402
 from utils import load_sentiment_dataset  # noqa: E402  (vendored RecServe module)
 
 # Increasing-capability ladder mirroring the 4-tier reference architecture.

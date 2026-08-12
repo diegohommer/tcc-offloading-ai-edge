@@ -220,32 +220,34 @@ __marimo__/
 # AppleDouble sidecar files (seen on some Docker-Desktop bind mounts)
 ._*
 
-# RecServe's utils.load_sentiment_dataset() caches each split at repo root
-# as ./<dataset>_test via datasets.save_to_disk()
-/*_test/
+# RecServe's utils.load_sentiment_dataset() caches each split as
+# ./<dataset>_test via datasets.save_to_disk(), relative to wherever the
+# process's cwd is when the script runs (unanchored so it's caught
+# regardless of cwd).
+*_test/
 
 # Generated experiment output
-results/traces/
+implementation/results/traces/
 
-# LaTeX build artifacts (regenerate with latexmk/pdflatex, see docs/latex/README.md)
-docs/latex/*.aux
-docs/latex/*.log
-docs/latex/*.toc
-docs/latex/*.lof
-docs/latex/*.lot
-docs/latex/*.out
-docs/latex/*.bbl
-docs/latex/*.blg
-docs/latex/*.fdb_latexmk
-docs/latex/*.fls
-docs/latex/*.synctex.gz
-docs/latex/*.nav
-docs/latex/*.snm
-docs/latex/*.vrb
-docs/latex/tcc.pdf
+# LaTeX build artifacts (regenerate with latexmk/pdflatex, see thesis/latex/README.md)
+thesis/latex/*.aux
+thesis/latex/*.log
+thesis/latex/*.toc
+thesis/latex/*.lof
+thesis/latex/*.lot
+thesis/latex/*.out
+thesis/latex/*.bbl
+thesis/latex/*.blg
+thesis/latex/*.fdb_latexmk
+thesis/latex/*.fls
+thesis/latex/*.synctex.gz
+thesis/latex/*.nav
+thesis/latex/*.snm
+thesis/latex/*.vrb
+thesis/latex/tcc.pdf
 
 # Reference papers: kept locally for convenience, not redistributed --
 # licensing varies by source (some are open-access, some aren't checked).
-# See docs/papers/README.md.
-docs/papers/*.pdf
+# See thesis/papers/README.md.
+thesis/papers/*.pdf
 
