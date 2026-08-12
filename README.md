@@ -21,8 +21,10 @@ encoder-only classifiers of increasing capability (distilroberta /
 roberta-base / roberta-large / deberta-large, 66M-400M parameters)
 escalating via the same beta-quantile confidence threshold RecServe (and
 Pakpahan's own architecture) uses, one tier at a time. The thesis's actual
-target (see the master document, section 12) needs a **generative** cascade
-of four decoder LLMs (0.5B-70B+) with prompt/output token counts per layer.
+target needs a **generative** cascade of four decoder LLMs (0.5B-70B+)
+with prompt/output token counts per layer (design not yet written up;
+section 12 of the master document is the energy-aware policy design
+instead — see below).
 
 This repository sits at that midpoint, by explicit decision:
 
@@ -102,6 +104,12 @@ real trace). From this repository's side specifically:
   Seq2Class.
 - Fix `|T_prompt|` and `|T_gen|` from a real generative-cascade trace, not
   a separately estimated distribution.
+- Implement the energy-aware offloading policy (design in section 12 of
+  the master document and `tcc_politica_energia_desenho.md`): a
+  confidence gate plus a skip-capable, energy-cost-minimizing tier
+  choice, with per-tier batch/utilization regime inferred locally from
+  recent escalation frequency instead of live cross-tier telemetry. Not
+  implemented or tested yet.
 
 ---
 **Author:** Diego Amorim
