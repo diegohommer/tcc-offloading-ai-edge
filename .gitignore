@@ -227,3 +227,25 @@ __marimo__/
 # Generated experiment output
 results/traces/
 
+# LaTeX build artifacts (regenerate with latexmk/pdflatex, see docs/latex/README.md)
+docs/latex/*.aux
+docs/latex/*.log
+docs/latex/*.toc
+docs/latex/*.lof
+docs/latex/*.lot
+docs/latex/*.out
+docs/latex/*.bbl
+docs/latex/*.blg
+docs/latex/*.fdb_latexmk
+docs/latex/*.fls
+docs/latex/*.synctex.gz
+docs/latex/*.nav
+docs/latex/*.snm
+docs/latex/*.vrb
+docs/latex/tcc.pdf
+
+# Reference papers: kept locally for convenience, not redistributed --
+# licensing varies by source (some are open-access, some aren't checked).
+# See docs/papers/README.md.
+docs/papers/*.pdf
+

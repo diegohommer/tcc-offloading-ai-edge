@@ -1,6 +1,6 @@
 """Scaffold for the deferred generative track (section 12 of the master doc).
 
-RecServe's shipped code (third_party/recserve) only implements a Seq2Class
+RecServe's shipped code (src/third_party/recserve) only implements a Seq2Class
 cascade: single forward pass, no output-token generation. The thesis's real
 experiment needs a Seq2Seq cascade -- four decoder LLMs (user/onu/fog/cloud
 scale), a perplexity- or confidence-based escalation rule reimplementing

@@ -2,7 +2,7 @@
 # All numbers are measured values from published sources, calibrated to
 # decoder-LLM decode-phase inference (0.5B-70B+ class models). They do NOT
 # describe the tiny encoder classifiers (66M-355M params) shipped by
-# default in third_party/recserve -- see third_party/recserve/NOTICE.md and
+# default in src/third_party/recserve -- see src/third_party/recserve/NOTICE.md and
 # the root README for that caveat.
 #
 # Locked base (section 4): phase=decode, batch=1 where available, boundary

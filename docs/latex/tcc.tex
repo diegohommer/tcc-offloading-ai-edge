@@ -1,0 +1,399 @@
+%==============================================================================
+% tcc.tex --- Avaliacao do custo energetico de politicas de offloading
+% baseadas em confianca em cascatas hierarquicas de inferencia de LLMs
+% sobre redes opticas passivas
+%
+% Rascunho parcial: capitulos 1 (Introducao) e 2 (Revisao Bibliografica).
+% Metodologia, resultados e conclusao ainda serao escritos.
+%
+% Compilar com:
+%   pdflatex tcc
+%   bibtex   tcc
+%   pdflatex tcc
+%   pdflatex tcc
+%==============================================================================
+
+\documentclass[cic,dipl]{infufrgs}
+
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+
+%------------------------------------------------------------------------------
+% Metadados do documento
+%------------------------------------------------------------------------------
+\title{Avalia\c{c}\~ao do custo energ\'etico de pol\'iticas de offloading
+  baseadas em confian\c{c}a em cascatas hier\'arquicas de infer\^encia de
+  LLMs sobre redes \'opticas passivas}
+
+\author{Amorim}{Diego Hommerding}
+
+% Orientador ainda pendente de confirmacao formal (ver documento mestre,
+% secao 10 e 11, item 1). Nome completo e titulacao a confirmar.
+\advisor[Prof.]{Nazar}{}
+
+%------------------------------------------------------------------------------
+% Palavras-chave
+%------------------------------------------------------------------------------
+\keyword{Infer\^encia distribu\'ida de LLMs}
+\keyword{Redes \'opticas passivas}
+\keyword{Efici\^encia energ\'etica}
+\keyword{Offloading baseado em confian\c{c}a}
+\keyword{Computa\c{c}\~ao em n\'evoa}
+
+%==============================================================================
+\begin{document}
+%==============================================================================
+
+\maketitle
+
+%------------------------------------------------------------------------------
+\begin{abstract}
+Arquiteturas hier\'arquicas de infer\^encia de LLMs distribuem o
+processamento entre dispositivo de usu\'ario, borda, fog e nuvem, decidindo
+em cada n\'ivel se respondem localmente ou encaminham a requisi\c{c}\~ao
+para um modelo maior. As pol\'iticas atuais dessa decis\~ao, como o
+RecServe \cite{wu2025recserve} e a arquitetura sobre TWDM-PON de Pakpahan e
+Hwang \cite{pakpahan2026continuum}, otimizam qualidade, lat\^encia e uso de
+banda, mas n\~ao consideram o consumo de energia. Este trabalho avalia o
+impacto energ\'etico dessas pol\'iticas de offloading, estabelecendo uma
+base de medi\c{c}\~ao compar\'avel entre as camadas e caracterizando o
+custo de cada uma a partir de dados j\'a publicados. Com isso, busca
+identificar quando uma decis\~ao de roteamento ciente de energia
+diferiria da decis\~ao baseada apenas em confian\c{c}a, apontando
+caminhos para uma infer\^encia distribu\'ida mais eficiente sobre redes
+de acesso \'optico.
+\end{abstract}
+
+\tableofcontents
+
+\listoffigures
+
+\listoftables
+
+\begin{listofabbrv}{TWDM-PON}
+  \item[LLM]  Large Language Model
+  \item[NPU]  Neural Processing Unit
+  \item[ONU]  Optical Network Unit
+  \item[OLT]  Optical Line Terminal
+  \item[PON]  Passive Optical Network
+  \item[PUE]  Power Usage Effectiveness
+  \item[TWDM-PON] Time and Wavelength Division Multiplexed Passive Optical Network
+\end{listofabbrv}
+
+%==============================================================================
+\chapter{Introdu\c{c}\~ao}
+\label{cap:introducao}
+%==============================================================================
+
+\section{Contextualiza\c{c}\~ao}
+
+Arquiteturas hier\'arquicas de infer\^encia de modelos de linguagem de
+grande porte (LLMs) distribuem o processamento entre m\'ultiplos n\'iveis:
+o dispositivo do usu\'ario, a borda da rede, a camada de fog e a nuvem. Em
+cada n\'ivel, o sistema decide se responde localmente, usando um modelo
+menor e mais barato, ou encaminha a requisi\c{c}\~ao para um modelo maior
+em um n\'ivel superior, mais caro por\'em mais capaz. Essa decis\~ao de
+roteamento, chamada de offloading, \'e o n\'ucleo de dois trabalhos
+recentes que servem de baseline para esta pesquisa.
+
+O RecServe \cite{wu2025recserve} prop\~oe um esquema de offloading
+recursivo baseado em um limiar de confian\c{c}a: em cada camada, a
+confian\c{c}a da resposta gerada localmente \'e comparada contra um
+limiar din\^amico, calculado como um quantil de um hist\'orico local de
+confian\c{c}a mantido em uma janela deslizante. A requisi\c{c}\~ao \'e
+escalonada para a camada seguinte somente quando essa confian\c{c}a fica
+abaixo do limiar. O limiar \'e din\^amico de prop\'osito, para n\~ao
+depender de um corte fixo escolhido manualmente, que n\~ao generalizaria
+conforme a distribui\c{c}\~ao de confian\c{c}a do modelo muda com o
+tr\'afego.
+
+Pakpahan e Hwang \cite{pakpahan2026continuum} prop\~oem uma arquitetura de
+infer\^encia hier\'arquica sobre redes \'opticas passivas com
+multiplexa\c{c}\~ao por divis\~ao de tempo e comprimento de onda
+(TWDM-PON), mapeando cada camada da hierarquia, usu\'ario, ONU (Optical
+Network Unit), OLT (Optical Line Terminal) e nuvem, a uma faixa de
+tamanho de modelo e a uma classe de hardware, de forma a atender
+requisitos de qualidade de servi\c{c}o sobre a rede de acesso \'optico.
+
+\section{Problema e lacuna}
+
+Ambos os trabalhos otimizam aspectos relevantes do sistema, mas nenhum
+considera energia como crit\'erio de decis\~ao. O RecServe otimiza a
+quantidade de bytes trocados durante a cascata de offloading. Pakpahan e
+Hwang otimizam qualidade de servi\c{c}o sobre a rede \'optica,
+especificamente lat\^encia, jitter e vaz\~ao. O consumo de energia por
+decis\~ao de roteamento n\~ao aparece como vari\'avel de otimiza\c{c}\~ao
+em nenhum dos dois.
+
+Essa lacuna \'e relevante porque a intui\c{c}\~ao mais comum, a de que
+responder localmente \'e sempre mais eficiente energeticamente do que
+escalar para um modelo maior, n\~ao \'e necessariamente verdadeira quando
+se considera a efici\^encia energ\'etica do hardware de cada camada e o
+regime de opera\c{c}\~ao (batelada ou n\~ao) em que ele processa
+requisi\c{c}\~oes. Um hardware de nuvem, mesmo servindo um modelo muito
+maior, pode ser mais eficiente por token do que um hardware de fog mais
+fraco servindo um modelo intermedi\'ario, dependendo de como ambos s\~ao
+utilizados em produ\c{c}\~ao.
+
+A pergunta central deste trabalho \'e: considerar energia, e n\~ao s\'o
+confian\c{c}a, desloca o ponto de decis\~ao de roteamento em uma cascata
+hier\'arquica de infer\^encia de LLMs? Essa pergunta se sustenta mesmo
+sem uma pol\'itica de roteamento nova: medir energia sobre a arquitetura
+de offloading j\'a \'e uma contribui\c{c}\~ao, na medida em que nenhum
+dos baselines mede ou otimiza esse recurso. Uma pol\'itica de decis\~ao
+ciente de energia, a ser detalhada em cap\'itulos futuros deste
+documento, \'e um resultado adicional, n\~ao uma depend\^encia da
+contribui\c{c}\~ao principal.
+
+\section{Objetivos}
+
+O objetivo geral deste trabalho \'e avaliar o impacto energ\'etico de
+pol\'iticas de offloading baseadas em confian\c{c}a em cascatas
+hier\'arquicas de infer\^encia de LLMs sobre redes \'opticas passivas.
+
+Os objetivos espec\'ificos s\~ao:
+
+\begin{enumerate}
+  \item Estabelecer uma base de medi\c{c}\~ao de energia compar\'avel
+    entre as camadas de usu\'ario, borda, fog e nuvem, a partir de dados
+    j\'a publicados na literatura, fixando os fatores que impedem a
+    compara\c{c}\~ao direta entre estudos (batch, precis\~ao, fase da
+    infer\^encia, fronteira de medi\c{c}\~ao e efici\^encia do
+    datacenter).
+  \item Caracterizar o custo energ\'etico de cada camada da hierarquia
+    usando essa base, identificando onde a literatura j\'a oferece
+    medi\c{c}\~ao direta no hardware da classe correspondente e onde
+    permanecem lacunas.
+  \item Instrumentar o RecServe para contabilizar energia por decis\~ao
+    de roteamento, associando cada trecho da cascata percorrida por uma
+    requisi\c{c}\~ao ao custo energ\'etico da camada que a processou.
+  \item Propor e avaliar uma pol\'itica de roteamento ciente de energia,
+    comparando-a com a pol\'itica original baseada apenas em confian\c{c}a,
+    e caracterizar em quais condi\c{c}\~oes as duas decis\~oes divergem.
+\end{enumerate}
+
+\section{Organiza\c{c}\~ao do texto}
+
+O restante deste documento est\'a organizado da seguinte forma. O
+Cap\'itulo~\ref{cap:revisao} apresenta a revis\~ao bibliogr\'afica,
+detalhando os dois trabalhos de baseline, as m\'etricas de energia
+usadas na literatura de infer\^encia de LLMs e os estudos de medi\c{c}\~ao
+de energia dispon\'iveis para cada classe de hardware da hierarquia. Os
+cap\'itulos de metodologia, resultados e conclus\~ao ainda ser\~ao
+escritos, \`a medida que a base de medi\c{c}\~ao for fechada e o
+experimento de compara\c{c}\~ao entre pol\'iticas for executado.
+
+%==============================================================================
+\chapter{Revis\~ao Bibliogr\'afica}
+\label{cap:revisao}
+%==============================================================================
+
+Este cap\'itulo apresenta os trabalhos que fundamentam esta pesquisa. A
+Se\c{c}\~ao~\ref{sec:recserve} detalha o RecServe, o baseline de
+implementa\c{c}\~ao da pol\'itica de offloading. A
+Se\c{c}\~ao~\ref{sec:pakpahan} detalha a arquitetura de infer\^encia
+hier\'arquica sobre TWDM-PON de Pakpahan e Hwang, usada como refer\^encia
+de mapeamento entre camada, modelo e hardware. A
+Se\c{c}\~ao~\ref{sec:metricas} apresenta as m\'etricas de energia
+propostas na literatura para infer\^encia de LLMs. A
+Se\c{c}\~ao~\ref{sec:medicoes} revisa os estudos de medi\c{c}\~ao de
+energia dispon\'iveis para cada classe de hardware da hierarquia. A
+Se\c{c}\~ao~\ref{sec:sintese} sintetiza a lacuna identificada nesses
+trabalhos, que sustenta a contribui\c{c}\~ao desta pesquisa.
+
+\section{Offloading recursivo baseado em confian\c{c}a: RecServe}
+\label{sec:recserve}
+
+O RecServe \cite{wu2025recserve} \'e um esquema de offloading para
+servi\c{c}o de LLMs em redes de m\'ultiplas camadas. Para uma consulta
+$x$ processada na camada $M$ com tarefa $\tau$, a decis\~ao segue a
+regra
+
+\begin{equation}
+  \text{Decis\~ao}(x) =
+  \begin{cases}
+    M, & \text{se } C_{M,\tau}(x) \geq T_{M,\tau}(\beta) \\
+    \text{escalona para } M+1, & \text{se } C_{M,\tau}(x) < T_{M,\tau}(\beta)
+  \end{cases}
+\end{equation}
+
+em que $C_{M,\tau}(x)$ \'e a confian\c{c}a da resposta gerada na camada
+$M$ e $T_{M,\tau}(\beta)$ \'e o quantil $\beta$ sobre o hist\'orico local
+de confian\c{c}a $H_{M,\tau}$, mantido em uma fila deslizante de tamanho
+$k$. A cascata escalona apenas um degrau por vez, nunca pulando
+camadas, e a decis\~ao \'e tomada localmente em cada camada, sem
+depend\^encia de informa\c{c}\~ao das demais.
+
+O limiar din\^amico \'e a caracter\'istica central do RecServe: em vez de
+um corte fixo escolhido manualmente, o sistema recalcula o limiar a
+partir da distribui\c{c}\~ao recente de confian\c{c}a observada na
+pr\'opria camada, adaptando-se a mudan\c{c}as no tr\'afego ou na
+dificuldade das consultas ao longo do tempo. Outras partes do sistema,
+no entanto, permanecem est\'aticas por escolha de projeto: o modelo
+usado em cada camada \'e uma configura\c{c}\~ao fixa, e os
+hiperpar\^ametros $\beta$ e $k$ s\~ao fixados por experimento, n\~ao
+reestimados durante a execu\c{c}\~ao. O c\'odigo do RecServe \'e aberto,
+o que permite instrument\'a-lo diretamente para os fins desta pesquisa.
+
+O RecServe otimiza a quantidade de bytes de comunica\c{c}\~ao trocados
+durante a cascata de offloading. Energia n\~ao \'e uma vari\'avel
+considerada na decis\~ao de roteamento nem contabilizada como m\'etrica
+de avalia\c{c}\~ao.
+
+\section{Infer\^encia hier\'arquica sobre TWDM-PON}
+\label{sec:pakpahan}
+
+Pakpahan e Hwang \cite{pakpahan2026continuum} prop\~oem uma arquitetura
+de infer\^encia hier\'arquica definida por software sobre uma rede
+\'optica passiva com multiplexa\c{c}\~ao por divis\~ao de tempo e
+comprimento de onda (TWDM-PON). A proposta mapeia cada n\'ivel da
+hierarquia de rede a uma faixa de tamanho de modelo e a uma classe de
+hardware, conforme resumido na Tabela~\ref{tab:pakpahan}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Mapeamento entre camada, modelo e hardware proposto por Pakpahan e Hwang \cite{pakpahan2026continuum}.}
+  \label{tab:pakpahan}
+  \begin{tabular}{lll}
+    \hline
+    \textbf{Camada} & \textbf{Modelo} & \textbf{Hardware} \\
+    \hline
+    Usu\'ario & tiny-LLM (menos de 1B) & NPU de celular \\
+    ONU (borda) & 0,5 a 7B & Jetson \\
+    OLT (fog) & 7 a 13B & A30 / T4 \\
+    Nuvem & 70B ou mais & A100 / H100 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Essa arquitetura otimiza qualidade de servi\c{c}o sobre a rede \'optica,
+particularmente lat\^encia, jitter e vaz\~ao entre as camadas. \'E usada
+neste trabalho como arquitetura de refer\^encia para o mapeamento entre
+camada e classe de hardware, e como ponto de partida para o crit\'erio de
+sele\c{c}\~ao de fontes de medi\c{c}\~ao de energia apresentado na
+Se\c{c}\~ao~\ref{sec:medicoes}. Assim como o RecServe, essa arquitetura
+n\~ao considera consumo de energia entre os crit\'erios de otimiza\c{c}\~ao.
+
+\section{M\'etricas de energia para infer\^encia de LLMs}
+\label{sec:metricas}
+
+Dois trabalhos recentes propõem m\'etricas de energia especificamente
+para infer\^encia de LLMs e s\~ao usados como refer\^encia de m\'etodo
+nesta pesquisa. Solovyeva e Castor \cite{solovyeva2026green} prop\~oem
+medir o custo energ\'etico de infer\^encia em joules por token de sa\'ida
+(J/token), separando a medi\c{c}\~ao por fase de infer\^encia (prefill e
+decode). Essa \'e a unidade adotada como base para a compara\c{c}\~ao
+entre camadas neste trabalho, descrita em detalhe no cap\'itulo de
+metodologia.
+
+Li e Lu \cite{li2026ecothink} prop\~oem uma m\'etrica de emiss\~ao de
+carbono por consulta (gCO2/query), derivada da energia por consulta
+multiplicada pela efici\^encia do datacenter (\emph{Power Usage
+Effectiveness}, PUE) e pela intensidade de carbono da rede el\'etrica
+local. Essa m\'etrica \'e mais pr\'oxima do objetivo final de avaliar
+impacto ambiental, mas depende de fatores externos ao hardware
+(localiza\c{c}\~ao do datacenter, matriz energ\'etica local) que
+dificultam a compara\c{c}\~ao direta entre camadas heterog\^eneas de uma
+cascata distribu\'ida. Este trabalho usa J/token como unidade prim\'aria
+e deriva gCO2/query como m\'etrica secund\'aria, quando aplic\'avel.
+
+\section{Medi\c{c}\~ao de energia por classe de hardware}
+\label{sec:medicoes}
+
+Esta se\c{c}\~ao revisa os estudos de medi\c{c}\~ao de energia
+dispon\'iveis para cada classe de hardware da hierarquia definida por
+Pakpahan e Hwang \cite{pakpahan2026continuum}. Nem todos os estudos usam
+exatamente o mesmo hardware citado por Pakpahan e Hwang; quando a
+medi\c{c}\~ao exata n\~ao est\'a dispon\'ivel, prioriza-se o estudo mais
+rigoroso dentro da mesma classe de implanta\c{c}\~ao (dispositivo de
+usu\'ario, borda, fog ou hyperscale), crit\'erio detalhado no cap\'itulo
+de metodologia.
+
+\subsection{Dispositivo de usu\'ario}
+
+Cai et al. \cite{cai2026npu} medem energia por token e vaz\~ao em um
+processador Snapdragon~8~Elite~Gen~5, separando a medi\c{c}\~ao por fase
+de infer\^encia e por unidade de computa\c{c}\~ao (CPU, GPU e NPU), com
+quantiza\c{c}\~ao de 4 bits e tamanho de lote igual a 1. Um achado
+relevante desse estudo \'e que, no decode, a CPU do celular costuma ser
+mais eficiente energeticamente do que a GPU, e a NPU pode consumir de 2 a
+4 vezes mais energia de decode apesar de ser frequentemente associada a
+efici\^encia energ\'etica; a NPU domina apenas na fase de prefill.
+
+\subsection{Borda}
+
+Kubwimana e Huang \cite{kubwimana2025edgereasoning} medem energia por
+token em uma placa NVIDIA Jetson AGX Orin, o hardware exato atribu\'ido
+\`a ONU por Pakpahan e Hwang, separando prefill e decode, em FP16 e
+quantiza\c{c}\~ao de 4 bits, com tamanho de lote igual a 1. O estudo
+confirma que o decode domina 99\% ou mais do tempo e da energia total de
+infer\^encia nessa classe de hardware, consistente com um regime
+limitado por banda de mem\'oria (\emph{memory-bound}) para infer\^encia
+com lote pequeno.
+
+\subsection{Fog}
+
+Tr\^es estudos recentes medem energia em GPUs de classe fog (A30, T4,
+L4, L40S). Fadel Argerich, F\"urst e Pati\~no-Mart\'inez
+\cite{fadelargerich2026wattcounts} medem energia por token para
+diversos modelos e GPUs em cen\'ario de servidor com lote alto,
+incluindo um ponto direto em uma placa A30. Em trabalho complementar,
+os mesmos autores \cite{fadelargerich2026wattgpu} medem pot\^encia sob
+restri\c{c}\~ao de lat\^encia entre tokens (\emph{inter-token latency}),
+tamb\'em em GPUs A30. Wilhelm, Wittkopp e Kao
+\cite{wilhelm2026energypertoken} defendem o uso de energia por token
+como m\'etrica prim\'aria de avalia\c{c}\~ao de infer\^encia e
+apresentam medi\c{c}\~oes em GPU L40S com tamanho de lote igual a 1,
+o cen\'ario mais pr\'oximo da base de medi\c{c}\~ao adotada nas camadas
+de usu\'ario e borda deste trabalho.
+
+\subsection{Nuvem}
+
+Samsi et al. \cite{samsi2023words2watts} medem energia por token para
+modelos da fam\'ilia Llama de 65 a 70 bilh\~oes de par\^ametros em GPUs
+A100, com tamanho de lote igual a 64. Oviedo et al.
+\cite{oviedo2026joule}, publicado no peri\'odico \emph{Joule}, comparam
+energia por consulta entre diferentes sistemas de \emph{serving} em
+produ\c{c}\~ao para o modelo Llama~3.1~70B, incluindo cen\'arios com e
+sem \emph{batching}, mostrando uma varia\c{c}\~ao de at\'e uma ordem de
+grandeza entre o regime de produ\c{c}\~ao real e um cen\'ario isolado
+sem otimiza\c{c}\~oes de \emph{serving}.
+
+Um achado consistente entre os estudos revisados nesta subse\c{c}\~ao,
+tamb\'em observado nos estudos de fog citados acima, \'e que nenhum
+registra medi\c{c}\~ao de fog ou nuvem em tamanho de lote igual a 1 que
+reflita um cen\'ario de produ\c{c}\~ao real: essas camadas, na pr\'atica,
+sempre atendem m\'ultiplas requisi\c{c}\~oes simultaneamente para
+amortizar o custo do hardware. Essa aus\^encia \'e tratada neste
+trabalho como uma caracter\'istica estrutural do dom\'inio, discutida em
+detalhe no cap\'itulo de metodologia.
+
+\section{S\'intese}
+\label{sec:sintese}
+
+Os dois baselines revisados neste cap\'itulo, RecServe
+\cite{wu2025recserve} e a arquitetura sobre TWDM-PON de Pakpahan e Hwang
+\cite{pakpahan2026continuum}, otimizam qualidade, lat\^encia e uso de
+banda, mas nenhum considera energia como crit\'erio de decis\~ao. As
+m\'etricas de energia propostas na literatura \cite{solovyeva2026green,
+li2026ecothink} oferecem o vocabul\'ario metodol\'ogico para medir esse
+custo, e os estudos de medi\c{c}\~ao por classe de hardware
+\cite{cai2026npu, kubwimana2025edgereasoning,
+fadelargerich2026wattcounts, fadelargerich2026wattgpu,
+wilhelm2026energypertoken, samsi2023words2watts, oviedo2026joule}
+oferecem dados publicados suficientes para caracterizar o custo
+energ\'etico de cada camada da hierarquia, ainda que com graus
+desiguais de cobertura entre as camadas. \'E essa combina\c{c}\~ao,
+crit\'erios de decis\~ao sem energia e dados de energia dispersos na
+literatura sem uma base comparável entre camadas, que sustenta a
+contribui\c{c}\~ao desta pesquisa, detalhada no cap\'itulo de
+metodologia.
+
+%==============================================================================
+% Referencias
+%==============================================================================
+\bibliographystyle{abntex2-alf}
+\bibliography{tcc}
+
+\end{document}

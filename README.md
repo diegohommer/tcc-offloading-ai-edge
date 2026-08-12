@@ -11,7 +11,7 @@ energy tables measured from published sources.
 
 ## Current state: a classification harness, not the thesis's generative cascade
 
-The published open-source RecServe implementation (`third_party/recserve/`,
+The published open-source RecServe implementation (`src/third_party/recserve/`,
 vendored unmodified) only does **sentiment classification** with **three**
 tiers (end/edge/cloud), no token generation, and no decode phase. This
 repo's instrumented wrapper (`src/recserve_trace/`) extends that to the
@@ -54,9 +54,9 @@ This repository sits at that midpoint, by explicit decision:
 ```
 config/
   layer_energy.yaml         # layer energy tables, each value with its source and caveats
-third_party/
-  recserve/                 # unmodified vendored copy of RecServe (see NOTICE.md)
 src/
+  third_party/
+    recserve/                 # unmodified vendored copy of RecServe (see NOTICE.md)
   recserve_trace/
     traced_recursive_serve.py   # instrumented reimplementation of RecServe's escalation loop
   energy/
@@ -69,6 +69,9 @@ scripts/
   compute_energy_report.py        # converts a trace into an energy report (CSV) via the layer energy tables
 results/
   traces/                    # output of the scripts above (generated, not version-controlled)
+docs/
+  latex/                     # TCC LaTeX draft (infufrgs/abntex2 template), see docs/latex/README.md
+  papers/                    # local copies of cited papers, not version-controlled, see docs/papers/README.md
 ```
 
 ## Running it

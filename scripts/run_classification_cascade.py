@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "third_party" / "recserve"))
+sys.path.insert(0, str(ROOT / "src" / "third_party" / "recserve"))
 
 from recserve_trace.traced_recursive_serve import TracedRecursiveServe  # noqa: E402
 from utils import load_sentiment_dataset  # noqa: E402  (vendored RecServe module)
