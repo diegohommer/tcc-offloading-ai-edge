@@ -82,8 +82,8 @@ layers:
       derivation: "25W (Figure 1 mean power at the ITL<=25ms SLA filter) * 0.025s -- the 25ms is an SLA threshold used to filter which GPUs are 'viable' on the chart, not a measured ITL, so this is a ceiling, not a point estimate."
       note: "Supports the memory-pressure-outlier reading: an 8B model that fits comfortably in 24GB comes in well under the SOLAR-10.7B point."
     pending:
-      source: "arXiv:2603.20224 (L40S, batch=1 explicit, Llama 8B)"
-      status: "Full text read; decode J/token value exists only as a figure (MT-Bench, Figure 3), not as text/table. Manual figure reading is pending -- top fog priority (see section 11 of the master doc)."
+      source: "Wilhelm, Wittkopp and Kao, Beyond Test-Time Compute Strategies, arXiv:2603.20224 / EuroMLSys'25 (L40S, batch=1 explicit, Llama 8B)"
+      status: "Full text confirmed read (HTML and all 8 PDF pages, not just abstract): Figure 3 ('Non-linear behavior in token generation', log2 x-axis over 1-128 generated tokens) is a rendered chart with no backing data table. Table 1 gives only aggregate kJ totals per MMLU category for Llama 1B vs 8B (single-output-token queries, prefill+decode combined, per-category sample count not stated), which does not reduce to a comparable decode J/token at batch=1. No GitHub/Zenodo artifact with raw numbers was found (checked for a repo under the authors' names and the TU Berlin DOS group). No later work was found quoting this specific number in prose (TokenPowerBench, arXiv:2512.03024, does not cite this paper; Grokipedia's 'Energy per Token' page returned HTTP 403 on fetch). Per instructions, eyeballing bar/line heights off the chart image is excluded as a source -- still top fog priority (see section 11 of the master doc)."
 
   cloud:
     hardware_class: "A100 / H100 / B200 -- any hyperscale class GPU with the best available measurement for a 65B+ model"
@@ -112,8 +112,29 @@ layers:
       note: "No batching, no serving engine -- ~20-25x more expensive per query than the production regime for the same model."
     unconfirmed:
       description: "218 mJ/token analytical estimator, searched for in From Tokens to Watt-hours (arXiv:2607.26571) and the Joule paper; not found in either. Excluded until the source is located."
-    pending:
-      description: "MLPerf Inference Power (MLCommons): tried via results viewer, GitHub code repo, and an AMD v5.1 submission blog; none yielded a J/token number for Llama2-70B. Per-version result repos (e.g. mlcommons/inference_results_v5.1) not yet opened directly. Top cloud priority (section 11)."
+    mlperf_power_regime:
+      source: "MLPerf Inference v5.1 (MLCommons), closed/datacenter, submitter Lenovo, github.com/mlcommons/inference_results_v5.1, opened directly via the GitHub API/raw content (not the results viewer)"
+      hardware: "Lenovo ThinkSystem SR680a V3, 8x NVIDIA B200-SXM-180GB (node total; power measured at the PDU with the SPEC PTD analyzer, not per-chip)"
+      precision: "weight_data_types=fp4 (NVFP4 quantization + affine fusion), input_data_types=int32 -- from the submission's measurements/.../SR680a_V3_B200SXMx8_TRT_Offline.json"
+      benchmark: "llama2-70b-99 (99% accuracy constraint), batch >> 1 (not batch=1) in both scenarios below"
+      offline:
+        avg_power_W: 9653.48
+        tokens_per_s: 102909
+        decode_J_per_token: 0.0938
+      server:
+        avg_power_W: 9606.74
+        tokens_per_s: 99159.27
+        decode_J_per_token: 0.0969
+      derivation: "decode_J_per_token = testing-phase 'Avg watts' (performance/power/ptd_logs.txt) / 'Tokens per second' or 'Completed tokens per second' (performance/run_1/mlperf_log_summary.txt), same power/throughput method as the fog-tier WattGPU cross_check above."
+      caveats:
+        - "Node-level power draw (8 GPUs plus host CPU/memory/PSU losses), not chip-isolated -- not directly comparable to the chip/module-boundary points used elsewhere in this file."
+        - "FP4 is an aggressive low-precision format unique to Blackwell-class GPUs; this alone makes the value far below the BF16/FP16 cloud-tier points above, independent of the batch>>1 effect."
+      verified_files:
+        - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/results/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Offline/performance/power/ptd_logs.txt"
+        - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/results/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Offline/performance/run_1/mlperf_log_summary.txt"
+        - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/results/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Server/performance/power/ptd_logs.txt"
+        - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/results/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Server/performance/run_1/mlperf_log_summary.txt"
+        - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/measurements/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Offline/SR680a_V3_B200SXMx8_TRT_Offline.json"
 
 link:
   description: "ONU/PON access-network hop energy -- three orders of magnitude below inference terms, second-order for routing decisions."
