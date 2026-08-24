@@ -233,31 +233,55 @@ It stated "none of Pakpahan's five compared mechanisms are energy-aware."
 That's false for one of them, found by directly reading the paper rather
 than trusting its one-line summary in Pakpahan's Table 1:
 
-- **PerLLM** (Yang et al., arXiv:2405.14636) is explicitly energy-aware —
-  its scheduling objective is `min (1/T)Σ(ω_tran·E_tran + ω_infer·E_infer
-  + ω_idle·E_idle)` subject to a latency deadline: transmission,
-  inference, and idle energy, explicitly summed and weighted. That is a
-  *more* granular energy formulation than this design's single joules-
-  per-quality exchange rate, not a lesser one. (Tabi, EdgeShard, and the
-  Draft-Verify-style approach — likely SLED, arXiv:2506.09397 — were also
-  checked and confirmed *not* energy-aware; only PerLLM was missed by
-  trusting the table's one-line gloss instead of the paper itself.)
+- **PerLLM** (Yang et al., arXiv:2405.14636, ref. [29] in Pakpahan's own
+  bibliography) is explicitly energy-aware — its scheduling objective is
+  `min (1/T)Σ(ω_tran·E_tran + ω_infer·E_infer + ω_idle·E_idle)` subject to
+  a latency deadline: transmission, inference, and idle energy, explicitly
+  summed and weighted. That is a *more* granular energy formulation than
+  this design's single joules-per-quality exchange rate, not a lesser one.
+- **Tabi** (Wang et al., EuroSys '23, DOI 10.1145/3552326.3587438, ref.
+  [28]) and **EdgeShard** (Zhang et al., IEEE IoT J. 2025, DOI
+  10.1109/JIOT.2024.3524255, ref. [31]) were both read directly and
+  confirmed *not* energy-aware — Tabi's dispatcher is a pure calibrated-
+  confidence threshold; EdgeShard optimizes latency and throughput only,
+  via model-partitioning dynamic programming.
+- **The fifth mechanism ("Draft-Verify" in Pakpahan's Table 1) was
+  initially misidentified.** An earlier pass guessed SLED (arXiv:2506.09397)
+  without access to Pakpahan's actual bibliography. Having now read that
+  bibliography directly (`thesis/papers/TieredPONLLM.pdf`, references
+  section), the real match — sitting in the exact right citation cluster,
+  immediately after Tabi/PerLLM/EdgeShard — is **Hao, Jiang, Jiang, Ren
+  and Cao, "Hybrid SLM and LLM for Edge-Cloud Collaborative Inference,"
+  EdgeFM '24 (DOI 10.1145/3662006.3662067, ref. [32])**: an edge SLM
+  drafts tokens, a cloud LLM verifies/corrects them, reported as
+  "25.8–31.2% of the LLM's cost" for comparable quality. Full text is
+  paywalled (ACM/ResearchGate both blocked direct access); consistent
+  wording across multiple independent search sources frames "cost" as
+  compute/token-usage cost, with no mention of energy, power, or joules
+  anywhere found — treated as *likely* not energy-aware, at moderate
+  rather than PerLLM-level confidence, since the primary text couldn't be
+  read directly. Worth a direct read before citing this claim in the
+  thesis text itself.
 - A broader search (not just Pakpahan's own citations) found **closer**
-  prior art still: **GreenServ** (Ziller et al., "Energy-Efficient
-  Context-Aware Dynamic Routing for Multi-Model LLM Inference") routes
-  queries across a pool of 16 LLMs trading accuracy against energy
-  explicitly, via an online multi-armed bandit — reporting +22% accuracy
-  and −31% energy vs. random routing. **CR²** ("Cost-Aware Risk-
-  Controlled Routing for Wireless Device-Edge LLM Inference") does
-  something structurally similar for device-edge routing. Neither is
-  cited by Pakpahan, because his paper isn't primarily about energy and
-  didn't survey that angle.
+  prior art still, both read directly: **GreenServ** (Ziller et al.,
+  "Energy-Efficient Context-Aware Dynamic Routing for Multi-Model LLM
+  Inference") routes queries across a pool of 16 LLMs trading accuracy
+  against energy explicitly, via an online multi-armed bandit — reporting
+  +22% accuracy and −31% energy vs. random routing. **CR²** (Xue et al.,
+  arXiv:2605.12001, "Cost-Aware Risk-Controlled Routing for Wireless
+  Device-Edge LLM Inference") is, if anything, *more* rigorously
+  energy-aware than PerLLM: its cost function
+  `c̄ₘ(x,ξ) = ωₜ·tₘ(x,ξ)/T₀ + ωₑ·eₘ(x,ξ)/E₀` combines latency and energy
+  with real physical units (transmission/reception/idle power in Watts,
+  energy in Joules), not just a motivating mention. Neither GreenServ nor
+  CR² is cited by Pakpahan, because his paper isn't primarily about
+  energy and didn't survey that angle.
 
 The general "trade quality against energy via a tunable threshold"
-pattern is **not novel** — confirmed now from three independent
-directions (EcoThink, PerLLM, GreenServ), not just one. Don't claim to
-have invented cost-aware routing; that claim doesn't survive a reviewer
-who's read any of these three.
+pattern is **not novel** — confirmed now from four independent, directly-
+read directions (EcoThink, PerLLM, GreenServ, CR²), not just one. Don't
+claim to have invented cost-aware routing; that claim doesn't survive a
+reviewer who's read any of these four.
 
 **What's still genuinely defensible, narrowed to what it actually is:**
 applying an explicit, *static*, per-tier-pair joules-per-quality exchange
@@ -266,7 +290,7 @@ rate *inside RecServe's specific β-quantile confidence mechanism*
 cascade, not a claim that energy-aware LLM routing is new. Grounded in
 real measured cross-tier energy data (this repo's own profiling, not an
 analytical TDP estimate like EcoThink's) is still a genuine, checkable
-strength relative to all three comparators.
+strength relative to all four comparators.
 
 **The setting difference was verified, not assumed (2026-08-24, read past
 the abstracts into each paper's actual system model):**
@@ -285,10 +309,15 @@ the abstracts into each paper's actual system model):**
   concurrency, batch processing, queuing delays... runtime model
   switching" — an explicit admission the network/deployment dimension
   isn't addressed at all.
+- **CR²** is also strictly **two-tier** (UE + edge server — "a two-tier
+  collaborative inference system consisting of a UE and an edge server"),
+  and its channel model is generic wireless (Shannon-capacity uplink/
+  downlink with path loss and Rayleigh fading), not any optical access
+  technology.
 
-Neither models a hierarchy deeper than PerLLM's two tiers (this design
+None of the four models a hierarchy deeper than two tiers (this design
 has four, with real measured per-tier hardware differences — phone,
-Jetson, A30, hyperscale), and neither touches PON/SDN access-network
+Jetson, A30, hyperscale), and none touches PON/SDN access-network
 constraints in any form. That is the real, checked basis for "different
 setting," not an assumption to revisit later.
 
