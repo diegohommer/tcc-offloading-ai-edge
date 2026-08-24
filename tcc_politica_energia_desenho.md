@@ -127,18 +127,48 @@ Escalate iff  λ × (expected quality gain from escalating)
               >  (known static joule cost of this specific hop)
 ```
 
-- **Quality gain proxy:** `1 − confidence` (or a per-tier calibrated
-  accuracy figure, if measured — this repo's own reproduction run already
-  produces the raw material for that: layer hop counts and per-hop
-  correctness from `run_classification_cascade.py`'s trace).
+**Exact composition with Eq. 2 (derived, not asserted — corrected
+2026-08-24, an earlier draft of this section had the sign backwards):**
+this is *not* a second gate run after the β-quantile check. Rearranging
+the rule above as a threshold on confidence gives
+
+```
+Serve locally  iff  C_{M,τ}(x)  ≥  T_{M,τ}(β)  −  cost / λ
+```
+
+— i.e., `T_{M,τ}(β)` is computed exactly as RecServe already does
+(untouched), and gets a single static offset, `cost/λ`, subtracted per
+hop. One unified threshold check, same shape as Eq. 2, not two
+sequential decisions. Sign check: expensive escalation (`cost` large
+relative to λ) *lowers* the effective threshold — easier to clear, more
+likely to stay local, which is the right direction. Cheap or
+net-negative-cost escalation (cloud in its batched regime, cheaper than
+fog) raises the effective bar, pushing toward escalating more readily —
+also correct. `cost=0` or `λ→∞` collapses the offset to zero and
+recovers Eq. 2 exactly, consistent with the strict-superset claim below.
+
+- **Quality gain proxy (open decision, not yet resolved):** two options,
+  with a real accuracy/effort tradeoff.
+  1. **Cheap default:** `gain ≈ 1 − confidence`. Costs nothing extra —
+     already available. Caveat: an *optimistic ceiling* (assumes
+     escalating always fully resolves uncertainty), not a true
+     expectation — treats "genuinely hard query" and "query this tier is
+     just weak on" identically, which biases the system toward
+     escalating somewhat more than it should.
+  2. **Calibrated per-tier-pair typical gain:** measured offline from
+     trace data this repo's harness already produces —
+     `run_classification_cascade.py`'s output already records, per
+     escalated query, whether the current tier was wrong and whether the
+     next tier resolved it. A calibration pass over that gives a real,
+     tier-pair-specific empirical gain constant, calibrated the same way
+     the joule costs already are (offline, once, not live) rather than a
+     per-query guess. More accurate, needs a calibration pass to exist
+     first. Start with (1) for an evaluable v1, swap in (2) once
+     calibration passes are running.
 - **λ (joules willing to spend per quality point):** a deliberately chosen
   policy parameter, not derivable from data alone — a value judgment.
   λ → ∞ recovers the original pure-confidence rule exactly, so this is a
   strict superset of the existing mechanism, not a replacement.
-- **Lighter-weight alternative**, smaller diff against the existing code:
-  keep Eq. 1's sliding-window quantile mechanics unchanged; just buffer an
-  energy-adjusted confidence value (`confidence − λ × per-tier-pair joule
-  penalty`) instead of raw confidence. Same equation, different input.
 
 **Why per-tier-pair, not one global constant:** the sign of the escalation
 cost isn't consistent across hops. `user → onu` is a reliable real cost.
