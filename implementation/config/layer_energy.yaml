@@ -193,6 +193,99 @@ layers:
         - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/results/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Server/performance/power/ptd_logs.txt"
         - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/results/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Server/performance/run_1/mlperf_log_summary.txt"
         - "https://github.com/mlcommons/inference_results_v5.1/blob/main/closed/Lenovo/measurements/SR680a_V3_B200SXMx8_TRT/llama2-70b-99/Offline/SR680a_V3_B200SXMx8_TRT_Offline.json"
+      additional_models:
+        note: >
+          Same submitter (Lenovo), same node class (8x B200-SXM-180GB, TensorRT,
+          weight fp4), same derivation method as llama2-70b-99 above
+          (avg_power_W = the second/testing-phase 'Avg watts' line in
+          performance/power/ptd_logs.txt, with 0 errors; tokens_per_s from
+          performance/run_1/mlperf_log_summary.txt), read directly from the
+          v5.1 results repo's raw files and cross-checked against
+          summary_results.json's has_power=True rows. Included as a
+          same-hardware MODEL-SIZE comparison (8B vs 70B vs 405B, all at
+          batch>>1), not a batch sweep of one model -- do not conflate with
+          the batch_curve below.
+        llama3.1_405b:
+          benchmark: "llama3.1-405b (Llama 3.1 405B, well above the 65-70B+ target -- included for the same-hardware trend, flagged as an oversized point)"
+          offline: {avg_power_W: 9509.7638, tokens_per_s: 1637.11, decode_J_per_token: 5.8089}
+          server: {avg_power_W: 9276.693218, tokens_per_s: 1249.04, decode_J_per_token: 7.4271}
+        llama3.1_8b:
+          benchmark: "llama3.1-8b (well below the 65-70B+ target -- included only for the same-hardware trend, not as cloud-tier evidence)"
+          offline: {avg_power_W: 8211.685147, tokens_per_s: 146960, decode_J_per_token: 0.0559}
+          server: {avg_power_W: 7733.873483, tokens_per_s: 128689.32, decode_J_per_token: 0.0601}
+    batch_curve_source: "Caravaca, A. Cuevas and R. Cuevas, From Prompts to Power: Measuring the Energy Footprint of LLM Inference, arXiv:2511.05597 (same author group as the production_regime 'caravaca_2025' AI Energy Score row above). The Llama-3.1-405B batch=1-vs-100 numbers are quoted prose in Section IV-B ('Batch size', discussing Figure 3); the per-model batch=1 ('Energy1' column) vs optimized-batch ('Energy' column) numbers are read from Table IV ('Summary of models tested'). Both were verified against the raw arXiv HTML text (arxiv.org/html/2511.05597), not just a summarization pass, to avoid the GPU-mislabeling risk documented in the caveats below."
+    batch_curve_regime: "vLLM continuous batching, GPU-only energy metering via CodeCarbon/NVML (chip/module boundary, matching this file's declared base). All prompts are P(300 T_input, 300 T_out) -- 300 output tokens each. Precision/quantization is not stated in the sections read (framework default, presumably BF16/FP16). 'batch=1' = the Energy1 column / single-prompt case in Table IV, or the explicit single-prompt case in Section IV-B; 'optimized' = the Energy column, the paper's best-found batching configuration -- Table IV never states this as a specific integer batch size (only the Section IV-B prose gives one explicit intermediate point, batch=100, for Llama-3.1-405B)."
+    batch_curve_caveats:
+      - "decode_J_per_token here = (Wh * 3600) / 300 output tokens; the paper reports no prefill/decode split ('no separate prefill/decode phase breakdown reported due to continuous batching'), so this over-counts decode alone by an unknown prefill share -- the same no-phase-separation caveat already applied to the fog RTX_4090 batch_curve and to mlperf_power_regime above."
+      - "Llama-3.1-405B hardware conflict inside the source paper itself: Section IV-B prose states its 405B batch=1/batch=100 case study ran on '2 x 8 NVIDIA A100 80GB GPUs' (16x A100), but Table IV's row for the same model lists 'NVIDIA H100 80GB HBM3', count 16. Both are recorded below, each labeled exactly as the paper states in its own respective location; the discrepancy is not resolved further here."
+      - "Table IV's 'optimized' batch is not given as a number; do not conflate the Table IV optimized-batch point with the Section IV-B prose's explicit batch=100 point -- they are two distinct points on the curve (100 vs an unstated, evidently larger, batch)."
+      - "Table IV's Energy/Energy1 units are not explicitly labeled inside the table; inferred as Wh per prompt from consistency of magnitude and methodology with the labeled-Wh Figure 3 / Section IV-B prose immediately preceding it."
+      - "QwQ-32B, Qwen1.5-32B-Chat and fin-llama-33b-merged (32.5-32.8B) are below this file's 65B+ cloud target; included as SECONDARY/supplementary points per instructions, flagged explicitly on each entry -- do not treat as primary 70B-class evidence."
+      - "facebook/opt-66b (65.72B) and Qwen2.5-72B (72.71B) bracket the 65-70B+ target closely; Meta-Llama-3-70B (70.55B) is the closest exact size match to this file's existing Llama-3.1-70B/Llama-2-70B cloud references, but Table IV gives it only the optimized-batch point, no batch=1 companion."
+    batch_curve:
+      - hardware: "16x A100 80GB (2x8 nodes, per Section IV-B prose)"
+        model: "Llama-3.1-405B"
+        batch: 1
+        decode_J_per_token: 260.40
+        note: "Section IV-B prose: 21.7 Wh, 15.4s for a single prompt P(300in,300out)."
+      - hardware: "16x A100 80GB (2x8 nodes, per Section IV-B prose)"
+        model: "Llama-3.1-405B"
+        batch: 100
+        decode_J_per_token: 7.248
+        note: "Section IV-B prose: 60.4 Wh total for 100 simultaneous prompts (29.4s) = 0.604 Wh/prompt."
+      - hardware: "16x H100 80GB HBM3 (per Table IV; conflicts with the A100 label the same paper gives in Section IV-B prose -- see caveats)"
+        model: "Llama-3.1-405B"
+        batch: 1
+        decode_J_per_token: 260.07
+        note: "Table IV 'Energy1' column."
+      - hardware: "16x H100 80GB HBM3 (per Table IV; conflicts with the A100 label the same paper gives in Section IV-B prose -- see caveats)"
+        model: "Llama-3.1-405B"
+        batch: "optimized (exact size unstated)"
+        decode_J_per_token: 4.2504
+        note: "Table IV 'Energy' column, the paper's best-found batching config."
+      - hardware: 4x_H100_80GB_HBM3
+        model: "Meta-Llama-3-70B (70.55B)"
+        batch: "optimized (exact size unstated)"
+        decode_J_per_token: 1.002
+        note: "Closest exact-size match in this source to the file's Llama-3/Llama-2-70B cloud references."
+      - hardware: 4x_H100_80GB_HBM3
+        model: "Qwen2.5-72B (72.71B)"
+        batch: "optimized (exact size unstated)"
+        decode_J_per_token: 1.044
+      - hardware: 4x_H100_80GB_HBM3
+        model: "facebook/opt-66b (65.72B)"
+        batch: "optimized (exact size unstated)"
+        decode_J_per_token: 1.246
+      - hardware: 1x_H100_80GB_HBM3
+        model: "QwQ-32B (32.76B)"
+        batch: 1
+        decode_J_per_token: 12.904
+        note: "SECONDARY -- below the 65B+ cloud target; supplementary per instructions."
+      - hardware: 1x_H100_80GB_HBM3
+        model: "QwQ-32B (32.76B)"
+        batch: "optimized (exact size unstated)"
+        decode_J_per_token: 0.4332
+        note: "SECONDARY, see above."
+      - hardware: 1x_H100_80GB_HBM3
+        model: "Qwen1.5-32B-Chat (32.51B)"
+        batch: 1
+        decode_J_per_token: 12.908
+        note: "SECONDARY, see above."
+      - hardware: 1x_H100_80GB_HBM3
+        model: "Qwen1.5-32B-Chat (32.51B)"
+        batch: "optimized (exact size unstated)"
+        decode_J_per_token: 0.4272
+        note: "SECONDARY, see above."
+      - hardware: 2x_H100_80GB_HBM3
+        model: "fin-llama-33b-merged (32.53B)"
+        batch: 1
+        decode_J_per_token: 17.632
+        note: "SECONDARY, see above."
+      - hardware: 2x_H100_80GB_HBM3
+        model: "fin-llama-33b-merged (32.53B)"
+        batch: "optimized (exact size unstated)"
+        decode_J_per_token: 0.6912
+        note: "SECONDARY, see above."
 
 link:
   description: "ONU/PON access-network hop energy -- three orders of magnitude below inference terms, second-order for routing decisions."
