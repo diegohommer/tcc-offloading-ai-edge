@@ -81,6 +81,64 @@ layers:
       decode_J_per_token_upper_bound: 0.625
       derivation: "25W (Figure 1 mean power at the ITL<=25ms SLA filter) * 0.025s -- the 25ms is an SLA threshold used to filter which GPUs are 'viable' on the chart, not a measured ITL, so this is a ceiling, not a point estimate."
       note: "Supports the memory-pressure-outlier reading: an 8B model that fits comfortably in 24GB comes in well under the SOLAR-10.7B point."
+    batch_curve_source: "Fadel Argerich and Patino-Martinez, Measuring and Improving the Energy Efficiency of Large Language Models Inference, IEEE Access vol. 12, 2024, DOI 10.1109/ACCESS.2024.3409745 (open access, CC BY 4.0). Batch=1 values read from Figure 4; batch=5/10/20 values read from Figure 6, Section VI-C ('Batch size')."
+    batch_curve_regime: "FP16, HuggingFace Transformers/PyTorch backend (not vLLM, unlike primary_point/cross_check above), short prompts (<10 tokens) sampled from The Pile, up to 100 output tokens, 10 repeated trials per config, EnergyMeter tool (RAPL+NVML+eBPF); batch = number of concurrent prompts"
+    batch_curve_caveats:
+      - "Hardware is a desktop/workstation NVIDIA GeForce RTX 4090 24GB (Ada Lovelace, 450W TDP), which is NOT in the T4/L4/A30/A2/A16/L40S hardware_class list above -- included because Watt Counts/WattGPU (this file's primary fog sources) were searched specifically for a multi-batch sweep on fog-class hardware and yielded none (Watt Counts' 'batch scenario' is fixed at batch=1000 only; its server-scenario Tables 5-6 report mean power by Poisson arrival-rate load but no throughput, so J/token is not derivable; WattGPU's Figure 1 is a single ITL=25ms SLA point). RTX 4090 is the same architecture generation as L40S and is itself benchmarked alongside A30/L4/T4 as a peer-tier card in Watt Counts' Tables 5-6, so it is used here as the best real (non-fabricated) multi-batch dataset found for a 7B-class model."
+      - "decode_J_per_token values are TOTAL node energy (cpu_per_token + gpu_per_token + dram_per_token stacked in the source figures), not chip/module-isolated GPU energy -- same node-vs-chip boundary caveat as the MLPerf point in the cloud block below; do not blend numerically with primary_point/cross_check without adjusting for boundary."
+      - "Figure 6's batch=1 printed labels for dollyv2-7b (7.63) and RedPajama-INCITE-7B (8.53) match Figure 4's independently-labeled batch=1 values exactly, and Section VI-C's prose ('Bloom 7B... ending up with a similar performance to RedPajama-INCITE-BASE-7B when both use a batch size of 20') matches the read digits (Bloom 2.86 vs RedPajama 2.90 at batch=20) -- used as a cross-check that the printed bar-label digits were read correctly."
+      - "The companion batch curve for pythia-6.9b in the same paper's Figure 5 (batch 1/5/10/20/40/100, would have extended the range further) was inspected but its six cramped subplots could not be read with confidence; excluded per the no-eyeballing-unlabeled-charts rule already applied to the fog 'pending' entry below."
+      - "Llama-2-7b-chat-hf's Figure 6 panel was also inspected but its printed labels were not legible with confidence; excluded for the same reason."
+    batch_curve:
+      - hardware: RTX_4090
+        model: "Dolly v2-7b (6.86B)"
+        batch: 1
+        decode_J_per_token: 7.63
+      - hardware: RTX_4090
+        model: "RedPajama-INCITE-7B-Base (6.86B)"
+        batch: 1
+        decode_J_per_token: 8.53
+      - hardware: RTX_4090
+        model: "Bloom-7b1 (7.07B)"
+        batch: 1
+        decode_J_per_token: 5.73
+      - hardware: RTX_4090
+        model: "Dolly v2-7b (6.86B)"
+        batch: 5
+        decode_J_per_token: 3.16
+      - hardware: RTX_4090
+        model: "RedPajama-INCITE-7B-Base (6.86B)"
+        batch: 5
+        decode_J_per_token: 3.38
+      - hardware: RTX_4090
+        model: "Bloom-7b1 (7.07B)"
+        batch: 5
+        decode_J_per_token: 3.03
+      - hardware: RTX_4090
+        model: "Dolly v2-7b (6.86B)"
+        batch: 10
+        decode_J_per_token: 2.98
+      - hardware: RTX_4090
+        model: "RedPajama-INCITE-7B-Base (6.86B)"
+        batch: 10
+        decode_J_per_token: 3.00
+      - hardware: RTX_4090
+        model: "Bloom-7b1 (7.07B)"
+        batch: 10
+        decode_J_per_token: 2.80
+      - hardware: RTX_4090
+        model: "Dolly v2-7b (6.86B)"
+        batch: 20
+        decode_J_per_token: 2.74
+      - hardware: RTX_4090
+        model: "RedPajama-INCITE-7B-Base (6.86B)"
+        batch: 20
+        decode_J_per_token: 2.90
+      - hardware: RTX_4090
+        model: "Bloom-7b1 (7.07B)"
+        batch: 20
+        decode_J_per_token: 2.86
+        note: "Ticks up slightly from batch=10 (2.80) -- paper attributes this to Bloom-7b1 already reaching ~99% GPU utilization by batch=5-10, after which a larger batch offers no further parallelism headroom (Section VI-C)."
     pending:
       source: "Wilhelm, Wittkopp and Kao, Beyond Test-Time Compute Strategies, arXiv:2603.20224 / EuroMLSys'25 (L40S, batch=1 explicit, Llama 8B)"
       status: "Full text confirmed read (HTML and all 8 PDF pages, not just abstract): Figure 3 ('Non-linear behavior in token generation', log2 x-axis over 1-128 generated tokens) is a rendered chart with no backing data table. Table 1 gives only aggregate kJ totals per MMLU category for Llama 1B vs 8B (single-output-token queries, prefill+decode combined, per-category sample count not stated), which does not reduce to a comparable decode J/token at batch=1. No GitHub/Zenodo artifact with raw numbers was found (checked for a repo under the authors' names and the TU Berlin DOS group). No later work was found quoting this specific number in prose (TokenPowerBench, arXiv:2512.03024, does not cite this paper; Grokipedia's 'Energy per Token' page returned HTTP 403 on fetch). Per instructions, eyeballing bar/line heights off the chart image is excluded as a source -- still top fog priority (see section 11 of the master doc)."
