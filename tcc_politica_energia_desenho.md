@@ -1,0 +1,268 @@
+# Energy-aware offloading policy — design notes
+
+**Status:** design only, not implemented. Referenced from `README.md`'s
+"Next steps" and from `implementation/src/layers/generative_layer.py`'s
+open decisions. Written up 2026-08-24 from a design discussion; no code
+changes accompany this document.
+
+**Extends, does not replace:** the confidence-based stepwise escalation
+rule already used by RecServe and by Pakpahan and Hwang's reference
+architecture (Eq. 1-2 of their paper) — the sliding-window β-quantile
+threshold this repo's `traced_recursive_serve.py` already implements for
+the classification cascade. Everything below is about giving that same
+mechanism an energy term, not inventing a new decision engine.
+
+## 1. What the base architecture already gives us
+
+- **The escalation rule is local and stepwise by design.** Each tier
+  computes its own confidence score, compares it to a threshold derived
+  from a sliding window of its own recent confidence history, and serves
+  locally or escalates exactly one tier up. It never reads another tier's
+  state.
+- **The base paper's own SDN controller already knows everything, and
+  deliberately doesn't use it for this decision.** Pakpahan and Hwang's
+  ONOS controller maintains an "LLM-capability registry" per ONU —
+  populated at registration with accelerator type, model cache size, and
+  *energy constraints* — yet their paper states explicitly: "Although the
+  ONOS controller is aware of all registered devices and their
+  capabilities, the system always follows stepwise escalation to preserve
+  locality and minimize network usage." Any energy-aware extension has to
+  reckon with that stated design goal, not casually override it.
+- **`implementation/config/layer_energy.yaml` now has real per-tier energy
+  data**, including batch-sensitivity curves for fog (12 points, RTX 4090,
+  Fadel Argerich & Patiño-Martínez 2024) and cloud (13+ points across
+  Samsi, Oviedo, MLPerf v5.1, and Caravaca et al.), gathered specifically
+  to inform this design. See the Hardware Ledger artifact for the
+  consolidated view.
+
+## 2. Rejected: live cross-tier telemetry broadcast
+
+The first version of this idea considered: each tier reports its current
+J/token to the SDN controller, which periodically broadcasts it to all
+tiers so they can use it for offloading decisions.
+
+Rejected, for three concrete reasons:
+
+- **It works against the base paper's own stated design goal** ("preserve
+  locality and minimize network usage"). Pakpahan's own Table 1 scores
+  competing mechanisms on exactly this axis — RecServe scores high on
+  bandwidth efficiency specifically *because* it's decentralized; PerLLM
+  scores lower because it requires a central controller. A periodic
+  all-tiers broadcast pulls this design toward the PerLLM end of that
+  spectrum.
+- **No timescale data exists to size the broadcast period.** Every energy
+  number gathered so far is a static snapshot at a declared batch — there
+  is no time-series / arrival-process data anywhere in this repo's sources
+  showing how fast a tier's real load actually changes. Picking a
+  polling/broadcast interval would be a guess.
+- **A bare J/token number is ambiguous without its regime.** We showed
+  (see §6) that J/token varies by ~3x (fog) to ~100x+ (cloud) depending
+  purely on current batch/precision — a received number doesn't say
+  whether it reflects stable hardware cost or a momentary load spike.
+
+## 3. Local-only energy signal: valid, but only for a narrower question
+
+A tier tracking its *own* recent energy consumption in a sliding window
+(directly analogous in shape to the existing confidence window) requires
+zero coordination and is architecturally clean. But it has a hard
+timing/causality constraint worth being precise about:
+
+**Local inference always runs first.** Every tier computes a full local
+forward pass to get the confidence score the existing decision already
+needs. By the time any decision is made, this query's local energy cost
+is a sunk cost — spent regardless of the outcome. This splits the
+possible mechanisms into two, which should not be conflated:
+
+| | Timing | Can use | Decides |
+|---|---|---|---|
+| **Escalate gate** (extends the existing accept/escalate step) | Post-inference | This query's own now-known energy + own recent history | Accept the local answer, or *also* pay to escalate |
+| **Admission/skip gate** (not in the base paper) | Pre-inference | Only recent history (a regime proxy) — never this query's own cost, which is unknowable in advance | Run locally at all, or forward immediately without local compute |
+
+The escalate gate has no timing problem — it's structurally identical to
+how the confidence threshold already works (built from history, applied
+to a value only known post-hoc for *this* query). The admission gate is a
+genuinely new mechanism, useful specifically for resource-constrained
+tiers (battery on the `user` tier) where skipping local compute entirely
+under a bad self-observed regime is worth the coarser decision.
+
+**Why local-only is insufficient for minimizing total system energy, even
+at the escalate gate:** the between-tier gap dwarfs and can invert
+relative to what a local window can see. Typical production points:
+
+| Tier | Typical J/token |
+|---|---|
+| User (best backend) | 0.074 – 0.21 |
+| ONU (best precision) | 0.22 – 1.89 |
+| Fog (production) | 0.38 |
+| Cloud (MLPerf, batched, FP4) | 0.094 – 0.097 |
+| Cloud (production, BF16) | 0.40 |
+
+Cloud's best regime *beats* fog's production point. Fog's own local swing
+is only ~3x (RTX 4090 batch curve, 2.7–8.5 J/token) while cloud's full
+range spans ~2700x (0.094 to 260 J/token) depending on regime. A local
+tier tracking only its own history cannot see which side of that range an
+escalation target currently sits on — a 3x local signal is not enough
+evidence to steer a decision where the real stakes are orders of magnitude
+larger, on a variable it cannot observe.
+
+**Where local-only remains fully valid:** a different objective — tier
+self-protection (battery, thermal, load-shedding) — where the point was
+never to reason about the target tier's cost at all. Note this objective
+can call for the *opposite* threshold adjustment from the
+energy-minimizing one for the same observed signal (shed load when
+locally expensive, vs. accept more locally when escalating is relatively
+worse) — which objective is being served needs to be a stated design
+choice, not left implicit.
+
+## 4. The proposed mechanism: static, per-tier-pair cost folded into the existing threshold
+
+Give the existing β-quantile threshold an explicit joules-per-quality-point
+exchange rate, using **static** (not live) per-tier-pair cost data already
+in `layer_energy.yaml`.
+
+Informal decision rule:
+
+```
+Escalate iff  λ × (expected quality gain from escalating)
+              >  (known static joule cost of this specific hop)
+```
+
+- **Quality gain proxy:** `1 − confidence` (or a per-tier calibrated
+  accuracy figure, if measured — this repo's own reproduction run already
+  produces the raw material for that: layer hop counts and per-hop
+  correctness from `run_classification_cascade.py`'s trace).
+- **λ (joules willing to spend per quality point):** a deliberately chosen
+  policy parameter, not derivable from data alone — a value judgment.
+  λ → ∞ recovers the original pure-confidence rule exactly, so this is a
+  strict superset of the existing mechanism, not a replacement.
+- **Lighter-weight alternative**, smaller diff against the existing code:
+  keep Eq. 1's sliding-window quantile mechanics unchanged; just buffer an
+  energy-adjusted confidence value (`confidence − λ × per-tier-pair joule
+  penalty`) instead of raw confidence. Same equation, different input.
+
+**Why per-tier-pair, not one global constant:** the sign of the escalation
+cost isn't consistent across hops. `user → onu` is a reliable real cost.
+`fog → cloud` can be free or a net savings depending on cloud's regime. A
+single global β cannot represent that asymmetry; per-pair calibration,
+straight from the Hardware Ledger, can.
+
+## 5. Automating "how does a tier know the next tier's cost" — without live telemetry
+
+This does **not** require runtime discovery:
+
+1. **Measure once, offline.** Already done — `layer_energy.yaml`.
+2. **Ship the relevant slice to each tier as static deployment config**,
+   the same way a tier already loads its model path or its β parameter.
+   No network round-trip, no polling.
+3. **Reuse the base paper's existing registration flow** rather than
+   inventing a new protocol: the ONOS `device.activate` RPC / `AttachProfile`
+   intent that already carries the "energy constraints" field in the
+   LLM-capability registry is the natural place to also hand a tier its
+   neighbor's typical cost, at registration time.
+4. **Refresh only when topology/hardware/model actually changes** (rare —
+   nobody swaps a GPU generation mid-afternoon), never per-query, never on
+   a live polling loop.
+
+## 6. Encompassing batch variation without going live
+
+A single static point estimate is a poor summary of a tier whose real
+cost swings 3x–100x with load. The fix is a **small static profile**, not
+a live signal:
+
+- **Index by something free to know locally — time-of-day bucket.** No
+  network round-trip, just a clock.
+- **Cloud:** effectively one bucket, near its production point
+  (0.3–0.4 J/token) — continuous batching keeps hyperscale serving close
+  to permanently saturated in practice, so a flat value is a defensible
+  simplification here specifically.
+- **Fog:** 2–3 buckets calibrated from the measured RTX 4090 curve — a
+  conservative value near the expensive end (~7–8.5 J/token, batch≈1) for
+  likely-idle periods, a cheaper value near the flattened end
+  (~2.7–3 J/token, batch 10–20) for likely-loaded periods. Bias toward the
+  pessimistic end when uncertain: underestimating fog's cost is the
+  costlier mistake (it leads to escalating expecting a saving that isn't
+  there).
+- **Selecting which bucket applies — still fully local, no coordination:**
+  use the tier's own recent **escalation frequency** as the signal. This
+  is the same proxy already named (but not mechanized) in this repo's
+  README ("regime inferred locally from recent escalation frequency"),
+  and it turns out to be a better-targeted signal for *this specific
+  problem* than raw local energy history: a target tier's aggregate batch
+  level is mechanically driven by the sum of escalation traffic arriving
+  from all its child tiers on the same access segment, and household
+  traffic tends to be time-correlated (shared peak hours) — so "how often
+  am I escalating right now" is a causally grounded, zero-coordination
+  correlate for "how loaded is my escalation target probably right now,"
+  in a way that this tier's own J/token history isn't.
+- **Open, unverified assumption:** this presumes a day/night traffic
+  pattern typical of household broadband demand — standard in telecom
+  capacity planning generally, but not measured for this specific
+  deployment. Flagged, not resolved, here.
+
+## 7. Positioning against existing literature
+
+The general "trade quality against energy via a tunable threshold"
+pattern is **not novel** — EcoThink (Li and Lu, arXiv:2603.25498, already
+in `thesis/papers/`) formulates a structurally similar constrained
+optimization (their Eq. 3: minimize expected energy subject to a quality
+floor), and this class of tradeoff is standard in the older mobile-edge-
+computing / green-computing literature generally. Don't claim to have
+invented cost-aware routing.
+
+What's genuinely distinctive, and worth claiming precisely:
+
+- Applied to a **physically distributed, multi-tier PON/SDN LLM cascade**
+  — EcoThink operates within a single system (choosing reasoning depth,
+  RAG vs. CoT/ToT), not across heterogeneous hardware connected by a real
+  access network.
+- **Grounded in real measured cross-tier energy data**, not an analytical
+  TDP-based estimate — EcoThink's own energy model (`P_avg` = hardware
+  TDP × tokens/throughput × PUE) uses a manufacturer max-power spec, not a
+  measured draw; the data this repo assembled (real profiling from five+
+  independent sources plus MLPerf logs) is more rigorous on exactly this
+  point.
+- **A minimal extension of an already-validated mechanism**, not a newly
+  trained router — no new model, reuses RecServe/Pakpahan's own
+  β-quantile machinery.
+- None of the five mechanisms Pakpahan's own Table 1 compares against
+  (Tabi, PerLLM, EdgeShard, Draft-Verify, RecServe) are scored as
+  energy-aware — within this specific lineage, the gap is real and
+  uncontested.
+
+Cite EcoThink explicitly, on this exact axis, when the related-work
+chapter (currently a skeleton, `thesis/latex/tcc.tex` §"Revisão
+Bibliográfica") gets rewritten.
+
+## 8. Open questions — not resolved here
+
+- **λ** (joules per quality point) needs to be set deliberately, possibly
+  per deployment scenario (battery-constrained vs. quality-critical); it
+  is a value judgment the data cannot supply.
+- **Sliding-window size** (local or profile-bucket) needs traffic-dynamics
+  data this repo doesn't have — every energy number gathered so far is a
+  static snapshot, never a time series.
+- **Skip-ahead escalation** (letting a query predictable in advance to
+  need a high tier skip the stepwise ladder, avoiding paying for discarded
+  intermediate local attempts — this is what the README's "skip-capable"
+  phrase already points at) is a further, separate extension. Its payoff
+  depends on how often queries actually climb far, which is workload-
+  dependent: in this repo's own SST2 classification reproduction, only
+  10% of queries escalated past ONU and 0% reached cloud, so the
+  wasted-sunk-cost problem it fixes was small for *that* benchmark — worth
+  re-measuring once the generative cascade (harder, more evenly
+  distributed difficulty) exists, rather than assumed from this one.
+- **Day/night traffic-pattern assumption** for fog's static profile
+  buckets (§6) is unverified for this specific deployment context.
+
+## 9. Where this plugs into the code
+
+- `implementation/src/layers/generative_layer.py`: this design determines
+  how that module's escalation decision should eventually be implemented
+  — the interface (`GenerationResult`, `GenerativeLayer.generate`) already
+  fixed there is unaffected; only the not-yet-written orchestration logic
+  around it would use §4-§6.
+- `implementation/config/layer_energy.yaml`: source of the per-tier-pair
+  static costs (§4) and batch profiles (§6).
+- `implementation/src/recserve/traced_recursive_serve.py`: the existing
+  β-quantile sliding-window mechanism this design extends rather than
+  replaces.

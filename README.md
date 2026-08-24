@@ -115,12 +115,15 @@ real trace). From this repository's side specifically:
   Seq2Class.
 - Fix `|T_prompt|` and `|T_gen|` from a real generative-cascade trace, not
   a separately estimated distribution.
-- Implement the energy-aware offloading policy (design in section 12 of
-  the master document and `tcc_politica_energia_desenho.md`): a
-  confidence gate plus a skip-capable, energy-cost-minimizing tier
-  choice, with per-tier batch/utilization regime inferred locally from
-  recent escalation frequency instead of live cross-tier telemetry. Not
-  implemented or tested yet.
+- Implement the energy-aware offloading policy — design now written up in
+  `tcc_politica_energia_desenho.md` (section 12 of the master document
+  covers the same ground): extends RecServe/Pakpahan's existing
+  β-quantile escalation rule with an explicit joules-per-quality-point
+  exchange rate, calibrated from `implementation/config/layer_energy.yaml`'s
+  static per-tier-pair costs (no live cross-tier telemetry — rejected
+  explicitly, see the design doc §2), with per-tier batch/utilization
+  regime inferred locally from recent escalation frequency (§6). Not
+  implemented or tested yet — design only.
 
 ---
 **Author:** Diego Amorim
