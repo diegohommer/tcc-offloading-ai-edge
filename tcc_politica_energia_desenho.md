@@ -227,37 +227,64 @@ a live signal:
 
 ## 7. Positioning against existing literature
 
+**Revised 2026-08-24 after actually reading Pakpahan's four other
+compared mechanisms — the original version of this section overclaimed.**
+It stated "none of Pakpahan's five compared mechanisms are energy-aware."
+That's false for one of them, found by directly reading the paper rather
+than trusting its one-line summary in Pakpahan's Table 1:
+
+- **PerLLM** (Yang et al., arXiv:2405.14636) is explicitly energy-aware —
+  its scheduling objective is `min (1/T)Σ(ω_tran·E_tran + ω_infer·E_infer
+  + ω_idle·E_idle)` subject to a latency deadline: transmission,
+  inference, and idle energy, explicitly summed and weighted. That is a
+  *more* granular energy formulation than this design's single joules-
+  per-quality exchange rate, not a lesser one. (Tabi, EdgeShard, and the
+  Draft-Verify-style approach — likely SLED, arXiv:2506.09397 — were also
+  checked and confirmed *not* energy-aware; only PerLLM was missed by
+  trusting the table's one-line gloss instead of the paper itself.)
+- A broader search (not just Pakpahan's own citations) found **closer**
+  prior art still: **GreenServ** (Ziller et al., "Energy-Efficient
+  Context-Aware Dynamic Routing for Multi-Model LLM Inference") routes
+  queries across a pool of 16 LLMs trading accuracy against energy
+  explicitly, via an online multi-armed bandit — reporting +22% accuracy
+  and −31% energy vs. random routing. **CR²** ("Cost-Aware Risk-
+  Controlled Routing for Wireless Device-Edge LLM Inference") does
+  something structurally similar for device-edge routing. Neither is
+  cited by Pakpahan, because his paper isn't primarily about energy and
+  didn't survey that angle.
+
 The general "trade quality against energy via a tunable threshold"
-pattern is **not novel** — EcoThink (Li and Lu, arXiv:2603.25498, already
-in `thesis/papers/`) formulates a structurally similar constrained
-optimization (their Eq. 3: minimize expected energy subject to a quality
-floor), and this class of tradeoff is standard in the older mobile-edge-
-computing / green-computing literature generally. Don't claim to have
-invented cost-aware routing.
+pattern is **not novel** — confirmed now from three independent
+directions (EcoThink, PerLLM, GreenServ), not just one. Don't claim to
+have invented cost-aware routing; that claim doesn't survive a reviewer
+who's read any of these three.
 
-What's genuinely distinctive, and worth claiming precisely:
+**What's still genuinely defensible, narrowed to what it actually is:**
+applying an explicit, *static*, per-tier-pair joules-per-quality exchange
+rate *inside RecServe's specific β-quantile confidence mechanism*
+(§4) — a minimal, structure-preserving extension of one particular
+cascade, not a claim that energy-aware LLM routing is new. Grounded in
+real measured cross-tier energy data (this repo's own profiling, not an
+analytical TDP estimate like EcoThink's) is still a genuine, checkable
+strength relative to all three comparators. Applied to a physically
+distributed PON/SDN hierarchy (vs. EcoThink's single system, PerLLM's and
+GreenServ's model-pool routing rather than a tiered hardware hierarchy)
+is still a real difference in setting, not just framing.
 
-- Applied to a **physically distributed, multi-tier PON/SDN LLM cascade**
-  — EcoThink operates within a single system (choosing reasoning depth,
-  RAG vs. CoT/ToT), not across heterogeneous hardware connected by a real
-  access network.
-- **Grounded in real measured cross-tier energy data**, not an analytical
-  TDP-based estimate — EcoThink's own energy model (`P_avg` = hardware
-  TDP × tokens/throughput × PUE) uses a manufacturer max-power spec, not a
-  measured draw; the data this repo assembled (real profiling from five+
-  independent sources plus MLPerf logs) is more rigorous on exactly this
-  point.
-- **A minimal extension of an already-validated mechanism**, not a newly
-  trained router — no new model, reuses RecServe/Pakpahan's own
-  β-quantile machinery.
-- None of the five mechanisms Pakpahan's own Table 1 compares against
-  (Tabi, PerLLM, EdgeShard, Draft-Verify, RecServe) are scored as
-  energy-aware — within this specific lineage, the gap is real and
-  uncontested.
+**Design idea worth borrowing regardless of the novelty question:** both
+PerLLM (CS-UCB) and GreenServ use an online multi-armed bandit to learn
+their energy/quality tradeoff rather than fixing it as a constant. That's
+directly relevant to this design's open λ-calibration problem (§9) — a
+bandit could learn λ (or the per-tier-pair threshold bias) from observed
+outcomes instead of it being a one-time hand-set value judgment. Worth
+evaluating as an alternative to static λ before committing to "value
+judgment, not derivable from data" as the final word on §9's open item.
 
-Cite EcoThink explicitly, on this exact axis, when the related-work
-chapter (currently a skeleton, `thesis/latex/tcc.tex` §"Revisão
-Bibliográfica") gets rewritten.
+Cite PerLLM, GreenServ, CR², and EcoThink explicitly, on this exact axis,
+when the related-work chapter (currently a skeleton, `thesis/latex/tcc.tex`
+§"Revisão Bibliográfica") gets rewritten — the comparison table Pakpahan's
+own paper uses (Table 1) is a reasonable template to extend with an
+energy column and these additional rows.
 
 ## 8. Scope: core contribution vs. future work
 
@@ -306,7 +333,10 @@ items are secondary or explicitly out of scope for now:
 
 - **λ** (joules per quality point) needs to be set deliberately, possibly
   per deployment scenario (battery-constrained vs. quality-critical); it
-  is a value judgment the data cannot supply.
+  is a value judgment the data cannot supply — *or* it could be learned
+  online via a multi-armed bandit instead of hand-set, per §7's PerLLM/
+  GreenServ note. Worth comparing both before treating "value judgment"
+  as final.
 - **Sliding-window / profile-bucket size** (§6, if pursued) needs
   traffic-dynamics data this repo doesn't have — every energy number
   gathered so far is a static snapshot, never a time series.
