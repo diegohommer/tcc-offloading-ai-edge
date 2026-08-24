@@ -146,6 +146,32 @@ cost isn't consistent across hops. `user → onu` is a reliable real cost.
 single global β cannot represent that asymmetry; per-pair calibration,
 straight from the Hardware Ledger, can.
 
+**A counterintuitive-looking consequence, worth documenting rather than
+"fixing":** this mechanism can make a tier escalate *almost everything*
+when its own model is expensive relative to what's next — and the data
+shows this isn't hypothetical. ONU's pricier configurations already cost
+more than fog's typical production point:
+
+| | J/token |
+|---|---|
+| ONU, 8B, W4 | 0.98 |
+| ONU, 14B, W4 | 1.89 |
+| Fog, production | 0.38 |
+
+If ONU is running its 14B config, escalating costs only 0.38 J more,
+against 1.89 J already spent (sunk) on ONU's own answer — cheap insurance
+for any real quality gain. That's not the mechanism misbehaving; it's
+correctly pricing that ONU is, for that model size, worse than pass-
+through. The mechanism doesn't need to be "fixed" for this — it's a
+**diagnostic**, not a bug: if a deployed tier ends up escalating nearly
+everything, that's a signal the model/precision chosen for that tier is
+mismatched for its position in the hierarchy, which feeds directly back
+into the still-open per-layer model/device choice
+(`generative_layer.py`). Note the effect flips for ONU's cheaper configs
+(1.5B, W4, 0.22 J/token — cheaper than fog) — staying local is correctly
+favored there. The behavior tracks whatever hardware/model choice gets
+made per tier; it doesn't have an opinion of its own to correct.
+
 ## 5. Automating "how does a tier know the next tier's cost" — without live telemetry
 
 This does **not** require runtime discovery:
@@ -233,28 +259,61 @@ Cite EcoThink explicitly, on this exact axis, when the related-work
 chapter (currently a skeleton, `thesis/latex/tcc.tex` §"Revisão
 Bibliográfica") gets rewritten.
 
-## 8. Open questions — not resolved here
+## 8. Scope: core contribution vs. future work
+
+**Decision (2026-08-24): stay 100% structurally faithful to RecServe's
+recursive, one-hop-at-a-time escalation.** §4-§6 (the λ-weighted
+threshold, static per-pair costs, batch-aware profile) never change
+*which tier is next* or let a query skip a hop — only *when* the current
+tier hands off, using the same Eq. 1-2 shape. This is deliberate, not a
+missed opportunity:
+
+- It's a strict superset of the original rule (λ → ∞ recovers it
+  exactly), so it inherits every property Pakpahan's Table 1 already
+  validated for RecServe (decentralized, high bandwidth efficiency, high
+  latency awareness) without having to re-argue any of them.
+- It's evaluable **today**, on infrastructure that already exists —
+  `run_classification_cascade.py` already produces per-hop correctness
+  and hop counts, enough to plot accuracy vs. energy as λ varies against
+  the λ→∞ baseline, without waiting on the generative cascade.
+- The alternative (letting a query jump non-adjacent tiers mid-cascade)
+  is not an extension of RecServe's actual mechanism, it's a different
+  escalation topology that merely *uses* RecServe's confidence signal —
+  see below.
+
+**§4-§6 is the core contribution to build and evaluate.** The remaining
+items are secondary or explicitly out of scope for now:
+
+- **§6 (batch-aware profile) is a refinement, not a prerequisite.** A v1
+  can ship §4-§5 with one flat static cost per tier-pair and still be a
+  complete, evaluable contribution; §6 sharpens accuracy once that's
+  working.
+- **Multi-hop / entry-point selection is explicit future work, not part
+  of this contribution.** Letting a query start its journey at a smarter
+  entry tier (chosen once, before RecServe's unmodified recursion takes
+  over) would capture the sunk-cost savings for queries known in advance
+  to need a high tier — but it requires a second, harder-to-calibrate
+  prior (per-tier success likelihood by query type) and is honestly
+  described as *wrapping* RecServe, not extending it, so it shouldn't be
+  conflated with §4's claim. Its payoff is also unconfirmed for the real
+  target workload: in this repo's own SST2 classification reproduction,
+  only 10% of queries escalated past ONU and 0% reached cloud, so the
+  wasted-sunk-cost problem it would fix was small for *that* benchmark —
+  worth re-measuring once the generative cascade (harder, more evenly
+  distributed difficulty) exists, not assumed from this one.
+
+## 9. Open questions — still need resolving for the core contribution
 
 - **λ** (joules per quality point) needs to be set deliberately, possibly
   per deployment scenario (battery-constrained vs. quality-critical); it
   is a value judgment the data cannot supply.
-- **Sliding-window size** (local or profile-bucket) needs traffic-dynamics
-  data this repo doesn't have — every energy number gathered so far is a
-  static snapshot, never a time series.
-- **Skip-ahead escalation** (letting a query predictable in advance to
-  need a high tier skip the stepwise ladder, avoiding paying for discarded
-  intermediate local attempts — this is what the README's "skip-capable"
-  phrase already points at) is a further, separate extension. Its payoff
-  depends on how often queries actually climb far, which is workload-
-  dependent: in this repo's own SST2 classification reproduction, only
-  10% of queries escalated past ONU and 0% reached cloud, so the
-  wasted-sunk-cost problem it fixes was small for *that* benchmark — worth
-  re-measuring once the generative cascade (harder, more evenly
-  distributed difficulty) exists, rather than assumed from this one.
+- **Sliding-window / profile-bucket size** (§6, if pursued) needs
+  traffic-dynamics data this repo doesn't have — every energy number
+  gathered so far is a static snapshot, never a time series.
 - **Day/night traffic-pattern assumption** for fog's static profile
   buckets (§6) is unverified for this specific deployment context.
 
-## 9. Where this plugs into the code
+## 10. Where this plugs into the code
 
 - `implementation/src/layers/generative_layer.py`: this design determines
   how that module's escalation decision should eventually be implemented
