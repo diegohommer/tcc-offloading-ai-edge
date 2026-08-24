@@ -12,6 +12,70 @@ threshold this repo's `traced_recursive_serve.py` already implements for
 the classification cascade. Everything below is about giving that same
 mechanism an energy term, not inventing a new decision engine.
 
+## Summary — the idea in plain terms
+
+RecServe (and Pakpahan & Hwang's PON architecture, which this repo
+follows) already has a simple rule: at each tier — user, ONU, fog,
+cloud — the local model answers a query and reports how confident it
+is. Confident enough, it stops there. Not confident enough, the query
+moves up to the next tier, which tries again. This repeats, tier by
+tier, until something is confident enough or the query reaches the
+cloud. The bar for "confident enough" isn't fixed — each tier
+calibrates it from its own recent history (the top-β-fraction of its
+recent confidence scores) — but that bar has never had anything to do
+with energy. A query escalates purely because the model wasn't sure,
+no matter how much that escalation costs.
+
+**The idea: add one number, λ ("lambda"), that answers a single
+question — how many joules is one extra percentage point of confidence
+worth to you?** With that number, and the real energy costs measured
+for every tier in `layer_energy.yaml`, each tier's confidence bar gets
+nudged automatically. Cheap hops (fog escalating to a well-batched
+cloud) barely move the bar — energy isn't the deciding factor there.
+Expensive hops (ONU running an oversized model, paying more locally
+than it would cost to escalate) get their bar nudged down, because it's
+not worth demanding near-perfect confidence when a cheap hop is right
+there. Set λ to "infinity" (energy doesn't matter at all) and RecServe's
+original behavior comes back exactly — this only adds an option, it
+doesn't take one away.
+
+**Concretely:** a tier normally requires, say, 85% confidence to answer
+locally. If escalating costs 0.38 J and λ says "1 J buys 10 points of
+confidence," the bar drops to about 81%. A borderline query at 83%
+confidence — which would have escalated under plain RecServe — now
+stays local, because the small remaining doubt wasn't worth the joules.
+Same query, same model, different outcome, purely because of what a
+joule is worth to you. (Full worked examples with real per-tier numbers
+are in §4.)
+
+**What this deliberately does *not* do, and why:**
+
+- **No live network chatter between tiers.** Every cost a tier needs is
+  measured once, offline, and shipped as static configuration — reusing
+  the same registration handshake the base architecture already has for
+  other device info. Nothing gets polled or broadcast while the system
+  runs (§2, §5).
+- **No jumping tiers.** A query still climbs one hop at a time, exactly
+  as RecServe defines it — the mechanism only ever asks "is it worth
+  going one hop further from here," never "should I skip straight to
+  the cloud." Keeping this untouched means the whole thing inherits
+  everything already proven about RecServe — decentralized, low
+  overhead — for free (§8).
+- **No claim that this is a brand-new idea.** Other systems (PerLLM,
+  GreenServ, CR²) already trade energy against quality, in their own
+  settings. What's actually being contributed is fitting that same kind
+  of tradeoff into *this specific* mechanism, for *this specific*
+  four-tier PON setting none of those systems touch (§7).
+
+**What's still an open decision, not something the data can settle by
+itself:** the actual value of λ (a value judgment — how much you care
+about energy vs. quality), and how to estimate "how much would
+escalating actually help" before you've tried it (necessarily a proxy,
+since you can't know a tier's answer without running it) (§4, §9).
+
+Everything below spells out the reasoning, the rejected alternatives,
+and the exact mechanics behind all of this.
+
 ## 1. What the base architecture already gives us
 
 - **The escalation rule is local and stepwise by design.** Each tier
@@ -146,6 +210,28 @@ net-negative-cost escalation (cloud in its batched regime, cheaper than
 fog) raises the effective bar, pushing toward escalating more readily —
 also correct. `cost=0` or `λ→∞` collapses the offset to zero and
 recovers Eq. 2 exactly, consistent with the strict-superset claim below.
+
+**What λ actually is, in units:** joules per percentage-point of
+confidence — "how many joules am I willing to spend to buy myself one
+more point of confidence." Worked example: a tier's calibrated bar
+`T(β) = 85%`, a query arrives at 83% confidence (would escalate under
+plain RecServe), escalating this hop costs 0.38 J (ONU → fog):
+
+| λ (J per confidence-point) | Bar shift = 0.38 ÷ λ | Effective bar | 83%-confidence query |
+|---|---|---|---|
+| 0.01 (generous) | 38 points | 85 − 38 = 47% | clears easily → **stays local** |
+| 0.1 (moderate) | 3.8 points | 85 − 3.8 = 81.2% | clears (83 ≥ 81.2) → **stays local** |
+| 1.0 (stingy) | 0.38 points | 85 − 0.38 = 84.6% | fails (83 < 84.6) → **escalates**, same as plain RecServe |
+
+Same query, same model, three different outcomes, purely from what a
+joule is declared to be worth. On a cheap hop (fog → cloud in its
+batched regime, 0.094 J) the same three λ values barely move the bar at
+all (0.9, 0.09 points) — cheap hops stay close to plain-RecServe
+behavior regardless of λ; expensive hops are where λ actually does
+work. A reasonable starting point, not derived from data but a sane
+place to begin tuning: pick λ so that a *typical* hop cost (~0.5 J)
+moves the bar by something noticeable-but-not-drastic (~4 points), i.e.
+`λ ≈ 0.1 J/point`.
 
 - **Quality gain proxy (open decision, not yet resolved):** two options,
   with a real accuracy/effort tradeoff.
