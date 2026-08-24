@@ -266,19 +266,46 @@ rate *inside RecServe's specific β-quantile confidence mechanism*
 cascade, not a claim that energy-aware LLM routing is new. Grounded in
 real measured cross-tier energy data (this repo's own profiling, not an
 analytical TDP estimate like EcoThink's) is still a genuine, checkable
-strength relative to all three comparators. Applied to a physically
-distributed PON/SDN hierarchy (vs. EcoThink's single system, PerLLM's and
-GreenServ's model-pool routing rather than a tiered hardware hierarchy)
-is still a real difference in setting, not just framing.
+strength relative to all three comparators.
+
+**The setting difference was verified, not assumed (2026-08-24, read past
+the abstracts into each paper's actual system model):**
+
+- **PerLLM** is a strict **two-tier** edge/cloud split. Network is modeled
+  as abstract bandwidth constants ("network bandwidth of the cloud and
+  edge is set to 300 Mbps and 100 Mbps," ±20% noise for "dynamically
+  changing environment") — no PON, TDMA, wavelength allocation, or any
+  access-network protocol. Evaluated on a generic testbed (5 CPUs +
+  1×A100), not anything PON-adjacent.
+- **GreenServ** is **not even multi-tier** — all 16 models sit on one
+  A100 server in one rack ("a server running Ubuntu 22.04.5... an NVIDIA
+  A100 GPU with 80 GB VRAM"), routed via local async queueing (FastAPI +
+  Redis). Zero network modeling of any kind. Their own §6.4 names this as
+  a limitation: "operational conditions should account for... request
+  concurrency, batch processing, queuing delays... runtime model
+  switching" — an explicit admission the network/deployment dimension
+  isn't addressed at all.
+
+Neither models a hierarchy deeper than PerLLM's two tiers (this design
+has four, with real measured per-tier hardware differences — phone,
+Jetson, A30, hyperscale), and neither touches PON/SDN access-network
+constraints in any form. That is the real, checked basis for "different
+setting," not an assumption to revisit later.
 
 **Design idea worth borrowing regardless of the novelty question:** both
 PerLLM (CS-UCB) and GreenServ use an online multi-armed bandit to learn
-their energy/quality tradeoff rather than fixing it as a constant. That's
-directly relevant to this design's open λ-calibration problem (§9) — a
-bandit could learn λ (or the per-tier-pair threshold bias) from observed
-outcomes instead of it being a one-time hand-set value judgment. Worth
-evaluating as an alternative to static λ before committing to "value
-judgment, not derivable from data" as the final word on §9's open item.
+their energy/quality tradeoff rather than fixing it as a constant.
+GreenServ's reward function in particular —
+`r_t(m,q) = α·Accuracy − β·Cost, with α=1−λ, β=λ` — is structurally the
+same single-dial parameterization landed on independently in §4
+(λ=0 pure quality, λ=1 pure cost), which is a useful piece of convergent
+validation for that specific parameterization choice, separate from the
+novelty question. This is directly relevant to this design's open
+λ-calibration problem (§9) — a bandit could learn λ (or the per-tier-pair
+threshold bias) from observed outcomes instead of it being a one-time
+hand-set value judgment. Worth evaluating as an alternative to static λ
+before committing to "value judgment, not derivable from data" as the
+final word on §9's open item.
 
 Cite PerLLM, GreenServ, CR², and EcoThink explicitly, on this exact axis,
 when the related-work chapter (currently a skeleton, `thesis/latex/tcc.tex`
