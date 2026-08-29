@@ -186,6 +186,10 @@ def main() -> None:
     parser.add_argument("--beta", type=float, default=0.3, help="beta-quantile (must match the cascade run)")
     parser.add_argument("--cost-config", default="monotonic",
                         help="which rung of the section 11.3 ladder to price with (default: monotonic)")
+    parser.add_argument("--measured-energy", type=Path, default=None,
+                        help="JSON from measure_tier_energy.py. Replaces the borrowed layer_energy.yaml "
+                             "values with energy actually measured on this machine for the models that "
+                             "actually run. Overrides --cost-config.")
     parser.add_argument("--nominal-tokens", type=float, default=None,
                         help="tokens assumed when computing the STATIC decision cost "
                              "(default: mean prompt tokens across the matrix)")
@@ -200,11 +204,22 @@ def main() -> None:
         raise SystemExit(f"no records in {args.matrix_path}")
 
     table = LayerEnergyTable()
-    configs = cost_configs(table)
-    if args.cost_config not in configs:
-        raise SystemExit(f"unknown --cost-config {args.cost_config!r}; choose from {sorted(configs)}")
-    j_per_token = configs[args.cost_config]
     link_j = table.link_energy_per_hop_J()
+
+    if args.measured_energy is not None:
+        measured = json.loads(args.measured_energy.read_text())
+        j_per_token = {t: float(measured["tiers"][t]["net_J_per_prompt_token"]) for t in TIERS}
+        cost_label = f"MEASURED on this machine ({args.measured_energy.name})"
+        # The link constant comes from PON literature (J per hop) and is unrelated
+        # to the locally measured CPU figures; at these magnitudes it would
+        # dominate every hop decision and drown out the measured signal.
+        link_j = 0.0
+    else:
+        configs = cost_configs(table)
+        if args.cost_config not in configs:
+            raise SystemExit(f"unknown --cost-config {args.cost_config!r}; choose from {sorted(configs)}")
+        j_per_token = configs[args.cost_config]
+        cost_label = args.cost_config
 
     nominal_tokens = args.nominal_tokens
     if nominal_tokens is None:
@@ -218,8 +233,11 @@ def main() -> None:
     }
 
     print(f"Matrix: {args.matrix_path}  (n={len(records)})")
-    print(f"Cost config: {args.cost_config}  ->  " +
-          "  ".join(f"{t}={j_per_token[t]:.4f}" for t in TIERS) + " J/token")
+    print(f"Cost config: {cost_label}  ->  " +
+          "  ".join(f"{t}={j_per_token[t]:.5f}" for t in TIERS) + " J/token")
+    if args.measured_energy is not None:
+        print("  (idle-subtracted RAPL package energy per PROMPT token, CPU, this machine;")
+        print("   link term set to 0 -- the PON per-hop constant is from unrelated literature)")
     print(f"Nominal tokens for the static decision cost: {nominal_tokens:.1f}")
     print("Static decision cost per hop: " +
           "  ".join(f"{t}->{nxt}={decision_costs[(t, nxt)]:.3f}J" for t, nxt in NEXT_TIER.items()))
@@ -271,8 +289,14 @@ def main() -> None:
                                   if not problems else "FAILED -- " + "; ".join(problems)))
 
     print(f"\nWrote sweep: {out_path}")
-    print("NOTE: absolute joules are the labeled smoke-test proxy (see module docstring);")
-    print("      the comparison *between* configurations is what this sweep measures.")
+    if args.measured_energy is not None:
+        print("NOTE: joules here were measured on this machine for the models that actually ran")
+        print("      (RAPL, CPU, per prompt token) -- not the borrowed decode-phase proxy. They are")
+        print("      real for THIS 4-tier classifier cascade, and say nothing about a generative one.")
+    else:
+        print("NOTE: absolute joules are the labeled smoke-test proxy (see module docstring);")
+        print("      the comparison *between* configurations is what this sweep measures.")
+        print("      Use --measured-energy to price with locally measured values instead.")
 
 
 if __name__ == "__main__":
