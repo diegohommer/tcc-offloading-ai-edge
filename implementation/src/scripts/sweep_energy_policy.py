@@ -90,6 +90,21 @@ def cost_configs(table: LayerEnergyTable) -> dict[str, dict[str, float]]:
     fog_prod = table.fog_primary_J_per_token()
     cloud_prod = table.cloud_production_J_per_token()
     cloud_mlperf = float(table.layers["cloud"]["mlperf_power_regime"]["offline"]["decode_J_per_token"])
+    onu_8b = table.decode_point("onu", "llama3.1_8b", "w4").decode_J_per_token
+
+    # QwQ-32B on 1xH100 at both batching extremes (Caravaca et al., Table IV).
+    # Flagged SECONDARY in layer_energy.yaml as below the 65B+ cloud target -- a
+    # documented deviation, used because it is the model a fully-local generative
+    # ladder can actually run, and because it is measured at BOTH batch=1 and the
+    # paper's best-found batching config.
+    def _qwq(batch_key) -> float:
+        for entry in table.layers["cloud"]["batch_curve"]:
+            if entry["model"].startswith("QwQ-32B") and str(entry["batch"]).startswith(str(batch_key)):
+                return float(entry["decode_J_per_token"])
+        raise KeyError(f"QwQ-32B batch={batch_key} not found in cloud batch_curve")
+
+    cloud_32b_batch1 = _qwq(1)
+    cloud_32b_opt = _qwq("optimized")
 
     return {
         # Rung 1: monotonically increasing, as directed. Achievable with real
@@ -101,7 +116,40 @@ def cost_configs(table: LayerEnergyTable) -> dict[str, dict[str, float]]:
         "batched-cloud": {"user": user_1b, "onu": onu_15b, "fog": fog_prod, "cloud": cloud_mlperf},
         # Rung 3: an oversized ONU model costs more than the tier above it.
         "oversized-onu": {"user": user_1b, "onu": onu_14b, "fog": fog_prod, "cloud": cloud_prod},
+
+        # --- Configs for the GENERATIVE ladder (run_generative_matrix.py) ---
+        # The same four models the cascade actually runs, each priced with the
+        # published energy for THAT model on hardware of its tier's class. This
+        # is the pairing the classification track could never have: confidence
+        # and energy finally refer to the same models.
+        #
+        # The cloud tier is deliberately split into two states rather than
+        # averaged. Caravaca et al. measured QwQ-32B on 1xH100 at both extremes
+        # and the gap is 30x -- unbatched cloud costs MORE per token than fog,
+        # batched cloud far less. One averaged value would erase exactly the
+        # inversion that section 11.3 rung 2 exists to test.
+        "gen-cloud-idle": {
+            "user": user_1b, "onu": onu_8b, "fog": fog_prod, "cloud": cloud_32b_batch1,
+        },
+        "gen-cloud-batched": {
+            "user": user_1b, "onu": onu_8b, "fog": fog_prod, "cloud": cloud_32b_opt,
+        },
     }
+
+
+def billable_tokens(cell: dict) -> int:
+    """Tokens the energy model actually prices for one tier visit.
+
+    Every J/token value in layer_energy.yaml is DECODE energy -- joules per
+    OUTPUT token. A generative matrix records tokens_gen, so that is what gets
+    priced. The classification matrix has no generation at all (tokens_gen
+    absent), and falls back to prompt tokens -- which is exactly the labelled
+    smoke-test proxy documented in compute_energy_report.py, not a real
+    decode measurement.
+    """
+    if cell.get("tokens_gen") is not None:
+        return int(cell["tokens_gen"])
+    return int(cell["tokens_prompt"])
 
 
 def apply_weight(threshold: float, cost: float, lam: float, form: str) -> float:
@@ -164,7 +212,7 @@ def replay(records, beta, form, lam, decision_costs, j_per_token, link_j, max_hi
         finals[final_tier] += 1
         n_correct += int(rec["tiers"][final_tier]["correct"])
         total_hops += len(visited)
-        total_energy_j += sum(j_per_token[t] * rec["tiers"][t]["tokens_prompt"] for t in visited)
+        total_energy_j += sum(j_per_token[t] * billable_tokens(rec["tiers"][t]) for t in visited)
         total_energy_j += link_j * (len(visited) - 1)
 
     n = len(records)
@@ -223,7 +271,7 @@ def main() -> None:
 
     nominal_tokens = args.nominal_tokens
     if nominal_tokens is None:
-        nominal_tokens = float(np.mean([r["tiers"]["user"]["tokens_prompt"] for r in records]))
+        nominal_tokens = float(np.mean([billable_tokens(r["tiers"]["user"]) for r in records]))
 
     # Static per-tier-pair decision cost: what a tier is told, at deployment
     # time, that escalating will typically cost.
