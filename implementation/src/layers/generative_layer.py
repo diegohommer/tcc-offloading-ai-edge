@@ -28,6 +28,13 @@ class GenerationResult:
     confidence: float  # e.g. normalized perplexity, per RecServe's Seq2Seq confidence definition
     prefill_latency_s: float
     decode_latency_s: float
+    # Raw per-token logprobs, kept so a collection run stays reusable: any future
+    # confidence definition (raw perplexity, min-token probability, entropy, a
+    # different normalization) can be recomputed offline from these instead of
+    # re-running the models. Optional because a backend may not expose them --
+    # but the cascade cannot compute confidence at all without them, so in
+    # practice every tier backend should populate it.
+    logprobs: list[float] | None = None
 
 
 class GenerativeLayer(Protocol):

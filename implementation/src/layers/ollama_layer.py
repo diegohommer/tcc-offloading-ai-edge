@@ -93,6 +93,7 @@ class OllamaGenerativeLayer:
             tokens_prompt=n_prompt,
             tokens_gen=n_gen,
             confidence=confidence_from_logprobs(logprobs),
+            logprobs=logprobs,
             # Neither backend reports a prefill/decode split, so the whole wall
             # time is attributed to decode. Decode dominates >=99% of time in
             # this regime (per the Jetson Orin measurements in layer_energy.yaml),
