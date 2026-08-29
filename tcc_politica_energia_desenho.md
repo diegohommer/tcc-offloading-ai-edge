@@ -73,6 +73,19 @@ about energy vs. quality), and how to estimate "how much would
 escalating actually help" before you've tried it (necessarily a proxy,
 since you can't know a tier's answer without running it) (§4, §9).
 
+**How this gets tested (§11):** rather than picking one λ and one
+weighting formula and hoping, the plan is to sweep both — three
+candidate ways of applying the energy weight (additive, multiplicative,
+exponential) across a range of λ values — and measure the resulting
+accuracy-vs-energy tradeoff curve for each. λ=0 is plain RecServe, so
+the baseline is a point on the curve rather than a separate experiment.
+The first run fixes each tier's energy cost as a simple increasing
+ladder (cheapest at the user device, priciest at the cloud) using real
+measured numbers, and complexity — the cases where a higher tier is
+actually *cheaper*, batch effects, time-of-day variation — gets layered
+in one step at a time afterwards, each step swapping in a different real
+row from the same measured table.
+
 Everything below spells out the reasoning, the rejected alternatives,
 and the exact mechanics behind all of this.
 
@@ -210,6 +223,17 @@ net-negative-cost escalation (cloud in its batched regime, cheaper than
 fog) raises the effective bar, pushing toward escalating more readily —
 also correct. `cost=0` or `λ→∞` collapses the offset to zero and
 recovers Eq. 2 exactly, consistent with the strict-superset claim below.
+
+> **Superseded as the primary form (2026-08-24, Prof. Nazar).** The
+> additive offset below is kept as one of three candidate weighting
+> functions to sweep, but it is **not** the default any more: it is
+> unbounded (a large `cost` with a small λ drives the effective
+> threshold below zero, needing an arbitrary clamp) and its λ
+> convention is inverted relative to how a weight normally reads
+> (λ→∞ = baseline). The **exponential** form
+> `T_eff = T(β)·exp(−λ·cost)` is bounded by construction and recovers
+> the baseline at λ=0. See §11 for all three forms, the λ-convention
+> change, and the staged experimental plan.
 
 **What λ actually is, in units:** joules per percentage-point of
 confidence — "how many joules am I willing to spend to buy myself one
@@ -527,3 +551,116 @@ items are secondary or explicitly out of scope for now:
 - `implementation/src/recserve/traced_recursive_serve.py`: the existing
   β-quantile sliding-window mechanism this design extends rather than
   replaces.
+
+## 11. Weighting function and staged experimental plan
+
+**Origin: Prof. Nazar, 2026-08-24** — "manter os dois e colocar um fator
+multiplicativo ou exponencial de ponderação... a gente testa o sistema
+com várias configurações diferentes desses parâmetros e medimos o
+impacto deles," plus: start by fixing per-layer energy cost as a
+*monotonically increasing* progression, then add complexity (batches
+etc.) from there.
+
+### 11.1 Keep both signals; sweep the weighting function
+
+Confidence and energy both stay in the decision — energy weights the
+confidence threshold rather than replacing or gating it. Three candidate
+forms, all applied to the *same* `T_{M,τ}(β)` RecServe already computes:
+
+| Form | Effective threshold | λ units | Baseline at | Bounded? |
+|---|---|---|---|---|
+| **A — additive** (the original §4 draft) | `T(β) − λ⁻¹·cost` | J per confidence-point | λ→∞ | No — needs clamping to [0,1] |
+| **B — multiplicative** | `T(β) · (1 − λ·cost)` | 1/J | λ=0 | No — needs clamping when λ·cost>1 |
+| **C — exponential** *(proposed default)* | `T(β) · exp(−λ·cost)` | 1/J | λ=0 | **Yes** — `exp(−λ·cost) ∈ (0,1]` for cost,λ ≥ 0, so `T_eff ∈ (0, T(β)]` with no clamp |
+
+**Why C as the default:** bounded by construction (no arbitrary clamp,
+which would otherwise be a free parameter nobody can justify), and its
+effect saturates smoothly — doubling a hop's cost squares the
+weighting factor rather than doubling a subtraction, so no single
+expensive hop can collapse the threshold to nonsense. A and B stay in
+the sweep because measuring the impact of the *form itself* (not just
+its parameter) is exactly what was asked for.
+
+**λ convention changes with this (worth stating explicitly, it flips
+relative to earlier sections):** under B and C, **λ=0 means energy is
+ignored and the mechanism is exactly plain RecServe**; larger λ means
+energy weighs more heavily. This is both more intuitive than form A's
+λ→∞ baseline and consistent with GreenServ's own `α=1−λ, β=λ`
+parameterization (§7). All λ-sweep results should be reported under this
+convention. The strict-superset property is unchanged and in fact
+cleaner: λ=0 is now an exact, trivially-checkable baseline rather than a
+limit.
+
+### 11.2 Step 1 — monotonically increasing cost, real numbers only
+
+Prof. Nazar's "progressão crescente" starting point is achievable
+**without fabricating anything** — a monotonic ladder exists inside the
+already-measured data, by selecting the cheapest ONU configuration and
+the BF16 (not FP4) cloud point:
+
+| Tier | J/token | Real source (`layer_energy.yaml`) |
+|---|---|---|
+| user | 0.074 | Llama 3.2 1B, W4, CPU backend (Cai et al.) |
+| onu | 0.22 | Qwen2.5 1.5B, W4, Jetson AGX Orin (Kubwimana & Huang) |
+| fog | 0.38 | A30, SOLAR-10.7B, production (Watt Counts) |
+| cloud | 0.40 | 4×H100, BF16, production regime (Oviedo et al., Joule) |
+
+This makes step 1 a defensible real-data baseline rather than a toy
+config, and it makes every later complexity step a matter of *swapping
+in other real rows from the same table* rather than changing the kind of
+input.
+
+**Hop cost accounting for step 1:** cost of escalating into tier *t* =
+(tokens generated at *t*) × (J/token for *t*) + one link hop (0.1 J,
+`link.per_hop_energy_J`). For realistic generation lengths the link term
+is negligible (300 tokens × 0.38 J/token = 114 J vs 0.1 J), but note it
+is *not* negligible in the current classification harness, where each
+tier does a single forward pass and generates no tokens — another reason
+the classification-harness energy numbers stay labelled as smoke-test
+only.
+
+### 11.3 Complexity ladder — what to add, in what order, and what each tests
+
+Each step swaps a real row from `layer_energy.yaml`; nothing synthetic
+is introduced at any stage:
+
+1. **Monotonic baseline** (§11.2) — establishes the mechanism behaves
+   sanely when the intuition "higher tier costs more" actually holds.
+2. **Break monotonicity with the batched-cloud point** (cloud FP4
+   MLPerf, 0.094 J/token — *cheaper than fog's 0.38*). Directly tests
+   the inversion case discussed in §3, and whether the per-tier-pair
+   formulation (§4) handles a negative-cost hop correctly rather than
+   just tolerating it.
+3. **Oversized ONU** (14B W4, 1.89 J/token — pricier than fog). Tests
+   the "tier degenerates to pass-through" diagnostic predicted in §4;
+   the expected, *correct* result is that ONU escalates nearly
+   everything.
+4. **Fog batch curve** (2.74–8.53 J/token across batch 1→20). Introduces
+   §6's batch sensitivity as a real swept variable.
+5. **Time-of-day profile buckets** (§6) — the full batch-aware profile,
+   selected by local escalation frequency.
+
+### 11.4 What to measure
+
+Primary: an **accuracy-vs-total-energy Pareto curve**, one point per
+(form, λ) configuration, with **λ=0 as the explicit baseline** (plain
+RecServe — the curve must pass exactly through it, which doubles as a
+correctness check on the implementation).
+
+Secondary, and cheap to record from the trace the harness already
+writes:
+
+- **Hop distribution shift** per configuration (does traffic actually
+  move between tiers, or does λ do nothing until some knee?).
+- **Per-tier escalation rate** — flags any tier degenerating into
+  pass-through (the §4 diagnostic), which is the expected outcome of
+  ladder step 3 and would be a *finding*, not a failure.
+- **Sensitivity of the ranking to the weighting form** — if A, B and C
+  produce the same Pareto ordering, the form doesn't matter and C can be
+  adopted purely for its boundedness; if they diverge, that divergence
+  is itself a result worth reporting.
+
+All of this is evaluable on the existing classification harness
+(§8) — `run_classification_cascade.py` already records per-hop
+confidence, correctness and tier, which is everything the sweep needs
+except the λ loop itself.
