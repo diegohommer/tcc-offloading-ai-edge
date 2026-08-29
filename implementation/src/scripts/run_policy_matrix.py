@@ -98,7 +98,11 @@ def main() -> None:
     print("\nStandalone accuracy per tier (every tier answering every query):")
     for tier in TIERS:
         print(f"  {tier:>5}: {per_tier_correct[tier] / n:.4f} ({per_tier_correct[tier]}/{n})")
-    print("\nNext: python src/scripts/sweep_energy_policy.py " + str(out_path.relative_to(ROOT)))
+    try:
+        shown = out_path.relative_to(ROOT)
+    except ValueError:
+        shown = out_path
+    print(f"\nNext: python src/scripts/sweep_energy_policy.py {shown}")
 
 
 if __name__ == "__main__":
