@@ -40,12 +40,19 @@ This repository sits at that midpoint, by explicit decision:
 2. **Deliberately not fabricated:** the layer energy tables
    (`implementation/config/layer_energy.yaml`) were measured on decoder
    LLMs doing multi-token decode, not on these tiny classifiers — no
-   published energy measurement exists for distilroberta/roberta-base/
+   *published* energy measurement exists for distilroberta/roberta-base/
    roberta-large/deberta-large. So no "real" energy number is invented for
    the classification cascade. An optional, clearly-labeled proxy
    (`--smoke-test-energy`) prices each tier's forward pass as if it were
    decode on that tier's representative model, solely to exercise the cost
    formulas end to end — never to cite as a thesis result.
+   Since 2026-08-29 there is also a **first-party** alternative to that
+   proxy: `src/scripts/measure_tier_energy.py` measures these four models'
+   actual energy on the local CPU via Intel RAPL, recorded under
+   `local_measurement` in `layer_energy.yaml`. Those numbers are really
+   measured, but of 66M-400M encoders on one CPU — a different unit
+   (J per *prompt* token, single forward pass) from the decode-phase
+   literature tables, and never to be mixed with them.
 3. **Not built yet:** the real generative cascade (four decoder models,
    per-layer precision choice, local quantized and/or hosted-API execution).
    See `implementation/src/layers/generative_layer.py` for the interface
@@ -74,6 +81,9 @@ implementation/
       generative_layer.py       # interface stub for the generative cascade (not implemented)
     scripts/
       compute_energy_report.py  # converts a trace into an energy report (CSV) via the layer energy tables
+      run_policy_matrix.py      # runs every tier on every query -> answer matrix (phase 1 of the lambda sweep)
+      sweep_energy_policy.py    # replays the energy-aware policy over that matrix (phase 2), form x lambda
+      measure_tier_energy.py    # measures real per-tier energy on this machine via Intel RAPL
   results/
     traces/                    # output of the scripts above (generated, not version-controlled)
 thesis/
@@ -94,6 +104,20 @@ python src/recserve/run_classification_cascade.py --dataset sst2 --limit 40
 
 # Part 2 (cost): convert the trace into energy
 python src/scripts/compute_energy_report.py results/traces/sst2_test.jsonl --smoke-test-energy
+
+# Part 3 (energy-aware policy): sweep the escalation rule's weighting form x lambda
+#   3a. run every tier on every query once (the sweep replays this offline)
+python src/scripts/run_policy_matrix.py --dataset sst2 --limit 0
+#   3b. sweep, priced with the literature tables (labelled smoke-test energy)
+python src/scripts/sweep_energy_policy.py results/traces/sst2_test.matrix.jsonl
+
+# Optional: price the sweep with energy measured on THIS machine instead of
+# the borrowed decode-phase numbers. Needs read access to the RAPL counters:
+#   sudo find -L /sys/class/powercap -name energy_uj -exec chmod a+r {} +
+# (root-only by default since CVE-2020-8694; resets on reboot, revert with chmod 400)
+python src/scripts/measure_tier_energy.py --limit 40 --repeats 3
+python src/scripts/sweep_energy_policy.py results/traces/sst2_test.matrix.jsonl \
+    --measured-energy results/traces/measured_tier_energy.json
 ```
 
 Models (`distilroberta-base-sst2-distilled`, `roberta-base-SST-2`,
@@ -115,15 +139,24 @@ real trace). From this repository's side specifically:
   Seq2Class.
 - Fix `|T_prompt|` and `|T_gen|` from a real generative-cascade trace, not
   a separately estimated distribution.
-- Implement the energy-aware offloading policy — design now written up in
-  `tcc_politica_energia_desenho.md` (section 12 of the master document
-  covers the same ground): extends RecServe/Pakpahan's existing
-  β-quantile escalation rule with an explicit joules-per-quality-point
-  exchange rate, calibrated from `implementation/config/layer_energy.yaml`'s
-  static per-tier-pair costs (no live cross-tier telemetry — rejected
-  explicitly, see the design doc §2), with per-tier batch/utilization
-  regime inferred locally from recent escalation frequency (§6). Not
-  implemented or tested yet — design only.
+- Extend the energy-aware policy beyond what is now built. The core
+  mechanism — RecServe's β-quantile threshold weighted by a static
+  per-tier-pair energy cost — **is implemented and evaluated** on the
+  classification harness (`src/scripts/sweep_energy_policy.py`; design
+  and results in `tcc_politica_energia_desenho.md`, §4/§11/§12). On the
+  full 872-query SST-2 split it traces a real accuracy/energy frontier,
+  and priced with locally measured RAPL energy it cuts 31% of energy for
+  0.1 accuracy points at λ=0.01. What remains:
+  - **§6's batch-aware cost profile** (time-of-day buckets selected by
+    local escalation frequency) — every run so far uses one flat static
+    cost per tier.
+  - **A harder dataset.** SST-2 is nearly saturated; the tier spread is
+    only ~4.6 points. `imdb` and `yelp_polarity` are already supported.
+  - **A workload that actually reaches cloud**, so the batched-cloud
+    inversion (design doc §11.3 rung 2) becomes testable — only 34/872
+    queries escalate that far today.
+  - **Re-deriving λ for the generative cascade.** No λ value from the
+    classification runs transfers; the costs differ by orders of magnitude.
 
 ---
 **Author:** Diego Amorim

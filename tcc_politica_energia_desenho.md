@@ -1,9 +1,14 @@
 # Energy-aware offloading policy — design notes
 
-**Status:** design only, not implemented. Referenced from `README.md`'s
-"Next steps" and from `implementation/src/layers/generative_layer.py`'s
-open decisions. Written up 2026-08-24 from a design discussion; no code
-changes accompany this document.
+**Status (updated 2026-08-29): implemented and evaluated on the
+classification harness.** The mechanism of §4/§11 is built
+(`src/scripts/sweep_energy_policy.py`), and has been run over the full
+872-query SST-2 split, priced both with the borrowed literature values
+and with energy measured locally via RAPL. Results and what they do and
+do not support are in **§12**. Still *not* built: the generative
+cascade this design ultimately targets, and §6's batch-aware profile.
+Referenced from `README.md`'s "Next steps" and from
+`implementation/src/layers/generative_layer.py`'s open decisions.
 
 **Extends, does not replace:** the confidence-based stepwise escalation
 rule already used by RecServe and by Pakpahan and Hwang's reference
@@ -664,3 +669,102 @@ All of this is evaluable on the existing classification harness
 (§8) — `run_classification_cascade.py` already records per-hop
 confidence, correctness and tier, which is everything the sweep needs
 except the λ loop itself.
+
+## 12. Results (run 2026-08-29)
+
+Everything below was produced by `src/scripts/sweep_energy_policy.py` over
+the full SST-2 test split (n=872), replaying the matrix from
+`run_policy_matrix.py`. Commands and caveats are in those scripts'
+docstrings; this section records what came out and what it supports.
+
+### 12.1 The mechanism works, and the baseline check passes
+
+At λ=0 the bounded forms reproduce plain RecServe *exactly* — same
+accuracy, same final-tier distribution, same energy — which is the
+correctness check §11.4 asked for. Raising λ shifts traffic down-tier
+monotonically. So the mechanism does what §4 says, and the strict-superset
+property holds in practice, not just on paper.
+
+### 12.2 The weighting form does not matter; use the bounded one
+
+Matched operating points across all three forms land on the *same*
+frontier, differing only in how λ is parameterised:
+
+| Form | λ | Accuracy | J/query |
+|---|---|---|---|
+| additive | 100 | 0.9346 | 2.662 |
+| multiplicative | 0.01 | 0.9346 | 2.662 |
+| exponential | 0.01 | 0.9346 | 2.680 |
+
+This is the outcome §11.1 flagged as possible: since nothing is lost in
+the tradeoff itself, **exponential should be adopted purely on its
+engineering merit** — bounded in `(0, T(β)]`, no clamp, exact baseline at
+λ=0. The additive form's unboundedness is a defect with no compensating
+benefit. Consider the form question settled.
+
+### 12.3 Per-tier standalone accuracy — and why n=40 was misleading
+
+| Tier | n=40 | n=872 |
+|---|---|---|
+| user | 1.0000 | 0.9117 |
+| onu | 0.9500 | 0.9438 |
+| fog | 0.9750 | 0.9576 |
+| cloud | 0.9750 | 0.9495 |
+
+At n=40 the smallest model looked *most* accurate, making escalation
+strictly harmful and the tradeoff degenerate. That inverted ladder was a
+small-sample artifact and disappears at n=872. **Do not run this
+experiment at small n** — it produces a qualitatively wrong picture, not
+just a noisy one. One real inversion survives: cloud (deberta-large)
+sits slightly *below* fog (roberta-large) on SST-2, so the top hop
+currently buys nothing on this task.
+
+### 12.4 The frontier, priced with locally measured energy
+
+Using the RAPL measurements recorded in `layer_energy.yaml`'s
+`local_measurement` block (exponential form):
+
+| λ | Accuracy | J/query | Δ energy | Δ accuracy |
+|---|---|---|---|---|
+| 0 (baseline) | 0.9530 | 0.638 | — | — |
+| 0.01 | 0.9518 | 0.440 | −31% | −0.1 pt |
+| 0.025 | 0.9450 | 0.375 | −41% | −0.8 pt |
+| 0.05 | 0.9404 | 0.339 | −47% | −1.3 pt |
+| 0.1 | 0.9381 | 0.296 | −54% | −1.5 pt |
+| 1.0 | 0.9163 | 0.231 | −64% | −3.7 pt |
+
+The knee is sharp: **λ=0.01 gives 31% less energy for 0.1 accuracy points**
+(one query in 872). Most of the saving lands before the accuracy cost
+becomes visible.
+
+### 12.5 What these numbers do and do not support
+
+**Supported:**
+
+- The decision rule is correct and behaves as designed (12.1).
+- The choice of weighting form is settled empirically (12.2).
+- A real, monotonic accuracy/energy frontier exists for this cascade, on
+  measured joules, with a usefully sharp knee (12.4).
+- The §4 "expensive tier degenerates toward pass-through" diagnostic is
+  observable: with an oversized ONU (14B, 1.89 J/token) baseline energy
+  jumps to 20.1 J/query and the mechanism routes around that tier far
+  more aggressively (λ=0.02 drives everything local, vs λ=0.2 in the
+  monotonic config).
+
+**Not supported — do not carry these forward as thesis results:**
+
+- **No specific λ value transfers.** λ=0.01 is right for *this* cost
+  ladder on *this* hardware. The generative cascade's costs differ by
+  orders of magnitude; λ must be re-derived there.
+- **The tiers are 66M–400M encoder classifiers on one CPU**, not a
+  1B→70B generative cascade on heterogeneous hardware. This validates
+  the mechanism, not the target system.
+- **SST-2 is nearly saturated** — a ~4.6-point spread between the
+  best and worst tier is a narrow window to trade within. A harder task
+  (imdb, yelp_polarity — both already supported by the harness) would
+  give the frontier more room.
+- **Ladder rung 2 (batched cloud) remains untested.** Only 34 of 872
+  queries reach cloud at baseline, so cheapening cloud changes almost no
+  decision. It needs a workload that actually escalates that far.
+- **§6's batch-aware profile is still unbuilt**; every run so far uses one
+  flat static cost per tier.

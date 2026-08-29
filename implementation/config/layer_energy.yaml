@@ -304,3 +304,75 @@ environment:
     hyperscale: 1.1
     average: 1.5
   applies_to: [fog, cloud]
+
+# ---------------------------------------------------------------------------
+# Locally measured energy -- NOT part of the literature tables above.
+# ---------------------------------------------------------------------------
+# Everything above this line is transcribed from published sources measuring
+# decoder LLMs (1B-405B params) on hardware this project does not have. The
+# block below is the opposite: energy this project measured itself, on the
+# tiny encoder classifiers that the RecServe harness actually runs.
+#
+# Recorded here because it is NOT regenerable from the repo -- it depends on
+# one specific machine, its thermal state, and root-granted RAPL access. The
+# generated JSON it came from (results/traces/measured_tier_energy.json) is
+# not version-controlled.
+#
+# DO NOT MIX WITH THE TABLES ABOVE. Different unit (J per PROMPT token on a
+# single forward pass, vs J per OUTPUT token during decode), different model
+# class (66M-400M encoders vs 1B-405B decoders), different boundary (CPU
+# package vs chip/module or node).
+local_measurement:
+  date: 2026-08-29
+  hardware: "Intel Core 5 120U, 12 threads, CPU-only inference (no GPU on this machine)"
+  method: >
+    Intel RAPL sysfs counter deltas (wraparound-corrected) around real
+    inference, via src/scripts/measure_tier_energy.py. Idle power sampled for
+    5s immediately before the run and subtracted to give the 'net' figures.
+    3 measured passes per tier, 40 SST-2 queries (1010 prompt tokens) per
+    pass, 5 unmeasured warmup inferences before each pass.
+  domain: package-0
+  idle_W: {package-0: 9.66, psys: 18.99}
+  unit: J_per_prompt_token
+  phase: single_forward_pass_no_generation
+  tiers:
+    user:
+      model: "azizbarank/distilroberta-base-sst2-distilled (~82M)"
+      net_J_per_inference: 0.2195
+      net_J_per_prompt_token: 0.00869
+      total_J_per_inference: 0.4212
+      net_J_stdev_across_passes: 1.70
+    onu:
+      model: "textattack/roberta-base-SST-2 (~125M)"
+      net_J_per_inference: 0.3899
+      net_J_per_prompt_token: 0.01544
+      total_J_per_inference: 0.6953
+      net_J_stdev_across_passes: 1.15
+    fog:
+      model: "howey/roberta-large-sst2 (~355M)"
+      net_J_per_inference: 1.7465
+      net_J_per_prompt_token: 0.06917
+      total_J_per_inference: 2.8872
+      net_J_stdev_across_passes: 4.60
+    cloud:
+      model: "Tomor0720/deberta-large-finetuned-sst2 (~400M)"
+      net_J_per_inference: 2.2323
+      net_J_per_prompt_token: 0.08841
+      total_J_per_inference: 4.1175
+      net_J_stdev_across_passes: 20.93
+  caveats:
+    - "Package-scope: counts any other load on the socket. Run on a quiet machine."
+    - >
+      'net' subtracts measured idle power; 'total' does not. Neither is
+      definitive -- total overstates the model's own marginal cost on a mostly
+      idle machine, net understates it if inference also raises the subtracted
+      components. Both recorded.
+    - >
+      The cloud tier's spread is large (stdev 20.93 J across passes; pass 1 read
+      113 J against ~77 J for passes 2-3), consistent with thermal/turbo
+      settling. The larger models want a longer warmup than the 5 inferences
+      used here. user/onu were stable by comparison.
+    - >
+      Ladder is monotonic (0.00869 / 0.01544 / 0.06917 / 0.08841) with a ~10x
+      user-to-cloud spread -- roughly twice the ~5.4x spread implied by the
+      borrowed literature values used before this was measured.
