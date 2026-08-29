@@ -121,6 +121,15 @@ class TracedRecursiveServe:
         confidence = prediction[0]["score"]
         return predicted_label, confidence, latency_s
 
+    def classify_one(self, tier: str, text: str) -> tuple[str, float, float]:
+        """Run a single tier on already-cleaned text. Public entry point for
+        benchmarks that drive one tier at a time (src/scripts/measure_tier_energy.py)."""
+        return self._classify_at(tier, text)
+
+    def count_tokens(self, tier: str, text: str) -> int:
+        """Prompt-token count under `tier`'s own tokenizer."""
+        return self._count_tokens(tier, text)
+
     def classify_all_tiers(self, input_text: str) -> dict[str, dict]:
         """Run *every* tier on `input_text`, ignoring escalation entirely.
 
