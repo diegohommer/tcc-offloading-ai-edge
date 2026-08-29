@@ -121,6 +121,34 @@ class TracedRecursiveServe:
         confidence = prediction[0]["score"]
         return predicted_label, confidence, latency_s
 
+    def classify_all_tiers(self, input_text: str) -> dict[str, dict]:
+        """Run *every* tier on `input_text`, ignoring escalation entirely.
+
+        Used to build the offline policy matrix the lambda sweep replays
+        against (src/scripts/run_policy_matrix.py). The escalation decision
+        is path-dependent -- changing lambda changes which tiers a query
+        visits, which changes each tier's confidence history, which changes
+        its future thresholds -- so a sweep cannot be post-processed from a
+        single cascade trace: it needs every tier's answer for every query.
+
+        Each tier's output depends only on the input text (the pipelines are
+        stateless and deterministic), so running them all up front and
+        replaying policies offline is equivalent to re-running the cascade
+        once per configuration, minus the repeated inference cost.
+        """
+        text = clean_text(input_text)
+        out: dict[str, dict] = {}
+        for tier in self.model_names:
+            predicted_label, confidence, latency_s = self._classify_at(tier, text)
+            out[tier] = {
+                "model_name": self.model_names[tier],
+                "predicted_label": predicted_label,
+                "confidence": confidence,
+                "latency_s": latency_s,
+                "tokens_prompt": self._count_tokens(tier, text),
+            }
+        return out
+
     def predict(self, input_text: str) -> QueryTrace:
         text = clean_text(input_text)
         trace = QueryTrace(input_text=text)
