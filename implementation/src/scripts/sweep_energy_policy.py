@@ -165,23 +165,24 @@ def apply_weight(threshold: float, cost: float, lam: float, form: str) -> float:
     raise ValueError(f"unknown weighting form: {form}")
 
 
-def replay(records, beta, form, lam, decision_costs, j_per_token, link_j, max_history=10000):
+def replay(records, beta, form, lam, decision_costs, j_per_token, link_j, chain, max_history=10000):
     """Re-run RecServe's escalation loop offline under one (form, lambda) config.
 
     Mirrors TracedRecursiveServe.predict exactly -- same threshold rule, same
     `len(history) > 1` guard, same append-after-decide ordering -- so that the
     baseline configuration reproduces the real cascade run bit for bit.
     """
-    history = {tier: [] for tier in TIERS}
+    next_tier_of = {chain[i]: chain[i + 1] for i in range(len(chain) - 1)}
+    history = {tier: [] for tier in chain}
     n_correct = 0
     total_energy_j = 0.0
     total_hops = 0
-    visits = {tier: 0 for tier in TIERS}
-    finals = {tier: 0 for tier in TIERS}
-    escalations = {tier: 0 for tier in TIERS}
+    visits = {tier: 0 for tier in chain}
+    finals = {tier: 0 for tier in chain}
+    escalations = {tier: 0 for tier in chain}
 
     for rec in records:
-        tier = "user"
+        tier = chain[0]
         visited = []
         while True:
             cell = rec["tiers"][tier]
@@ -189,7 +190,7 @@ def replay(records, beta, form, lam, decision_costs, j_per_token, link_j, max_hi
             visited.append(tier)
             visits[tier] += 1
 
-            next_tier = NEXT_TIER.get(tier)
+            next_tier = next_tier_of.get(tier)
             escalate = False
             hist = history[tier]
             if next_tier is not None and len(hist) > 1:
@@ -222,9 +223,9 @@ def replay(records, beta, form, lam, decision_costs, j_per_token, link_j, max_hi
         "total_energy_J": total_energy_j,
         "energy_J_per_query": total_energy_j / n,
         "avg_hops": total_hops / n,
-        **{f"visits_{t}": visits[t] for t in TIERS},
-        **{f"final_{t}": finals[t] for t in TIERS},
-        **{f"esc_rate_{t}": (escalations[t] / visits[t] if visits[t] else 0.0) for t in TIERS},
+        **{f"visits_{t}": visits[t] for t in chain},
+        **{f"final_{t}": finals[t] for t in chain},
+        **{f"esc_rate_{t}": (escalations[t] / visits[t] if visits[t] else 0.0) for t in chain},
     }
 
 
@@ -232,6 +233,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("matrix_path", type=Path, help="JSONL from run_policy_matrix.py")
     parser.add_argument("--beta", type=float, default=0.3, help="beta-quantile (must match the cascade run)")
+    parser.add_argument("--tiers", default=None,
+                        help="comma-separated escalation chain, in order (default: whichever of "
+                             "user,onu,fog,cloud the matrix actually contains). Lets a partial "
+                             "cascade be swept before every tier has been collected.")
     parser.add_argument("--cost-config", default="monotonic",
                         help="which rung of the section 11.3 ladder to price with (default: monotonic)")
     parser.add_argument("--measured-energy", type=Path, default=None,
@@ -250,6 +255,17 @@ def main() -> None:
     records = [json.loads(line) for line in args.matrix_path.read_text().splitlines() if line.strip()]
     if not records:
         raise SystemExit(f"no records in {args.matrix_path}")
+
+    if args.tiers:
+        chain = [t.strip() for t in args.tiers.split(",") if t.strip()]
+    else:
+        chain = [t for t in TIERS if all(t in r["tiers"] for r in records)]
+    missing = [t for t in chain if not all(t in r["tiers"] for r in records)]
+    if missing:
+        raise SystemExit(f"matrix lacks tier(s) {missing} on some queries")
+    if len(chain) < 2:
+        raise SystemExit(f"need at least 2 tiers to escalate between; got {chain}")
+    next_tier_of = {chain[i]: chain[i + 1] for i in range(len(chain) - 1)}
 
     table = LayerEnergyTable()
     link_j = table.link_energy_per_hop_J()
@@ -271,38 +287,38 @@ def main() -> None:
 
     nominal_tokens = args.nominal_tokens
     if nominal_tokens is None:
-        nominal_tokens = float(np.mean([billable_tokens(r["tiers"]["user"]) for r in records]))
+        nominal_tokens = float(np.mean([billable_tokens(r["tiers"][chain[0]]) for r in records]))
 
     # Static per-tier-pair decision cost: what a tier is told, at deployment
     # time, that escalating will typically cost.
     decision_costs = {
         (t, nxt): j_per_token[nxt] * nominal_tokens + link_j
-        for t, nxt in NEXT_TIER.items()
+        for t, nxt in next_tier_of.items()
     }
 
     print(f"Matrix: {args.matrix_path}  (n={len(records)})")
     print(f"Cost config: {cost_label}  ->  " +
-          "  ".join(f"{t}={j_per_token[t]:.5f}" for t in TIERS) + " J/token")
+          "  ".join(f"{t}={j_per_token[t]:.5f}" for t in chain) + " J/token")
     if args.measured_energy is not None:
         print("  (idle-subtracted RAPL package energy per PROMPT token, CPU, this machine;")
         print("   link term set to 0 -- the PON per-hop constant is from unrelated literature)")
     print(f"Nominal tokens for the static decision cost: {nominal_tokens:.1f}")
     print("Static decision cost per hop: " +
-          "  ".join(f"{t}->{nxt}={decision_costs[(t, nxt)]:.3f}J" for t, nxt in NEXT_TIER.items()))
+          "  ".join(f"{t}->{nxt}={decision_costs[(t, nxt)]:.3f}J" for t, nxt in next_tier_of.items()))
     print()
 
     rows = []
     # Baseline: plain RecServe, energy ignored entirely. Everything else is
     # measured against this, and the exponential/multiplicative lambda=0 rows
     # must reproduce it exactly (checked below).
-    baseline = replay(records, args.beta, "exponential", 0.0, decision_costs, j_per_token, link_j)
+    baseline = replay(records, args.beta, "exponential", 0.0, decision_costs, j_per_token, link_j, chain)
     rows.append({"form": "baseline", "lambda": 0.0, **baseline})
 
     for form in args.forms:
         grid = args.lambdas if args.lambdas is not None else DEFAULT_LAMBDAS[form]
         for lam in grid:
             rows.append({"form": form, "lambda": lam,
-                         **replay(records, args.beta, form, lam, decision_costs, j_per_token, link_j)})
+                         **replay(records, args.beta, form, lam, decision_costs, j_per_token, link_j, chain)})
 
     out_path = Path(args.out) if args.out else args.matrix_path.with_suffix(".sweep.csv")
     with open(out_path, "w", newline="") as f:
@@ -314,10 +330,10 @@ def main() -> None:
     print(header)
     print("-" * len(header))
     for row in rows:
-        dist = "/".join(str(row[f"final_{t}"]) for t in TIERS)
+        dist = "/".join(str(row[f"final_{t}"]) for t in chain)
         print(f"{row['form']:<16}{row['lambda']:>10.4g}{row['accuracy']:>10.4f}"
               f"{row['energy_J_per_query']:>10.3f}{row['avg_hops']:>7.2f}   {dist}")
-    print(f"\n(final-tier distribution is {'/'.join(TIERS)})")
+    print(f"\n(final-tier distribution is {'/'.join(chain)})")
 
     # Correctness check: the two bounded forms must collapse onto the baseline
     # at lambda=0. If they do not, the replay does not faithfully reproduce
