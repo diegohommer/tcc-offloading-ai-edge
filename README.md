@@ -139,24 +139,35 @@ real trace). From this repository's side specifically:
   Seq2Class.
 - Fix `|T_prompt|` and `|T_gen|` from a real generative-cascade trace, not
   a separately estimated distribution.
-- Extend the energy-aware policy beyond what is now built. The core
-  mechanism — RecServe's β-quantile threshold weighted by a static
-  per-tier-pair energy cost — **is implemented and evaluated** on the
-  classification harness (`src/scripts/sweep_energy_policy.py`; design
-  and results in `tcc_politica_energia_desenho.md`, §4/§11/§12). On the
-  full 872-query SST-2 split it traces a real accuracy/energy frontier,
-  and priced with locally measured RAPL energy it cuts 31% of energy for
-  0.1 accuracy points at λ=0.01. What remains:
-  - **§6's batch-aware cost profile** (time-of-day buckets selected by
-    local escalation frequency) — every run so far uses one flat static
-    cost per tier.
-  - **A harder dataset.** SST-2 is nearly saturated; the tier spread is
-    only ~4.6 points. `imdb` and `yelp_polarity` are already supported.
-  - **A workload that actually reaches cloud**, so the batched-cloud
-    inversion (design doc §11.3 rung 2) becomes testable — only 34/872
-    queries escalate that far today.
-  - **Re-deriving λ for the generative cascade.** No λ value from the
-    classification runs transfers; the costs differ by orders of magnitude.
+- **Decide how to reframe the energy-aware policy.** The mechanism is
+  implemented and evaluated (`src/scripts/sweep_energy_policy.py`), but
+  the headline result is **negative**: weighting the confidence threshold
+  by an energy cost is *redundant with RecServe's existing β knob*. With
+  a static cost, `exp(−λ·cost)` is a constant multiplier on `T(β)`, and
+  scaling a quantile by a constant simply yields another quantile — the
+  same control under a different name. Three attempts to escape the
+  degeneracy (static per-pair cost, per-hop cost, per-query cost scaled
+  by output length) all landed within noise of tuning β alone
+  (+0.0039 / +0.0012 / +0.0026 accuracy at matched energy). Full analysis
+  and three possible directions in `tcc_politica_energia_desenho.md` §14
+  (written in Portuguese, for discussion with the advisor).
+
+  The earlier "31% energy for 0.1 accuracy points" figure from the SST-2
+  runs still holds arithmetically, but is **not evidence the mechanism
+  works** — tuning β reaches the same frontier. It looked impressive only
+  because that cascade's tiers sat within 4.6 accuracy points of each
+  other, so cutting escalation cost almost nothing.
+
+  Still genuinely open, independent of that result:
+  - **§6's batch-aware cost profile** — the one untested source of cost
+    variability, and per §14 the most likely way to break the degeneracy,
+    since the cloud tier's batching swing is ~30×.
+  - **A fog-tier model that is actually stronger than the ONU tier.**
+    SOLAR-10.7B measured *worse* than Llama-3.1-8B (§13.1), which breaks
+    the cascade's monotonicity assumption. `qwen2.5:14b` is the candidate.
+  - **The cloud tier of the generative cascade** — 32B+ is not viable
+    locally (QwQ-32B measured at 1.2 tok/s), so it needs the GPPD cluster
+    or a hosted endpoint.
 
 ---
 **Author:** Diego Amorim
