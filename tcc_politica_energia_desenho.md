@@ -768,3 +768,111 @@ becomes visible.
   decision. It needs a workload that actually escalates that far.
 - **§6's batch-aware profile is still unbuilt**; every run so far uses one
   flat static cost per tier.
+
+## 13. Generative cascade: first results (GSM8K, 2026-08-30)
+
+First run of the generative track -- GSM8K chain-of-thought, 200 queries,
+three tiers collected locally via Ollama (~10 h of CPU inference). This
+replaces the classification harness's zero-output-token workload with one in
+the decode-dominated regime the energy tables actually measure (median
+~170-230 generated tokens per query).
+
+Raw data: `results/traces/gsm8k_generative.{raw,matrix}.jsonl` -- generated,
+not version-controlled, but reproducible (temperature 0, fixed models). The
+raw file also stores every per-token logprob and token string, so the
+confidence analyses below are recomputable without re-running any model.
+
+### 13.1 The capability ladder is NOT monotonic
+
+| Tier | Model | Accuracy |
+|---|---|---|
+| user | llama3.2:1b | 0.425 |
+| onu | llama3.1:8b | **0.860** |
+| fog | solar:10.7b | **0.675** |
+
+Paired, per-query (n=200):
+
+| Hop | Fixes | Breaks | Net |
+|---|---|---|---|
+| user -> onu | 91 (79% of user's errors) | 4 | **+87** |
+| onu -> fog | 7 (25% of onu's errors) | 44 | **-37** |
+| user -> fog | 65 (57%) | 15 | +50 |
+
+**`solar:10.7b` is worse at GSM8K than the smaller `llama3.1:8b`**, and not
+marginally: escalating onu -> fog destroys 44 correct answers to rescue 7.
+Parameter count does not track math-reasoning capability -- SOLAR-10.7B is an
+older base model than Llama 3.1.
+
+This matters more than a bad benchmark number because the cascade is
+deliberately stepwise (§8): a query escalating past onu *must* traverse fog.
+An inverted tier does not merely waste its own energy, it converts that
+energy into wrong answers, and every higher tier inherits a degraded input.
+Before the generative experiment can demonstrate the lambda mechanism, fog
+needs a model actually better than 8B -- a model-choice problem, not a
+mechanism problem.
+
+The user -> onu hop, by contrast, is exactly the regime the mechanism needs:
+escalation repairs 79% of the small tier's errors and breaks almost nothing.
+The classification cascade never had this (all four tiers within 4.6 points).
+
+### 13.2 exp(min logprob) beats RecServe's specified confidence, on every tier
+
+Welch t, separating correct from incorrect answers (higher |t| = stronger):
+
+| Confidence definition | user (1B) | onu (8B) | fog (10.7B) |
+|---|---|---|---|
+| **exp(min logprob)** -- weakest link | **+6.36** | **+7.16** | **+5.09** |
+| stdev of logprobs -- dispersion | -5.28 | -5.58 | -5.33 |
+| exp(mean logprob) -- *RecServe spec* | +4.62 | +4.75 | +4.86 |
+| fraction of tokens with logprob < -1 | -4.60 | -4.27 | -4.73 |
+
+RecServe's normalized-perplexity definition **works** (all |t| > 4.6, clearly
+significant) -- an earlier n=20 pilot suggested otherwise and was wrong,
+small-sample noise. But `exp(min logprob)` separates ~10-50% better and does
+so on all three tiers, across an 8x model-size range. The mechanism is the
+same in each case: a wrong answer betrays itself by its *worst* token, not by
+its average fluency, which averaging over ~200 tokens washes out.
+
+Tested and rejected: confidence over the answer region only (tokens after the
+`####` marker) has **no signal at all** (t = -0.10 / +0.81). By the time the
+model emits the final number it is already determined by the preceding
+reasoning, so it is high-probability whether or not that reasoning was sound.
+
+Adopting `exp(min logprob)` is a small, measured, replicated improvement to
+RecServe's mechanism -- worth reporting as such rather than silently
+substituting.
+
+### 13.3 Confidence is blind to problem difficulty -- on every tier
+
+Accuracy falls sharply with GSM8K's own gold difficulty label, while
+confidence stays flat:
+
+| difficulty | user acc / conf | onu acc / conf | fog acc / conf |
+|---|---|---|---|
+| 2 steps (n=71) | 0.56 / 0.8745 | 0.90 / 0.8989 | 0.79 / 0.9010 |
+| 4 steps (n=39) | 0.31 / 0.8785 | 0.77 / 0.8926 | 0.54 / 0.8985 |
+| 5 steps (n=19) | 0.16 / 0.8751 | 0.84 / 0.8929 | 0.42 / 0.9010 |
+
+Confidence varies by under 0.01 across difficulty levels where accuracy
+varies by 0.3-0.4, and on the user tier it drifts *upward* as problems get
+harder. So the signal separates **correct from incorrect** well, but carries
+no information about **how hard a query is**.
+
+Consequence for the policy: escalation will be partially effective (it does
+catch wrong answers) but cannot preferentially route the genuinely hard
+queries upward. This is a property of perplexity-based confidence itself, not
+of model scale -- it holds identically at 1B, 8B and 10.7B. It is a real
+limitation of the mechanism this thesis extends, and it is visible only
+because GSM8K supplies an objective per-query difficulty label.
+
+### 13.4 What this changes
+
+- **Blocked until fixed:** the fog tier needs a model stronger than
+  llama3.1:8b before the four-tier generative sweep means anything.
+  Candidate: `qwen2.5:14b` (Qwen2.5 is strong at math; energy tabulated in
+  layer_energy.yaml, though measured on Jetson Orin rather than fog-class
+  A30 -- a documented caveat, and a better trade than a broken ladder).
+- **Adopt** `exp(min logprob)` as the confidence definition, citing §13.2.
+- **Report** the difficulty-blindness (§13.3) as a limitation of the
+  confidence mechanism, not of this implementation.
+- Cloud tier (`qwq:32b`) still uncollected.
