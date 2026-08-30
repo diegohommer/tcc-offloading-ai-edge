@@ -876,3 +876,122 @@ because GSM8K supplies an objective per-query difficulty label.
 - **Report** the difficulty-blindness (§13.3) as a limitation of the
   confidence mechanism, not of this implementation.
 - Cloud tier (`qwq:32b`) still uncollected.
+
+## 14. O termo de energia é redundante com o β do RecServe (2026-08-30)
+
+Esta seção está em português porque é o resultado mais importante do
+trabalho até agora e precisa ser discutido com o orientador.
+
+### 14.1 Em termos simples: o que aconteceu
+
+A proposta era: **na hora de decidir se escalona uma consulta para a camada
+de cima, leve em conta quanto de energia isso custa.** Se está caro e
+provavelmente não vale a pena, não escalona.
+
+Testamos. **Não funcionou** — no sentido de que não adiciona nada. Os
+resultados são iguais aos de simplesmente ajustar o β que o RecServe já tem.
+
+O β do RecServe controla o quão "exigente" cada camada é antes de escalonar.
+β baixo = escalona pouco. β alto = escalona muito. Descobrimos que o nosso
+termo de energia faz **exatamente a mesma coisa**, só que por outro caminho.
+
+### 14.2 Por que isso acontece (a explicação matemática)
+
+A regra que propusemos é:
+
+```
+limiar_efetivo = T(β) × exp(−λ · custo)
+```
+
+Se o `custo` é uma constante (um número fixo por camada), então
+`exp(−λ · custo)` também é uma constante. Chamemos de `k`:
+
+```
+limiar_efetivo = k × T(β)
+```
+
+Só que `T(β)` é um **quantil** da distribuição de confiança. Multiplicar um
+quantil por uma constante dá... outro valor que também é um quantil, só que
+diferente. Ou seja: `k × T(β) = T(β')` para algum β'.
+
+**Multiplicar o limiar por uma constante é a mesma coisa que escolher outro
+β.** É por isso que não adiciona nada — é o mesmo botão, com outro nome.
+
+### 14.3 As três tentativas
+
+Testamos três formas de fazer o custo variar, para tentar fugir dessa
+redundância. Todas medidas na cascata generativa (GSM8K, 200 consultas,
+Llama-3.2-1B → Llama-3.1-8B), comparando a fronteira de Pareto
+(acurácia × energia) contra ajustar só o β:
+
+| Tentativa | Como o custo varia | Ganho médio sobre β sozinho |
+|---|---|---|
+| 1. Custo estático | Constante por par de camadas | **+0.0039** |
+| 2. Custo por salto | Diferente entre user→onu e onu→fog | **+0.0012** |
+| 3. Custo por consulta | Proporcional ao tamanho da resposta | **+0.0026** |
+
+Todos os ganhos são de ~0.3 ponto percentual de acurácia, com vários pontos
+negativos. Isso é **ruído** com n=200, não efeito real.
+
+**Por que a tentativa 2 falhou:** custo diferente por camada é replicável por
+um β diferente por camada. Cada camada já tem seu próprio histórico de
+confiança e seu próprio limiar, então nada impede ajustar β_i por camada.
+
+**Por que a tentativa 3 falhou** (essa era a mais promissora): custo por
+consulta *é* algo que nenhum β consegue expressar — duas consultas
+simultâneas, mesma confiança, recebem limiares diferentes. Mas o custo varia
+com o **tamanho da resposta**, e o tamanho da resposta não tem relação com
+**se escalonar resolveria o problema**. Ou seja: o mecanismo passa a tomar
+decisões *diferentes*, mas não decisões *melhores*.
+
+### 14.4 A causa raiz: o sinal de energia não sabe o que importa
+
+Isso conecta com o achado da §13.3 (confiança é cega à dificuldade).
+
+Para superar o β, o termo de energia teria que **concentrar os escalonamentos
+nas consultas onde escalonar realmente ajuda**. Nem o custo estático, nem o
+custo por salto, nem o custo por tamanho de resposta sabem nada sobre isso.
+
+A energia diz quanto custa. Não diz se vale a pena.
+
+### 14.5 O que isso significa para o TCC
+
+Isso **não** invalida o trabalho. É um resultado negativo bem fundamentado,
+com explicação algébrica *e* três verificações empíricas independentes. A
+afirmação defensável passa a ser:
+
+> Ponderar o limiar de confiança por um custo de energia é redundante com o
+> próprio limiar de confiança, porque o sinal de energia não carrega
+> informação sobre o valor de escalonar.
+
+Isso é útil: evita que o próximo pesquisador siga o mesmo caminho.
+
+E o restante do trabalho continua de pé:
+- caracterização de energia entre camadas (literatura verificada + medições
+  próprias via RAPL) — §1, `layer_energy.yaml`
+- validação do RecServe em tarefa generativa, em escalas que o artigo
+  original nunca testou (60M-355M lá, 1B-10.7B aqui) — §13
+- teste empírico da Suposição 1 do RecServe: confiança acompanha a
+  capacidade do modelo, mas **não** a dificuldade da tarefa — §13.3
+- `exp(min logprob)` separa melhor que a métrica especificada, replicado em
+  três escalas — §13.2
+- escadas não-monotônicas quebram a recursão em cascata (SOLAR-10.7B é pior
+  que Llama-3.1-8B) — §13.1
+
+### 14.6 Caminhos possíveis (a decidir com o orientador)
+
+1. **Assumir o resultado negativo** como contribuição central e escrever o
+   TCC em torno dele + das caracterizações já feitas. É o caminho seguro:
+   todo o material já existe.
+2. **Buscar um sinal de custo que saiba o que importa** — por exemplo, custo
+   ponderado pelo ganho de qualidade esperado daquele salto (calibrado
+   offline por par de camadas, §4). Aí o termo deixaria de ser só "energia" e
+   passaria a ser "energia por ponto de qualidade esperado", que é o que
+   originalmente se pretendia.
+3. **Mudar o alvo**: em vez de melhorar a decisão de escalonamento, usar a
+   caracterização de energia para responder "qual modelo colocar em cada
+   camada" — questão para a qual já temos dados e que o achado da escada
+   não-monotônica torna concreta.
+
+A opção 2 é a que mais preserva a proposta original. A opção 1 é a de menor
+risco dado o prazo.
