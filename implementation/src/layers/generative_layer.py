@@ -35,6 +35,11 @@ class GenerationResult:
     # but the cascade cannot compute confidence at all without them, so in
     # practice every tier backend should populate it.
     logprobs: list[float] | None = None
+    # The token strings those logprobs belong to. Needed to align confidence with
+    # a *region* of the generation (e.g. only the final answer after '####')
+    # rather than the whole chain of thought -- impossible from the float vector
+    # alone, and a gap the first smoke test exposed.
+    tokens: list[str] | None = None
 
 
 class GenerativeLayer(Protocol):

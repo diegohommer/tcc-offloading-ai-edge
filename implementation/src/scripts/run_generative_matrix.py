@@ -233,6 +233,7 @@ def main() -> None:
                     # future confidence definition is recomputable without re-running
                     "generated_text": result.text,
                     "logprobs": result.logprobs,
+                    "tokens": result.tokens,
                     "confidence": result.confidence,
                     "correct": correct,
                     "tokens_prompt": result.tokens_prompt,

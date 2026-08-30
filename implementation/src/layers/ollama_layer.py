@@ -83,9 +83,9 @@ class OllamaGenerativeLayer:
     def generate(self, prompt: str) -> GenerationResult:
         start = time.perf_counter()
         if self.openai_compatible:
-            text, logprobs, n_prompt, n_gen = self._call_openai_compatible(prompt)
+            text, logprobs, tokens, n_prompt, n_gen = self._call_openai_compatible(prompt)
         else:
-            text, logprobs, n_prompt, n_gen = self._call_ollama_native(prompt)
+            text, logprobs, tokens, n_prompt, n_gen = self._call_ollama_native(prompt)
         elapsed = time.perf_counter() - start
 
         return GenerationResult(
@@ -94,6 +94,7 @@ class OllamaGenerativeLayer:
             tokens_gen=n_gen,
             confidence=confidence_from_logprobs(logprobs),
             logprobs=logprobs,
+            tokens=tokens,
             # Neither backend reports a prefill/decode split, so the whole wall
             # time is attributed to decode. Decode dominates >=99% of time in
             # this regime (per the Jetson Orin measurements in layer_energy.yaml),
@@ -103,7 +104,7 @@ class OllamaGenerativeLayer:
             decode_latency_s=elapsed,
         )
 
-    def _call_ollama_native(self, prompt: str) -> tuple[str, list[float], int, int]:
+    def _call_ollama_native(self, prompt: str) -> tuple[str, list[float], list[str], int, int]:
         response = requests.post(
             f"{self.base_url}/api/generate",
             json={
@@ -125,15 +126,18 @@ class OllamaGenerativeLayer:
                 "Ollama Cloud returns null for this field -- use a local server or an "
                 "OpenAI-compatible provider."
             )
-        logprobs = [entry["logprob"] for entry in raw if entry.get("logprob") is not None]
+        kept = [entry for entry in raw if entry.get("logprob") is not None]
+        logprobs = [entry["logprob"] for entry in kept]
+        tokens = [entry.get("token", "") for entry in kept]
         return (
             payload.get("response", ""),
             logprobs,
+            tokens,
             int(payload.get("prompt_eval_count", 0)),
             int(payload.get("eval_count", len(logprobs))),
         )
 
-    def _call_openai_compatible(self, prompt: str) -> tuple[str, list[float], int, int]:
+    def _call_openai_compatible(self, prompt: str) -> tuple[str, list[float], list[str], int, int]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -156,7 +160,9 @@ class OllamaGenerativeLayer:
 
         content = choice["message"]["content"] or ""
         entries = ((choice.get("logprobs") or {}).get("content")) or []
-        logprobs = [e["logprob"] for e in entries if e.get("logprob") is not None]
+        kept = [e for e in entries if e.get("logprob") is not None]
+        logprobs = [e["logprob"] for e in kept]
+        tokens = [e.get("token", "") for e in kept]
         if not logprobs:
             raise RuntimeError(
                 f"{self.model}: endpoint returned no logprobs. Verify the provider "
@@ -167,6 +173,7 @@ class OllamaGenerativeLayer:
         return (
             content,
             logprobs,
+            tokens,
             int(usage.get("prompt_tokens", 0)),
             int(usage.get("completion_tokens", len(logprobs))),
         )
