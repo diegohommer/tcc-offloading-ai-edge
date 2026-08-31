@@ -1,95 +1,78 @@
 # TCC: Energy Cost of Hierarchical LLM Inference over PON
 
-**Topic:** energy cost of confidence-based offloading policies in
-hierarchical LLM inference cascades (user → edge/ONU → fog/OLT → cloud)
-over passive optical networks (PON).
+**Topic:** energy cost of confidence-based offloading in hierarchical LLM
+inference cascades (user → edge/ONU → fog/OLT → cloud) over passive optical
+networks.
 
-This repository hosts the thesis's experimental harness: a real offloading
-cascade (RecServe), instrumented to produce a per-query trace, plus an
-energy-costing module that converts that trace into J/query using layer
-energy tables measured from published sources.
+## Scope, results and limitations live in the proposal
 
-## Current state: a classification harness, not the thesis's generative cascade
+> **[Joules per Query](https://claude.ai/code/artifact/80752dd5-f88f-47a0-ab4b-9cb2d632a92f)**
+> — the revised proposal, and the **source of truth** for what this work
+> claims: research questions, methodology, established results, and the
+> bounded methodological limitations.
+>
+> Source: `thesis/proposal/joules-per-query.html`
 
-The published open-source RecServe implementation
-(`implementation/src/recserve/vendor/`, vendored unmodified) only does
-**sentiment classification** with **three** tiers (end/edge/cloud), no
-token generation, and no decode phase. This repo's instrumented wrapper
-(`implementation/src/recserve/traced_recursive_serve.py`) extends that to
-the thesis's **four**-tier architecture — user / onu / fog / cloud,
-matching Pakpahan and Hwang (IEEE Access vol. 14, 2026) Fig. 1 — using
-four encoder-only classifiers of increasing capability (distilroberta /
-roberta-base / roberta-large / deberta-large, 66M-400M parameters)
-escalating via the same beta-quantile confidence threshold RecServe (and
-Pakpahan's own architecture) uses, one tier at a time. The thesis's actual
-target needs a **generative** cascade of four decoder LLMs (0.5B-70B+)
-with prompt/output token counts per layer (design not yet written up;
-section 12 of the master document is the energy-aware policy design
-instead — see below).
+This README covers the repository only — what the code is and how to run it.
+Anything about the thesis argument belongs in the proposal, so it does not
+drift out of sync here.
 
-This repository sits at that midpoint, by explicit decision:
+The one result worth stating twice, because it sets the scope of everything
+else: **weighting the confidence threshold by an energy cost is redundant with
+RecServe's existing β parameter.** A quantile is a rank statistic, so
+tier-constant terms cannot re-rank queries; three variants (static per-pair,
+per-hop, per-query by output length) all landed within noise of tuning β alone
+(+0.0039 / +0.0012 / +0.0026 accuracy at matched energy). The full analysis is
+`tcc_politica_energia_desenho.md` §14, in Portuguese, for discussion with the
+advisor.
 
-1. **Real and working now:** run the 4-tier classification cascade end to
-   end, recording a per-query trace — layer visited, prompt tokens (via
-   each model's own tokenizer), confidence, latency. This validates the
-   beta-quantile escalation mechanism and the whole trace-to-energy
-   pipeline. Tier names (`user`/`onu`/`fog`/`cloud`) are the same keys used
-   by `implementation/config/layer_energy.yaml`, so a hop's tier doubles
-   as its energy lookup key directly, with no tier-to-layer proxy
-   indirection.
-2. **Deliberately not fabricated:** the layer energy tables
-   (`implementation/config/layer_energy.yaml`) were measured on decoder
-   LLMs doing multi-token decode, not on these tiny classifiers — no
-   *published* energy measurement exists for distilroberta/roberta-base/
-   roberta-large/deberta-large. So no "real" energy number is invented for
-   the classification cascade. An optional, clearly-labeled proxy
-   (`--smoke-test-energy`) prices each tier's forward pass as if it were
-   decode on that tier's representative model, solely to exercise the cost
-   formulas end to end — never to cite as a thesis result.
-   Since 2026-08-29 there is also a **first-party** alternative to that
-   proxy: `src/scripts/measure_tier_energy.py` measures these four models'
-   actual energy on the local CPU via Intel RAPL, recorded under
-   `local_measurement` in `layer_energy.yaml`. Those numbers are really
-   measured, but of 66M-400M encoders on one CPU — a different unit
-   (J per *prompt* token, single forward pass) from the decode-phase
-   literature tables, and never to be mixed with them.
-3. **Not built yet:** the real generative cascade (four decoder models,
-   per-layer precision choice, local quantized and/or hosted-API execution).
-   See `implementation/src/layers/generative_layer.py` for the interface
-   already fixed and what's left to decide before implementing it.
+## What is here
 
-## Structure
-
-Two top-level halves: `implementation/` (all code, config, and generated
-output) and `thesis/` (the LaTeX draft and reference papers) — nothing
-code-related sits at the repo root.
+Two halves: `implementation/` (code, config, generated output) and `thesis/`
+(proposal, LaTeX draft, reference papers). Nothing code-related at the root.
 
 ```
 implementation/
-  requirements.txt
   config/
-    layer_energy.yaml         # layer energy tables, each value with its source and caveats
+    layer_energy.yaml           # per-tier energy tables; every value carries its source and caveats
   src/
-    recserve/                   # everything RecServe-specific lives here
-      vendor/                     # unmodified vendored copy of RecServe (see NOTICE.md)
-      traced_recursive_serve.py   # instrumented reimplementation of RecServe's escalation loop
-      run_classification_cascade.py   # runs RecServe over a dataset, writes a trace (JSONL)
-    energy/                    # reusable costing library, not tied to RecServe
-      layer_energy.py          # loads config/layer_energy.yaml
-      cost.py                  # derivation formulas: J/query, J/token, gCO2/query, latency, cascade cost
+    recserve/
+      vendor/                     # unmodified vendored RecServe (see NOTICE.md)
+      traced_recursive_serve.py   # RecServe's escalation loop, reimplemented with per-query tracing
+      run_classification_cascade.py
     layers/
-      generative_layer.py       # interface stub for the generative cascade (not implemented)
+      generative_layer.py         # the interface a tier implements
+      ollama_layer.py             # local (Ollama) and OpenAI-compatible backends
+    tasks/
+      gsm8k.py                    # prompt construction and answer checking
+    energy/
+      layer_energy.py             # loads config/layer_energy.yaml
+      cost.py                     # J/query, J/token, gCO2/query, latency, cascade cost
     scripts/
-      compute_energy_report.py  # converts a trace into an energy report (CSV) via the layer energy tables
-      run_policy_matrix.py      # runs every tier on every query -> answer matrix (phase 1 of the lambda sweep)
-      sweep_energy_policy.py    # replays the energy-aware policy over that matrix (phase 2), form x lambda
-      measure_tier_energy.py    # measures real per-tier energy on this machine via Intel RAPL
-  results/
-    traces/                    # output of the scripts above (generated, not version-controlled)
+      run_policy_matrix.py        # classification: every tier on every query
+      run_generative_matrix.py    # generative: same, plus full per-token logprobs
+      sweep_energy_policy.py      # replays a matrix offline: weighting form x lambda x beta
+      measure_tier_energy.py      # first-party per-tier energy on this machine, via Intel RAPL
+      compute_energy_report.py    # trace -> energy report (CSV)
+  results/traces/                 # generated, not version-controlled
 thesis/
-  latex/                     # TCC LaTeX draft (infufrgs/abntex2 template), see thesis/latex/README.md
-  papers/                    # local copies of cited papers, not version-controlled, see thesis/papers/README.md
+  proposal/                       # the revised proposal (source of truth)
+  latex/                          # LaTeX draft, infufrgs/abntex2 template
+  papers/                         # local copies of cited papers, not version-controlled
 ```
+
+### The collection design worth knowing about
+
+Both matrix runners **run every tier on every query** and store the raw output —
+for the generative runner, the full per-token log-probability vector and token
+strings, at temperature 0. Escalation is path-dependent: β changes which tiers a
+query visits, which changes each tier's confidence history, so a single cascade
+trace cannot answer what a skipped tier would have said.
+
+Collecting the full matrix once makes every downstream question — any β, any λ,
+any confidence definition, any energy model — answerable offline, with no model
+re-executed. The generative runner is also resumable per `(tier, query)`, which
+matters because the cloud tier is billed.
 
 ## Running it
 
@@ -98,76 +81,73 @@ cd implementation
 python -m venv .venv && source .venv/bin/activate
 pip install --index-url https://download.pytorch.org/whl/cpu torch
 pip install -r requirements.txt
+```
 
-# Part 1 (functional): run the real cascade, write the trace
+### Generative cascade (GSM8K)
+
+Needs a local Ollama with the ladder's models pulled. Collection is the only
+expensive step; the sweep replays it offline.
+
+```bash
+# smoke test -- confirm logprobs come back and confidence looks sane
+python src/scripts/run_generative_matrix.py --limit 20 --tiers user
+
+# local tiers (free)
+python src/scripts/run_generative_matrix.py --limit 200 --tiers user,onu,fog
+
+# cloud tier (billed; needs a provider that exposes logprobs)
+export LLAMA_API_KEY=...
+python src/scripts/run_generative_matrix.py --limit 200 --tiers cloud
+
+# override the ladder without touching code
+python src/scripts/run_generative_matrix.py --config config/ladder.json --tiers onu
+```
+
+### Classification cascade (SST-2)
+
+The encoder cascade that validated the escalation mechanism and the
+trace-to-energy pipeline before the generative track existed.
+
+```bash
 python src/recserve/run_classification_cascade.py --dataset sst2 --limit 40
-
-# Part 2 (cost): convert the trace into energy
 python src/scripts/compute_energy_report.py results/traces/sst2_test.jsonl --smoke-test-energy
 
-# Part 3 (energy-aware policy): sweep the escalation rule's weighting form x lambda
-#   3a. run every tier on every query once (the sweep replays this offline)
 python src/scripts/run_policy_matrix.py --dataset sst2 --limit 0
-#   3b. sweep, priced with the literature tables (labelled smoke-test energy)
 python src/scripts/sweep_energy_policy.py results/traces/sst2_test.matrix.jsonl
+```
 
-# Optional: price the sweep with energy measured on THIS machine instead of
-# the borrowed decode-phase numbers. Needs read access to the RAPL counters:
-#   sudo find -L /sys/class/powercap -name energy_uj -exec chmod a+r {} +
-# (root-only by default since CVE-2020-8694; resets on reboot, revert with chmod 400)
+`--smoke-test-energy` prices each forward pass as if it were decode on that
+tier's representative model. It exercises the cost formulas end to end and is
+**never** a citable result: no published energy measurement exists for
+distilroberta / roberta-base / roberta-large / deberta-large.
+
+### First-party energy measurement
+
+Measures these models' real energy on the local CPU via Intel RAPL, recorded
+under `local_measurement` in `layer_energy.yaml`. Genuinely measured — but of
+66M–400M encoders on one CPU, in a different unit (J per *prompt* token, single
+forward pass) from the decode-phase literature tables. Do not mix the two.
+
+```bash
+# RAPL counters are root-only by default (CVE-2020-8694); resets on reboot
+sudo find -L /sys/class/powercap -name energy_uj -exec chmod a+r {} +
+
 python src/scripts/measure_tier_energy.py --limit 40 --repeats 3
 python src/scripts/sweep_energy_policy.py results/traces/sst2_test.matrix.jsonl \
     --measured-energy results/traces/measured_tier_energy.json
 ```
 
-Models (`distilroberta-base-sst2-distilled`, `roberta-base-SST-2`,
-`roberta-large-sst2`, `deberta-large-finetuned-sst2`) download automatically
-from the Hugging Face Hub on first use. `--device -1` (default) runs on CPU;
-this environment has no GPU.
+## Open items
 
-## Next steps (not implemented here)
-
-See section 11 of the TCC master document for the full pending list
-(advisor confirmation, the L40S figure, MLPerf Power, load constants from a
-real trace). From this repository's side specifically:
-
-- Decide and implement the generative cascade
-  (`implementation/src/layers/generative_layer.py`): per-layer
-  model/precision choice, local quantized vs. hosted-API execution.
-- Reimplement the confidence rule for Seq2Seq (normalized perplexity, per
-  the RecServe paper's abstract), since the released code only covers
-  Seq2Class.
-- Fix `|T_prompt|` and `|T_gen|` from a real generative-cascade trace, not
-  a separately estimated distribution.
-- **Decide how to reframe the energy-aware policy.** The mechanism is
-  implemented and evaluated (`src/scripts/sweep_energy_policy.py`), but
-  the headline result is **negative**: weighting the confidence threshold
-  by an energy cost is *redundant with RecServe's existing β knob*. With
-  a static cost, `exp(−λ·cost)` is a constant multiplier on `T(β)`, and
-  scaling a quantile by a constant simply yields another quantile — the
-  same control under a different name. Three attempts to escape the
-  degeneracy (static per-pair cost, per-hop cost, per-query cost scaled
-  by output length) all landed within noise of tuning β alone
-  (+0.0039 / +0.0012 / +0.0026 accuracy at matched energy). Full analysis
-  and three possible directions in `tcc_politica_energia_desenho.md` §14
-  (written in Portuguese, for discussion with the advisor).
-
-  The earlier "31% energy for 0.1 accuracy points" figure from the SST-2
-  runs still holds arithmetically, but is **not evidence the mechanism
-  works** — tuning β reaches the same frontier. It looked impressive only
-  because that cascade's tiers sat within 4.6 accuracy points of each
-  other, so cutting escalation cost almost nothing.
-
-  Still genuinely open, independent of that result:
-  - **§6's batch-aware cost profile** — the one untested source of cost
-    variability, and per §14 the most likely way to break the degeneracy,
-    since the cloud tier's batching swing is ~30×.
-  - **A fog-tier model that is actually stronger than the ONU tier.**
-    SOLAR-10.7B measured *worse* than Llama-3.1-8B (§13.1), which breaks
-    the cascade's monotonicity assumption. `qwen2.5:14b` is the candidate.
-  - **The cloud tier of the generative cascade** — 32B+ is not viable
-    locally (QwQ-32B measured at 1.2 tok/s), so it needs the GPPD cluster
-    or a hosted endpoint.
+- **Cloud tier of the generative cascade.** 32B+ is not viable locally
+  (QwQ-32B measured at 1.2 tok/s), so it needs the GPPD cluster or a hosted
+  endpoint exposing log-probabilities.
+- **A fog model actually stronger than the ONU tier.** SOLAR-10.7B measured
+  *worse* than Llama-3.1-8B, which breaks the cascade's monotonicity
+  assumption and, because escalation is stepwise, converts energy into wrong
+  answers at every tier above it.
+- **The batch-aware cost profile.** The one untested source of cost
+  variability; the cloud tier's batching swing is ~30×.
 
 ---
 **Author:** Diego Amorim
