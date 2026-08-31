@@ -427,6 +427,7 @@
           <tr><td>ONU</td><td>Jetson AGX Orin 64GB [5]</td><td>Llama-3.1-8B W4</td><td class="n">0.98</td><td>Yes</td></tr>
           <tr><td>Fog</td><td>L4 / A30 / A10, 24GB [7]</td><td>Gemma-2-9B FP16</td><td class="n hi">1.75</td><td>No — blended, CNN/DM</td></tr>
           <tr><td>Fog</td><td>A30 PCIe [6]</td><td>SOLAR-10.7B</td><td class="n">0.3785</td><td>No — blended, batch=1000</td></tr>
+          <tr><td>Cloud</td><td>4×H100 80GB [15]</td><td><strong>Llama-3-70B</strong></td><td class="n hi">1.002</td><td>No — blended; exact model match to the leaderboard tier</td></tr>
           <tr><td>Cloud</td><td>H100 / B200 [9]</td><td>Llama-3.1-70B</td><td class="n">≈0.40</td><td>No — blended, batched serving</td></tr>
           <tr><td>Transport</td><td>ONU, PON access hop [10]</td><td>—</td><td class="n">0.1 / hop</td><td>n/a</td></tr>
         </tbody>
@@ -434,7 +435,26 @@
     </div>
 
     <h3><span class="num">5.3</span>Experimental cascade</h3>
-    <p>Four tiers are instantiated with decoder models, each inside its declared band and each with published energy on its tier's hardware class. The proposed ladder is <span class="m">Llama-3.2-1B → Qwen2.5-1.5B → Gemma-2-9B → Llama-3.1-70B</span>, subject to a monotonicity pilot (§9). Confidence is computed from token log-probabilities; escalation follows RecServe's sliding-window β-quantile rule unchanged.</p>
+    <p>Four tiers are instantiated with decoder models, each inside its declared band, each with published energy on its tier's hardware class, and each served <em>at the precision that energy was measured at</em>. Confidence is computed from token log-probabilities; escalation follows RecServe's sliding-window β-quantile rule unchanged.</p>
+
+    <div class="tw">
+      <table>
+        <caption>Proposed ladder — precision is matched per tier, not held constant across them</caption>
+        <thead>
+          <tr><th>Tier</th><th>Model</th><th>Precision</th><th class="n">J/token</th><th>Energy source</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>User</td><td>Llama-3.2-1B</td><td class="n">Q4_K_M</td><td class="n">0.074</td><td>Snapdragon 8 Elite [4]</td></tr>
+          <tr><td>ONU</td><td>Qwen2.5-1.5B</td><td class="n">Q4_K_M</td><td class="n">0.22</td><td>Jetson AGX Orin [5]</td></tr>
+          <tr><td>Fog</td><td>Gemma-2-9B</td><td class="n">FP16</td><td class="n">1.75</td><td>L4 / A30 / A10 [7]</td></tr>
+          <tr><td>Cloud</td><td>Llama-3-70B-Instruct</td><td class="n">BF16</td><td class="n">1.002</td><td>4×H100 [15]</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>The precision ladder is the architecture, not a confound to be removed.</strong> The reference architecture specifies quantised execution at the edge — it is what makes an ONU-class accelerator viable — and full precision in the datacentre. Serving every tier at one precision would model a handset running BF16, which no handset does, and would sever the correspondence with the user and ONU energy measurements, which exist only at W4. The precision step is a substantial part of <em>why</em> tiers differ in joules per token, and it is modelled rather than eliminated.</p>
+    <p>The consequence for interpretation is that a rung's quality gain mixes two causes — larger model and higher numerical precision. That is the quantity the deployment actually delivers, and it is the one this work measures; it is not a controlled comparison of capacity at fixed precision, and is not reported as one.</p>
+    <p>The cloud tier is not executed locally. Its per-instance results are taken from the Open LLM Leaderboard archive, which ran the model unquantised on datacentre hardware — the same precision as its energy source. Because the top tier is terminal under a stepwise rule, it never thresholds its own confidence, so accuracy and token counts are all that is required of it.</p>
 
     <h3><span class="num">5.4</span>Workload and collection design</h3>
     <p>The task is GSM8K chain-of-thought reasoning — chosen because it is decode-dominated (median 170–230 generated tokens, the regime the energy tables actually measure) and because it carries an objective per-query difficulty label, which enables the analysis in §6.5.</p>
@@ -522,7 +542,24 @@
     <p>The two halves of each tier are joined by model name, but the join is looser than the name suggests. Confidence traces are collected through Ollama, which applies post-training weight-only quantisation and serves <span class="m">Q4_K_M</span> by default — a k-quant with mixed precision per tensor. The energy tables cite W4 figures produced by AWQ- or GPTQ-style schemes; and on the ONU tier's Jetson Orin, the W4 path falls back to INT8 arithmetic, because the Ampere architecture has no INT4 support [5]. All three are "4-bit". None is the same algorithm.</p>
     <p>This matters because quantisation changes the weights, and therefore the output distribution, and therefore the confidence — it is not a rounding effect. Under greedy chain-of-thought decoding the divergence compounds: a single flipped argmax early in a 170–230 token trace produces a different reasoning chain from that point on, so the confidence being scored belongs to a different answer rather than to a slightly perturbed one.</p>
     <p>The magnitude is measurable, and measured on exactly these models. Husom et al. [14] evaluate 28 quantised LLMs drawn from the same Ollama library — including <span class="m">llama3.2:1b-instruct-q4_K_M</span> and <span class="m">qwen2.5:1.5b-instruct-q4_K_M</span>, this work's user and ONU candidates — against hardware power measurement, and find accuracy varying significantly across quantisation levels, with the worst degradation in <em>mathematical reasoning</em> tasks: the regime this work's GSM8K workload sits in. Energy across the same range varies by up to 79% between FP16 and the q3/q4 variants.</p>
-    <p>The consequence is a bound on how tightly the correspondence can be claimed, not an error in the accounting: confidence and energy refer to the same model family, parameter count and approximate bit-width, but not to an identical kernel. Closing the gap entirely would require either measuring energy on the exact quantisation served, or serving the exact quantisation measured — and neither is available for any tier without owning that tier's hardware.</p>
+    <p>The requirement this imposes is <em>within</em> a tier, not across them: what must agree is the precision at which a tier's confidence is collected and the precision at which its energy was measured. Under that test the ladder in §5.3 scores unevenly, and the two ends of it invert the expectation:</p>
+
+    <div class="tw">
+      <table>
+        <thead>
+          <tr><th>Tier</th><th>Confidence collected at</th><th>Energy measured at</th><th>Agreement</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>User</td><td class="n">Q4_K_M (k-quant)</td><td class="n">W4 (AWQ/GPTQ)</td><td>approximate — both ~4-bit, different algorithms</td></tr>
+          <tr><td>ONU</td><td class="n">Q4_K_M</td><td class="n">W4, INT8 compute fallback</td><td>approximate — as above, plus the Ampere fallback</td></tr>
+          <tr><td>Fog</td><td class="n">FP16</td><td class="n">FP16</td><td><strong>exact</strong>, if served at FP16</td></tr>
+          <tr><td>Cloud</td><td class="n">BF16 (leaderboard)</td><td class="n">BF16 [15]</td><td><strong>exact</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The cloud tier, the one this work cannot execute, turns out to be the best-matched: the leaderboard ran the model unquantised and its energy was measured unquantised, so both sides refer to the same weights. The fog tier is the one that requires care — its energy figure is an FP16 measurement, so serving Gemma-2-9B through a 4-bit local runtime would introduce a wider mismatch than exists at the edge tiers, where at least both sides are 4-bit. FP16 weights for a 9B model are roughly 18.5 GB, which fits the available memory, so this gap is closable by serving choice rather than by caveat.</p>
+    <p>What remains irreducible is the edge pair: Q4_K_M against AWQ/GPTQ-style W4 is a difference of quantisation <em>algorithm</em>, and closing it would require measuring energy on the exact quantisation served — which is not possible without owning a Snapdragon and a Jetson. That residual is the honest bound on how tightly the correspondence can be claimed, and it applies to two tiers rather than to all four.</p>
   </section>
 
   <section>
@@ -571,6 +608,8 @@
       <li>Michael, BenShushan, Bien &amp; Moore. <span class="t">Confidence Calibration in Large Language Models.</span> arXiv:2605.23909.</li>
       <li>Li &amp; Lu. <span class="t">EcoThink: A Green Adaptive Inference Framework for Sustainable and Accessible Agents.</span> WWW 2026.</li>
       <li>Husom, Goknil, Astekin, Shar, Kåsen, Sen, Mithassel &amp; Soylu. <span class="t">Sustainable LLM Inference for Edge AI: Evaluating Quantized LLMs for Energy Efficiency, Output Accuracy, and Inference Latency.</span> ACM Trans. Internet of Things; arXiv:2504.03360. 28 Ollama-quantised models, Joulescope hardware power measurement.</li>
+      <li>Caravaca, A. Cuevas &amp; R. Cuevas. <span class="t">From Prompts to Power: Measuring the Energy Footprint of LLM Inference.</span> arXiv:2511.05597, Table IV. Meta-Llama-3-70B on 4&#215;H100 80GB &mdash; the exact model taken for the cloud tier.</li>
+      <li>Open LLM Leaderboard archive, <span class="t">open-llm-leaderboard-old/details_meta-llama__Meta-Llama-3-70B-Instruct</span>, harness GSM8K 5-shot, 1319 instances. Public and ungated; per-instance prompt, generation and correctness, no log-probabilities.</li>
     </ol>
   </section>
 
