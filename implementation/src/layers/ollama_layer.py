@@ -80,12 +80,21 @@ class OllamaGenerativeLayer:
     temperature: float = 0.0            # deterministic: confidence must be reproducible
     timeout_s: float = 300.0
 
-    def generate(self, prompt: str) -> GenerationResult:
+    def generate(self, prompt: str, stop: list[str] | None = None) -> GenerationResult:
+        """Generate for `prompt`, optionally halting at any string in `stop`.
+
+        `stop` exists for replaying a benchmark harness's own prompts, where the
+        harness truncates the continuation at a fixed marker. It must be applied
+        at generation time rather than by trimming the text afterwards: the
+        confidence is computed over the returned logprob vector, so tokens
+        emitted past the stop would otherwise contaminate it -- and under
+        exp(min logprob) a single bad trailing token dominates the score.
+        """
         start = time.perf_counter()
         if self.openai_compatible:
-            text, logprobs, tokens, n_prompt, n_gen = self._call_openai_compatible(prompt)
+            text, logprobs, tokens, n_prompt, n_gen = self._call_openai_compatible(prompt, stop)
         else:
-            text, logprobs, tokens, n_prompt, n_gen = self._call_ollama_native(prompt)
+            text, logprobs, tokens, n_prompt, n_gen = self._call_ollama_native(prompt, stop)
         elapsed = time.perf_counter() - start
 
         return GenerationResult(
@@ -104,7 +113,7 @@ class OllamaGenerativeLayer:
             decode_latency_s=elapsed,
         )
 
-    def _call_ollama_native(self, prompt: str) -> tuple[str, list[float], list[str], int, int]:
+    def _call_ollama_native(self, prompt: str, stop: list[str] | None = None) -> tuple[str, list[float], list[str], int, int]:
         response = requests.post(
             f"{self.base_url}/api/generate",
             json={
@@ -112,7 +121,8 @@ class OllamaGenerativeLayer:
                 "prompt": prompt,
                 "stream": False,
                 "logprobs": True,
-                "options": {"temperature": self.temperature, "num_predict": self.max_tokens},
+                "options": {"temperature": self.temperature, "num_predict": self.max_tokens,
+                            **({"stop": stop} if stop else {})},
             },
             timeout=self.timeout_s,
         )
@@ -137,7 +147,7 @@ class OllamaGenerativeLayer:
             int(payload.get("eval_count", len(logprobs))),
         )
 
-    def _call_openai_compatible(self, prompt: str) -> tuple[str, list[float], list[str], int, int]:
+    def _call_openai_compatible(self, prompt: str, stop: list[str] | None = None) -> tuple[str, list[float], list[str], int, int]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -151,6 +161,7 @@ class OllamaGenerativeLayer:
                 "max_tokens": self.max_tokens,
                 "temperature": self.temperature,
                 "logprobs": True,
+                **({"stop": stop} if stop else {}),
             },
             timeout=self.timeout_s,
         )

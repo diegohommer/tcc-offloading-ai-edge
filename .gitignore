@@ -229,6 +229,10 @@ __marimo__/
 # Generated experiment output
 implementation/results/traces/
 
+# Leaderboard archive parquets: downloaded, not redistributed. Public and
+# ungated -- run_leaderboard_matrix.py prints the exact curl command.
+implementation/results/leaderboard/
+
 # LaTeX build artifacts (regenerate with latexmk/pdflatex, see thesis/latex/README.md)
 thesis/latex/*.aux
 thesis/latex/*.log
