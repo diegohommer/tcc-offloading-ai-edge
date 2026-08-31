@@ -628,3 +628,136 @@ E o restante do trabalho continua de pé:
 
 A opção 2 é a que mais preserva a proposta original. A opção 1 é a de menor
 risco dado o prazo.
+
+## 15. Camada de nuvem a partir do leaderboard público (2026-08-31)
+
+Em português, como a §14, porque decide o desenho experimental e precisa ser
+discutido com o orientador.
+
+### 15.1 A pergunta
+
+O Prof. Nazar propôs: em vez de rodar o topo da cascata — inviável nesta
+máquina —, pegar os resultados já publicados de um modelo grande e preencher
+o resto da matriz rodando os modelos menores nas **mesmas instâncias**.
+
+Funciona, mas por um motivo diferente do esperado.
+
+### 15.2 O que o arquivo v1 do Open LLM Leaderboard tem
+
+`open-llm-leaderboard-old/details_*` **não é gated** e tem **GSM8K 5-shot**
+(o leaderboard v2 substituiu GSM8K por MATH-Lvl-5; só o arquivo antigo
+serve). Schema por instância, 1319 linhas = split de teste completo:
+
+| Campo | Conteúdo |
+|---|---|
+| `example` | texto da pergunta — chave de pareamento |
+| `full_prompt` | o prompt 5-shot exato entregue ao modelo |
+| `predictions` | texto gerado |
+| `metrics` | `{'acc': bool}` — correção por instância |
+| `input_tokens`, `cont_tokens` | IDs de token, dão as contagens para energia |
+| `pred_logits` | **dtype `null` para GSM8K** — vazio |
+
+Ou seja: **não há logprobs**, portanto não há confiança. O campo só é
+preenchido em tarefas de log-likelihood (múltipla escolha).
+
+### 15.3 Por que isso não bloqueia
+
+**A camada de nuvem nunca usa a própria confiança.** Na regra do RecServe a
+confiança decide escalar-ou-parar; a nuvem é terminal, não tem para onde
+escalar. Ela só precisa produzir uma resposta e consumir energia. Para o topo,
+`acc` mais contagem de tokens é exata e completamente suficiente.
+
+Efeito colateral: cai também a exigência de que um provedor de API exponha
+logprobs, caso a rota da API seja escolhida no lugar desta.
+
+### 15.4 Correção de um erro cometido durante a análise
+
+Numa primeira passada comparei "Llama-3-8B-Instruct (0.6869) contra
+Llama-3-70B-Instruct (0.5406)" e concluí que a escada instruct invertia e que
+seria preciso migrar para modelos base. **Estava errado:** o arquivo rotulado
+como 70B-Instruct havia sido baixado de `details_meta-llama__Llama-2-70b-hf`,
+isto é, Llama-2-70B base. A comparação estava contaminada por diferença de
+geração.
+
+Números corretos, todos nas mesmas 1319 instâncias:
+
+| Modelo | GSM8K (harness 5-shot) |
+|---|---|
+| Llama-3-8B base | 0.4579 |
+| Llama-3-70B base | 0.7688 |
+| Llama-3-8B instruct | 0.6869 |
+| **Llama-3-70B instruct** | **0.8544** |
+| Llama-2-70B base | 0.5406 |
+
+| Salto | conserta | quebra | líquido |
+|---|---|---|---|
+| 8B base -> 70B base | 454 | 44 | **+410** |
+| 8B instruct -> 70B instruct | 268 | 47 | **+221** |
+| 8B instruct -> Llama-2-70B | 132 | 325 | **-193** |
+
+**A escada instruct não inverte.** A inversão de -193 é efeito de geração
+(Llama-2 contra Llama-3), que é a mesma causa já documentada na §13.1 para o
+SOLAR-10.7B — logo, uma replicação independente daquele achado, não um
+mecanismo novo. Não há motivo para migrar para modelos base.
+
+### 15.5 O cruzamento: qual 70B tem os dois lados
+
+| Modelo | Confiança/resultados | Energia | Veredito |
+|---|---|---|---|
+| **Meta-Llama-3-70B** | leaderboard v1, **0.8544** | **Caravaca et al., arXiv:2511.05597, Tab. IV, 4xH100: 1.002 J/token** | **escolhido** |
+| Llama-2-70B | leaderboard v1, 0.5406 | MLPerf v5.1, 0.0938 J/token (PDU, SPEC PTD) | energia impecável, escada invertida |
+| Llama-3.1-70B | ausente do arquivo v1 | Oviedo, 0.3989 J/token | sem dado de confiança |
+| Qwen2.5-72B | não verificado | Caravaca, 1.044 J/token | alternativa |
+
+Meta-Llama-3-70B é **o mesmo modelo dos dois lados** — correspondência mais
+apertada que a de qualquer outra camada desta escada, incluindo user e ONU,
+onde a quantização diverge (§7.4 da proposta). O `layer_energy.yaml` já
+registrava essa linha com a nota "closest exact-size match".
+
+### 15.6 O que isso obriga a refazer
+
+**Sim, as três camadas de baixo precisam ser recoletadas.** E o prompt não
+pode ser reconstruído: os prefixos few-shot são **diferentes em cada
+instância** (1319 prefixos distintos — o harness sorteia por documento). O
+procedimento é ler `full_prompt[i]` do parquet e enviá-lo **verbatim** a cada
+tier local. Isso elimina qualquer risco de divergência de formato e dá
+pareamento exato, sem reimplementar a lógica de few-shot do harness.
+
+Também é preciso alinhar `is_correct` em `src/tasks/gsm8k.py` com a regra do
+harness (exact-match sobre o marcador `#### N`).
+
+**Validação grátis do pipeline:** `Meta-Llama-3-8B` base está no leaderboard
+com 0.4579. Rodá-lo localmente com o mesmo `full_prompt` e reproduzir esse
+número valida de uma vez o replay do prompt, a extração da resposta e o
+critério de correção — numa camada que seria rodada de qualquer forma.
+
+### 15.7 O custo real não é a recoleta, é o regime de tokens
+
+O leaderboard gera **mediana 83 tokens de saída para 858 de prompt**. Todas as
+fontes de energia disponíveis medem no regime oposto:
+
+| Fonte | Prompt | Saída |
+|---|---|---|
+| Leaderboard (o dado a usar) | ~858 | ~83 |
+| Caravaca (1.002 J/token) | 300 | 300 |
+| Oviedo (0.3989 J/token) | — | 361 |
+
+Prefill passa a ser ~10x o decode, invertendo o regime em que este trabalho
+vinha operando (~50 de prompt para ~200 gerados). Consequências:
+
+- Multiplicar 1.002 J/token por 83 tokens seria substancialmente errado: esse
+  valor foi amortizado sobre 300 tokens de saída.
+- O argumento da §5.1 da proposta — a escalada repaga prefill em cada camada —
+  deixa de ser segunda ordem e passa a ser termo dominante.
+- Os achados §6.6 (transporte de segunda ordem) e §7.1 (cota do prefill em
+  ~1-3.4%) foram estabelecidos no regime decode-dominado e **precisam ser
+  recalculados** neste.
+
+O caminho honesto é reportar a nuvem como **faixa** entre os pontos
+publicados, declarando que nenhum foi medido no regime do harness.
+
+### 15.8 Fonte
+
+- Dataset: https://huggingface.co/datasets/open-llm-leaderboard-old/details_meta-llama__Meta-Llama-3-70B-Instruct
+- Arquivo: `2024-04-21T11-59-48.701689/details_harness|gsm8k|5_2024-04-21T11-59-48.701689.parquet`
+- Companheiro para validação: `open-llm-leaderboard-old/details_meta-llama__Meta-Llama-3-8B`
