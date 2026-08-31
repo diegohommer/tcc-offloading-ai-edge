@@ -1,0 +1,573 @@
+<title>Joules per Query</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --paper:      #F2F5F5;
+    --surface:    #FBFCFC;
+    --surface-2:  #E9EFEF;
+    --ink:        #14262B;
+    --ink-soft:   #4A6169;
+    --ink-faint:  #7C9198;
+    --accent:     #B4650E;
+    --accent-2:   #1F6E6B;
+    --rule:       #D2DCDC;
+    --rule-soft:  #E2E9E9;
+    --ok:         #2F6B4F;
+    --warn:       #9A6510;
+    --open:       #6B5E86;
+
+    --measure: 68ch;
+    --f-display: "Spectral", Georgia, "Times New Roman", serif;
+    --f-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --f-mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #101A1D;
+      --surface:    #16242A;
+      --surface-2:  #1D2E35;
+      --ink:        #E4EDED;
+      --ink-soft:   #9CB0B6;
+      --ink-faint:  #6E858C;
+      --accent:     #E09A3C;
+      --accent-2:   #4FA9A5;
+      --rule:       #2A3D44;
+      --rule-soft:  #223339;
+      --ok:         #6FB58F;
+      --warn:       #D2A24F;
+      --open:       #A99CC4;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #101A1D;
+    --surface:    #16242A;
+    --surface-2:  #1D2E35;
+    --ink:        #E4EDED;
+    --ink-soft:   #9CB0B6;
+    --ink-faint:  #6E858C;
+    --accent:     #E09A3C;
+    --accent-2:   #4FA9A5;
+    --rule:       #2A3D44;
+    --rule-soft:  #223339;
+    --ok:         #6FB58F;
+    --warn:       #D2A24F;
+    --open:       #A99CC4;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.25rem;
+  }
+
+  /* ---------- front matter ---------- */
+
+  .front { display: flex; flex-direction: column; gap: 1.5rem; }
+
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(1.9rem, 5vw, 2.65rem);
+    line-height: 1.16;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .subtitle {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: 1.12rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    max-width: var(--measure);
+    text-wrap: balance;
+  }
+
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1rem 1.75rem;
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .meta div { display: flex; flex-direction: column; gap: 0.2rem; }
+  .meta dt {
+    font-family: var(--f-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .meta dd { margin: 0; font-size: 0.92rem; }
+
+  /* ---------- sections ---------- */
+
+  section { display: flex; flex-direction: column; gap: 1.1rem; }
+
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.42rem;
+    line-height: 1.25;
+    letter-spacing: -0.008em;
+    margin: 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--f-mono);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--accent);
+    flex: none;
+  }
+
+  h3 {
+    font-family: var(--f-body);
+    font-weight: 600;
+    font-size: 0.98rem;
+    letter-spacing: 0.005em;
+    margin: 0.9rem 0 0;
+    color: var(--ink);
+  }
+  h3 .num {
+    font-family: var(--f-mono);
+    font-size: 0.8rem;
+    color: var(--accent-2);
+    margin-right: 0.45rem;
+  }
+
+  p { margin: 0; max-width: var(--measure); }
+  section > p + p { margin-top: -0.2rem; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  code, .m { font-family: var(--f-mono); font-size: 0.88em; }
+  code {
+    background: var(--surface-2);
+    padding: 0.08em 0.34em;
+    border-radius: 3px;
+  }
+
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  ul, ol { margin: 0; padding-left: 1.3rem; max-width: var(--measure); display: flex; flex-direction: column; gap: 0.5rem; }
+  li::marker { color: var(--ink-faint); }
+
+  /* ---------- tables ---------- */
+
+  .tw { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--f-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-bottom: 0.5rem;
+  }
+  th, td {
+    padding: 0.5rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--f-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 500;
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.n, th.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hi { color: var(--accent); font-weight: 500; }
+
+  /* ---------- callouts ---------- */
+
+  .note {
+    border-left: 3px solid var(--accent-2);
+    background: var(--surface);
+    padding: 0.9rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: var(--measure);
+  }
+  .note .lbl {
+    font-family: var(--f-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+  }
+  .note p { font-size: 0.92rem; }
+
+  .formula {
+    font-family: var(--f-mono);
+    font-size: 0.84rem;
+    line-height: 1.75;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.9rem 1.1rem;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* ---------- status pills ---------- */
+
+  .pill {
+    font-family: var(--f-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.14em 0.5em;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .pill.done { color: var(--ok); }
+  .pill.prog { color: var(--warn); }
+  .pill.plan { color: var(--open); }
+
+  /* ---------- references ---------- */
+
+  .refs { font-size: 0.85rem; }
+  .refs ol { gap: 0.65rem; padding-left: 1.6rem; }
+  .refs li { color: var(--ink-soft); }
+  .refs .t { color: var(--ink); font-style: italic; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.25rem;
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    max-width: var(--measure);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="front">
+    <div class="eyebrow">Undergraduate Thesis Proposal · Revised</div>
+    <h1>Energy Cost of Confidence-Based Offloading in Hierarchical LLM Inference over Passive Optical Networks</h1>
+    <p class="subtitle">What it costs, in joules, to serve LLM inference through a confidence-based recursive cascade on a four-tier PON — and what actually governs that cost.</p>
+
+    <dl class="meta">
+      <div><dt>Author</dt><dd>Diego Hommerding Amorim</dd></div>
+      <div><dt>Advisor</dt><dd>Prof. Nazar</dd></div>
+      <div><dt>Programme</dt><dd>BSc Computer Science, INF/UFRGS</dd></div>
+      <div><dt>Term</dt><dd>2026/2 · 5 Aug – 23 Dec 2026</dd></div>
+      <div><dt>Revision</dt><dd>30 Aug 2026</dd></div>
+      <div><dt>Status</dt><dd>Experimental phase substantially complete</dd></div>
+    </dl>
+  </header>
+
+  <section>
+    <h2><span class="num">00</span>Abstract</h2>
+    <p>Large language model inference is moving off centralised datacentres and onto tiered infrastructure that reaches the network edge. Passive optical networks are the access technology this traffic will cross, and recent work has proposed mapping a four-tier LLM inference continuum — user device, ONU, OLT, cloud — directly onto TWDM-PON. That architecture inherits its offloading rule from RecServe: each tier answers locally, scores its own confidence, and escalates one tier up when confidence falls below a threshold calibrated from the β-quantile of its recent history. Neither the architecture nor the offloading rule has ever been evaluated in terms of energy.</p>
+    <p>This work supplies that evaluation. It assembles a per-tier energy characterisation from verified literature plus first-party RAPL measurements, instruments a real four-tier cascade to produce per-query traces, and prices those traces in joules. Its central result is analytical and negative: weighting the confidence threshold by an energy cost is <em>redundant</em> with the β parameter RecServe already exposes, because a quantile is a rank statistic and tier-constant terms cannot re-rank queries. Energy-awareness in this architecture is therefore a matter of configuration — which model sits on which tier, and where β is set — not of the escalation rule.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">01</span>Context and Motivation</h2>
+    <p>Inference, not training, now dominates the lifetime energy cost of deployed language models. As inference distributes toward the edge, the question of where a query should be computed becomes an energy question as much as a latency question — and the two do not have the same answer.</p>
+    <p>Passive optical networks are the relevant substrate. PON is the dominant fibre access technology, it is already deployed at scale, and its topology maps naturally onto a compute hierarchy: customer premises equipment, the ONU at the subscriber, the OLT at the central office, and the operator's cloud beyond. Pakpahan and Hwang [2] make that mapping explicit, proposing an SDN-controlled tiered LLM inference continuum over TWDM-PON with declared model-size bands and hardware classes per tier.</p>
+    <p>Their evaluation, however, is an OPNET network simulation — latency, jitter, throughput, packet drop. No language model is executed, no confidence score is computed, and no joule is counted. The offloading decision itself is imported from RecServe [1]. The gap this work addresses sits precisely there: the architecture has a declared energy motivation and no energy evaluation.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span>Reference Works</h2>
+
+    <h3><span class="num">2.1</span>RecServe — the offloading mechanism</h3>
+    <p>RecServe [1] performs recursive offloading across a multi-tier network. Each tier runs local inference, computes a task-specific confidence score, and compares it against a threshold <span class="m">T(β)</span> derived from the β-quantile of a sliding window of its own recent confidences. Above threshold, the local answer is returned; below, the query escalates exactly one tier. The rule is decentralised by design: no tier reads another tier's state.</p>
+    <p>Its published evaluation covers three tiers and encoder models of 60M–355M parameters on classification tasks. For generative tasks it specifies normalised perplexity as the confidence measure.</p>
+
+    <h3><span class="num">2.2</span>Pakpahan and Hwang — the architecture</h3>
+    <p>The reference architecture [2] defines four tiers with explicit parameter bands and hardware classes, reproduced below. These bands are the fidelity constraint this work's experimental cascade is held to.</p>
+
+    <div class="tw">
+      <table>
+        <caption>Tier definitions, Pakpahan and Hwang, Fig. 1 and §III-B</caption>
+        <thead>
+          <tr><th>Tier</th><th>Parameters</th><th>Hardware</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>User</td><td class="n">tiny (within 0.5–&lt;7B)</td><td>Embedded CPU / NPU</td><td>Simple or privacy-sensitive prompts; early exit</td></tr>
+          <tr><td>Edge (ONU)</td><td class="n">0.5B – &lt;7B</td><td>Jetson-class accelerator</td><td>Quantised models; partial inference at the premises</td></tr>
+          <tr><td>Fog (OLT)</td><td class="n">7B – 13B</td><td>A30 / T4</td><td>Aggregates traffic from many ONUs at the central office</td></tr>
+          <tr><td>Cloud</td><td class="n">&gt; 70B</td><td>A100 / H100 cluster</td><td>Long-context and multimodal fallback</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="lbl">Observation carried into the results</span>
+      <p>The paper's own figure places the User and Edge tiers inside a single <span class="m">0.5B–&lt;7B</span> band. The reference architecture does not separate its two lowest tiers by model capacity — it separates them by hardware and role. The large capability steps are ONU→Fog and Fog→Cloud.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span>Problem Statement and Research Questions</h2>
+    <p>A confidence-based recursive cascade trades answer quality against the cost of escalation. The cost side of that trade has never been quantified for this architecture, and the offloading rule that governs it contains no energy term.</p>
+    <ol>
+      <li><strong>RQ1 — Characterisation.</strong> What is the per-tier energy cost of LLM inference across a four-tier PON hierarchy, in joules per token, with each figure traceable to a measurement on hardware of that tier's declared class?</li>
+      <li><strong>RQ2 — The frontier.</strong> What accuracy–energy frontier does the confidence-based cascade trace, priced in measured joules, and where on it does the cost of escalation begin to exceed its quality return?</li>
+      <li><strong>RQ3 — The rule.</strong> Can the escalation rule be made energy-aware by weighting its confidence threshold with a per-tier energy cost, and does doing so improve on tuning β alone?</li>
+      <li><strong>RQ4 — Transport.</strong> What share of total cascade energy is access-network transport rather than computation, and under what workload does that share stop being negligible?</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span>Scope</h2>
+    <p>This is an evaluation, not a proposal for a new mechanism. Three boundaries follow from that, and are stated here rather than discovered later.</p>
+    <ul>
+      <li><strong>Energy is priced, not measured end to end.</strong> Per-tier joules-per-token figures come from published measurements on the declared hardware class, plus first-party RAPL measurements on the machine running the cascade. Real traces supply routing decisions and token counts; the tables supply the cost.</li>
+      <li><strong>The cascade is real, the deployment is not.</strong> Models are executed and confidences computed for every tier on every query. No TWDM-PON testbed is involved; transport energy is modelled from published ONU power figures.</li>
+      <li><strong>The mechanism is RecServe's, unmodified in structure.</strong> This work evaluates and characterises that mechanism. Where it substitutes a component — the confidence definition, §6.4 — the substitution is drawn from published work and cited as such.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span>Methodology</h2>
+
+    <h3><span class="num">5.1</span>Energy accounting</h3>
+    <p>The metric requires more care than it first appears to, and getting it wrong changes conclusions rather than decimals. Energy per token is a <em>ratio</em>, and its denominator is not fixed:</p>
+
+    <div class="formula">J/token_reported  =  E_total / n_gen
+                  =  (E_prefill(n_prompt) + e_decode · n_gen) / n_gen
+                  =  e_decode  +  E_prefill / n_gen
+                                  ^^^^^^^^^^^^^^^^^
+                                  task-dependent, not hardware-dependent</div>
+
+    <p>Prefill is paid once and divided by however many tokens the task generates. A benchmark that emits a handful of tokens reports a per-token figure inflated by unamortised prefill; one that emits hundreds reports a figure close to pure decode. The effect is large enough to invert comparisons:</p>
+
+    <div class="tw">
+      <table>
+        <caption>Same model, same GPU class, three tasks — Bench360 [7]</caption>
+        <thead>
+          <tr><th>Model</th><th>Task</th><th class="n">Generated tokens</th><th class="n">J/token</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Gemma-2-9B FP16</td><td>MMLU</td><td class="n">~1–5</td><td class="n hi">4.65</td></tr>
+          <tr><td>Gemma-2-9B FP16</td><td>SQuAD v2</td><td class="n">short span</td><td class="n">4.12</td></tr>
+          <tr><td>Gemma-2-9B FP16</td><td>CNN/DM</td><td class="n">~50–100</td><td class="n hi">1.75</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>Convention adopted.</strong> Following Solovyeva and Castor [3] and the emerging standard represented by TokenPowerBench [8], energy is reported <em>by phase</em>, with distinct denominators — input tokens for prefill, output tokens for decode:</p>
+
+    <div class="formula">E_query  =  E_pf_per_token · n_prompt  +  E_dec_per_token · n_gen</div>
+
+    <p>This is the form the costing module already implements. It also exposes a structural property of stepwise escalation that a single blended figure hides: <strong>escalation re-runs prefill at every tier</strong>, since no KV cache crosses a tier boundary. A query reaching cloud has paid prefill four times.</p>
+
+    <div class="note">
+      <span class="lbl">Known approximation</span>
+      <p>The additive form is an approximation. Solovyeva and Castor [3] show the phases are coupled — higher prefill cost <em>amplifies</em> per-token decode cost, plausibly through KV-cache pressure on a memory-bound phase. The residual is bounded by the same evidence that bounds prefill's share (§7.1) and is reported, not assumed away.</p>
+    </div>
+
+    <h3><span class="num">5.2</span>Per-tier energy characterisation</h3>
+    <p>Each tier's figure is drawn from a measurement on hardware of that tier's declared class, for a model in that tier's declared band. Where a source reports only a blended prefill+decode figure, the decode-dominant variant is used and the deviation recorded.</p>
+
+    <div class="tw">
+      <table>
+        <caption>Candidate models with published energy on the declared hardware class</caption>
+        <thead>
+          <tr><th>Tier</th><th>Measured hardware</th><th>Model</th><th class="n">J/token</th><th>Phase-separated?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>User</td><td>Snapdragon 8 Elite Gen 5 [4]</td><td>Llama-3.2-1B W4</td><td class="n hi">0.074</td><td>Yes — decode isolated</td></tr>
+          <tr><td>User</td><td>Snapdragon 8 Elite Gen 5 [4]</td><td>Qwen2.5-1.5B W4</td><td class="n">0.097</td><td>Yes</td></tr>
+          <tr><td>ONU</td><td>Jetson AGX Orin 64GB [5]</td><td>Qwen2.5-1.5B W4</td><td class="n hi">0.22</td><td>Yes — phases measured separately</td></tr>
+          <tr><td>ONU</td><td>Jetson AGX Orin 64GB [5]</td><td>Llama-3.1-8B W4</td><td class="n">0.98</td><td>Yes</td></tr>
+          <tr><td>Fog</td><td>L4 / A30 / A10, 24GB [7]</td><td>Gemma-2-9B FP16</td><td class="n hi">1.75</td><td>No — blended, CNN/DM</td></tr>
+          <tr><td>Fog</td><td>A30 PCIe [6]</td><td>SOLAR-10.7B</td><td class="n">0.3785</td><td>No — blended, batch=1000</td></tr>
+          <tr><td>Cloud</td><td>H100 / B200 [9]</td><td>Llama-3.1-70B</td><td class="n">≈0.40</td><td>No — blended, batched serving</td></tr>
+          <tr><td>Transport</td><td>ONU, PON access hop [10]</td><td>—</td><td class="n">0.1 / hop</td><td>n/a</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">5.3</span>Experimental cascade</h3>
+    <p>Four tiers are instantiated with decoder models, each inside its declared band and each with published energy on its tier's hardware class. The proposed ladder is <span class="m">Llama-3.2-1B → Qwen2.5-1.5B → Gemma-2-9B → Llama-3.1-70B</span>, subject to a monotonicity pilot (§9). Confidence is computed from token log-probabilities; escalation follows RecServe's sliding-window β-quantile rule unchanged.</p>
+
+    <h3><span class="num">5.4</span>Workload and collection design</h3>
+    <p>The task is GSM8K chain-of-thought reasoning — chosen because it is decode-dominated (median 170–230 generated tokens, the regime the energy tables actually measure) and because it carries an objective per-query difficulty label, which enables the analysis in §6.5.</p>
+    <p>Collection is exhaustive rather than path-dependent: <strong>every tier answers every query</strong>, and the full per-token log-probability vector is stored alongside the generated text, at temperature 0. Escalation is path-dependent — β changes which tiers a query visits, which changes each tier's confidence history — so a single cascade trace cannot answer what a skipped tier would have said. Running the full matrix once makes every downstream question (any β, any λ, any confidence definition, any energy model) answerable offline, without re-executing a model.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">06</span>Results to Date</h2>
+
+    <h3><span class="num">6.1</span>The accuracy–energy frontier exists and has a sharp knee <span class="pill done">established</span></h3>
+    <p>Over the full SST-2 test split (n=872), priced with first-party RAPL measurements:</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="n">λ</th><th class="n">Accuracy</th><th class="n">J/query</th><th class="n">Δ energy</th><th class="n">Δ accuracy</th></tr></thead>
+        <tbody>
+          <tr><td class="n">0 (baseline)</td><td class="n">0.9530</td><td class="n">0.638</td><td class="n">—</td><td class="n">—</td></tr>
+          <tr><td class="n hi">0.01</td><td class="n">0.9518</td><td class="n">0.440</td><td class="n hi">−31%</td><td class="n hi">−0.1 pt</td></tr>
+          <tr><td class="n">0.05</td><td class="n">0.9404</td><td class="n">0.339</td><td class="n">−47%</td><td class="n">−1.3 pt</td></tr>
+          <tr><td class="n">1.0</td><td class="n">0.9163</td><td class="n">0.231</td><td class="n">−64%</td><td class="n">−3.7 pt</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Most of the saving lands before the accuracy cost becomes visible. Three weighting forms — additive, multiplicative, exponential — were measured and trace the same frontier; the exponential form is adopted on the engineering merit of being bounded in <span class="m">(0, T(β)]</span> without an arbitrary clamp.</p>
+
+    <h3><span class="num">6.2</span>The energy term is redundant with β <span class="pill done">established · central result</span></h3>
+    <p>The proposed rule sets an effective threshold <span class="m">T(β) · exp(−λ · cost)</span>. When <span class="m">cost</span> is constant per tier, the exponential is a constant <span class="m">k</span>, and <span class="m">k · T(β)</span> is simply another quantile of the same distribution — that is, <span class="m">T(β′)</span> for some β′. Scaling a quantile by a constant is indistinguishable from choosing a different β.</p>
+    <p>Three variants designed to escape that algebra were measured on the generative cascade (GSM8K, n=200), each compared against the Pareto frontier of tuning β alone:</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Variant</th><th>How cost varies</th><th class="n">Mean gain over β alone</th></tr></thead>
+        <tbody>
+          <tr><td>Static cost</td><td>Constant per tier pair</td><td class="n">+0.0039</td></tr>
+          <tr><td>Per-hop cost</td><td>Differs between user→onu and onu→fog</td><td class="n">+0.0012</td></tr>
+          <tr><td>Per-query cost</td><td>Proportional to response length</td><td class="n">+0.0026</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>All gains are within noise at this sample size. The generalisation is the contribution: <strong>under a quantile-derived threshold, any criterion that transforms confidence using tier-constant parameters is behaviourally identical to some choice of β</strong>, because a quantile is a rank statistic and such terms do not re-rank queries. The per-query variant does re-rank — but on response length, which carries no information about whether escalating would help. Energy says what a hop costs; it does not say whether the hop is worth taking.</p>
+
+    <div class="note">
+      <span class="lbl">The constructive reading</span>
+      <p>Redundancy runs both ways. β <em>is</em> the energy dial — RecServe simply never says how to set it. β is <strong>sufficient</strong> to reach any point on the frontier; per-tier energy measurement is <strong>necessary</strong> to locate the desired point, since escalation rate is not a proxy for consumption. With an oversized ONU (14B, 1.89 J/token) the same mechanism reaches 20.1 J/query at baseline and the optimal operating point shifts by an order of magnitude.</p>
+    </div>
+
+    <h3><span class="num">6.3</span>Non-monotonic ladders corrupt stepwise recursion <span class="pill done">established</span></h3>
+    <p>On GSM8K, SOLAR-10.7B is <em>worse</em> than the smaller Llama-3.1-8B (0.675 vs 0.860). Paired per-query, escalating onu→fog repairs 7 answers and breaks 44. Because escalation is stepwise, a query bound for a higher tier must traverse the inverted one — so a bad rung does not merely waste its own energy, it converts that energy into wrong answers and degrades every tier above it. This is invisible at the 60M–355M scale of RecServe's own evaluation.</p>
+
+    <h3><span class="num">6.4</span>The specified confidence measure is not the best available <span class="pill done">established · replication</span></h3>
+    <p>Four confidence definitions were compared by Welch <em>t</em> separating correct from incorrect answers, on three tiers spanning an 8× size range. <span class="m">exp(min logprob)</span> — the weakest token — separates 10–50% better than the normalised-perplexity measure RecServe specifies (<span class="m">t</span> = 6.36 / 7.16 / 5.09 versus 4.62 / 4.75 / 4.86). A wrong answer betrays itself by its worst token, not by its average fluency.</p>
+    <p>This is a <em>replication</em>, and is reported as one: Gupta et al. [11] formalise exactly these estimators for LM cascades as Chow-Sum, Chow-Average and Chow-Quantile, with <span class="m">α = 0</span> defined as the minimum token log-probability, and show quantile-based deferral improving on the length-biased simple aggregations. The contribution here is that the result transfers to a recursive multi-tier cascade with measured energy — a setting their work does not cover.</p>
+
+    <h3><span class="num">6.5</span>Confidence tracks correctness but not difficulty <span class="pill done">established</span></h3>
+    <div class="tw">
+      <table>
+        <caption>GSM8K gold difficulty · accuracy and mean confidence, user tier</caption>
+        <thead><tr><th>Reasoning steps</th><th class="n">n</th><th class="n">Accuracy</th><th class="n">Confidence</th></tr></thead>
+        <tbody>
+          <tr><td>2 steps</td><td class="n">71</td><td class="n">0.56</td><td class="n">0.8745</td></tr>
+          <tr><td>4 steps</td><td class="n">39</td><td class="n">0.31</td><td class="n">0.8785</td></tr>
+          <tr><td>5 steps</td><td class="n">19</td><td class="n">0.16</td><td class="n">0.8751</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Accuracy falls by a factor of three; confidence varies by under 0.01 and on this tier drifts <em>upward</em>. The pattern holds identically at 1B, 8B and 10.7B, so it is a property of perplexity-based confidence rather than of scale. The consequence for routing is direct, and it is the same root cause as §6.2: escalation catches wrong answers but cannot preferentially route the genuinely hard ones. The underlying calibration phenomenon — the hard–easy effect — is documented independently by Michael et al. [12]; the contribution here is its consequence for stepwise cascade routing.</p>
+
+    <h3><span class="num">6.6</span>Access-network transport is second-order <span class="pill prog">in progress</span></h3>
+    <p>At 0.1 J per access hop against tens to hundreds of joules of computation per generative query, PON transport is roughly 0.1–1% of cascade energy. In the classification regime, where a whole query costs 0.638 J, the same hop is ~16%. There is a crossover, and locating it is arithmetic over traces already collected.</p>
+    <p>The claim this supports is worth stating precisely, because it inverts the premise of the classical mobile-edge-computing literature, where local computation is traded against transmission energy: <strong>for LLM inference over PON, that trade has collapsed.</strong> A query moves kilobytes and burns hundreds of joules. Energy-aware offloading here is a compute-placement problem, not a networking problem — which is also why no per-query energy signal could beat β (§6.2): the cost is dominated by static per-tier configuration.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">07</span>Methodological Limitations</h2>
+    <p>Stated with bounds rather than as open questions, since in a characterisation study these are the substance rather than a disclaimer.</p>
+
+    <h3><span class="num">7.1</span>Phase reporting is inconsistent across sources</h3>
+    <p>The user and ONU sources report decode isolated from prefill, matching the convention adopted in §5.1. The fog and cloud sources report blended figures. The residual error is bounded by three independent measurements that agree prefill is a small share of total energy: ≤3.4% in language and code tasks in the general literature; a prefill:decode latency ratio of 1:192 to 1:569 on Jetson [5]; and one to two orders of magnitude below decode on mobile silicon [4]. The direction of the residual is also favourable — it over-prices the upper tiers, which makes escalation look more expensive and transport look more negligible, so both headline conclusions are stated conservatively.</p>
+
+    <h3><span class="num">7.2</span>Batch regimes differ across tiers</h3>
+    <p>User and ONU figures are batch-1; fog and cloud figures come from batched serving (Watt Counts uses 1000-query batches). This partly reflects reality — a handset does run batch-1 and a datacentre does not — but it is a modelling decision and is declared as one rather than left implicit.</p>
+
+    <h3><span class="num">7.3</span>Sample size and scope</h3>
+    <p>The generative results rest on n=200. An earlier n=40 run produced a <em>qualitatively</em> wrong picture, not merely a noisier one — the capability ladder appeared inverted — so small-n results are excluded rather than caveated. No specific λ or β value transfers across hardware ladders; what transfers is the calibration procedure.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">08</span>Positioning</h2>
+    <p>Threshold-based quality–energy trade-offs are not novel; EcoThink [13] formulates a structurally similar constrained optimisation, and the pattern is standard in green-computing literature. Three things are specific to this work.</p>
+    <ul>
+      <li><strong>The setting.</strong> A physically distributed multi-tier PON cascade with heterogeneous hardware, rather than depth selection inside a single system.</li>
+      <li><strong>The evidence base.</strong> Measured energy from independent profiling sources plus first-party RAPL, rather than analytical estimates from manufacturer TDP.</li>
+      <li><strong>The negative result.</strong> None of the five mechanisms Pakpahan and Hwang compare — Tabi, PerLLM, EdgeShard, Draft–Verify, RecServe — is energy-aware. This work shows why adding energy-awareness to the threshold cannot work, which is more useful than another mechanism that does not.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">09</span>Remaining Work</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Item</th><th>Cost</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Monotonicity pilot on the proposed ladder (30 queries per tier)</td><td class="n">~20 min</td><td><span class="pill plan">planned</span></td></tr>
+          <tr><td>Collect the missing ONU tier at n=200</td><td class="n">~1–2 h</td><td><span class="pill plan">planned</span></td></tr>
+          <tr><td>Prefill share of cascade energy, from existing traces</td><td class="n">~1 day</td><td><span class="pill prog">in progress</span></td></tr>
+          <tr><td>PON transport crossover point (RQ4)</td><td class="n">~2 days</td><td><span class="pill prog">in progress</span></td></tr>
+          <tr><td>Oracle bound — what any per-query signal could buy</td><td class="n">~1 day</td><td><span class="pill plan">optional</span></td></tr>
+          <tr><td>Cloud tier via hosted API with log-probabilities</td><td class="n">billed</td><td><span class="pill plan">planned</span></td></tr>
+          <tr><td>Writing: methodology, results, conclusion</td><td class="n">~8 weeks</td><td><span class="pill prog">in progress</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>No mandatory experiment remains. Every result in §6 rests on data already collected, and the remaining analyses run offline against traces on disk. The critical path is writing, not compute.</p>
+  </section>
+
+  <section class="refs">
+    <h2><span class="num">10</span>References</h2>
+    <ol>
+      <li>Wu et al. <span class="t">Recursive Offloading for LLM Serving in Multi-tier Networks.</span> IEEE Xplore doc. 11293838; arXiv:2505.16502.</li>
+      <li>Pakpahan &amp; Hwang. <span class="t">Enabling Software-Defined Tiered LLM Inference Continuum on Passive Optical Network.</span> IEEE Access vol. 14, 2026. doi:10.1109/ACCESS.2026.3651558.</li>
+      <li>Solovyeva &amp; Castor. <span class="t">Towards Green AI: Decoding the Energy of LLM Inference in Software Development.</span> Phase-level method reference.</li>
+      <li>Cai et al. <span class="t">Is Your NPU Ready for LLMs?</span> arXiv:2607.05475. User-tier measurements.</li>
+      <li>Kubwimana &amp; Huang (NVIDIA). <span class="t">EdgeReasoning: Characterizing Reasoning LLM Deployment on Edge GPUs.</span> arXiv:2511.01866. ONU-tier measurements.</li>
+      <li>Watt Counts. <span class="t">Energy-Aware Benchmark for Sustainable LLM Inference on Heterogeneous GPU Architectures.</span> arXiv:2604.09048. 50 models × 10 GPUs.</li>
+      <li>Stuhlmann, Fadel Argerich &amp; Fürst. <span class="t">Bench360: Benchmarking Local LLM Inference from 360°.</span> arXiv:2511.16682. Fog-tier measurements on L4 / A30 / A10.</li>
+      <li>TokenPowerBench. <span class="t">Benchmarking the Power Consumption of LLM Inference.</span> AAAI; arXiv:2512.03024.</li>
+      <li>Oviedo et al. <span class="t">Joule.</span> arXiv:2509.20241, Table 1, Llama 3.1 70B. Cloud-tier measurements.</li>
+      <li>Sarigiannidis et al. IET Networks, 2016. ONU power states and PON access energy.</li>
+      <li>Gupta et al. <span class="t">Language Model Cascades: Token-level Uncertainty and Beyond.</span> ICLR 2024; arXiv:2404.10136.</li>
+      <li>Michael, BenShushan, Bien &amp; Moore. <span class="t">Confidence Calibration in Large Language Models.</span> arXiv:2605.23909.</li>
+      <li>Li &amp; Lu. <span class="t">EcoThink: A Green Adaptive Inference Framework for Sustainable and Accessible Agents.</span> WWW 2026.</li>
+    </ol>
+  </section>
+
+  <footer>
+    Revised proposal, 30 August 2026. Supersedes the original mechanism-oriented scope; the research questions, contributions and schedule reflect the negative result in §6.2 and the energy-metric convention adopted in §5.1.
+  </footer>
+
+</div>
