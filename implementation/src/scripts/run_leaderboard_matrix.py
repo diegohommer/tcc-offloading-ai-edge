@@ -190,7 +190,24 @@ def replay(rows, layer, tier, model, golds, out_path, done, limit):
                 print(f"  ! índice {row['index']}: pergunta não encontrada no GSM8K, pulando")
                 continue
             t0 = time.perf_counter()
-            result = layer.generate(row["full_prompt"], stop=STOP)
+            result = None
+            for tentativa in range(1, 4):
+                try:
+                    result = layer.generate(row["full_prompt"], stop=STOP)
+                    break
+                except Exception as e:                      # noqa: BLE001
+                    # Um timeout isolado no meio de 200 consultas nao deve matar a
+                    # coleta inteira -- foi assim que a primeira tentativa do fog
+                    # morreu na consulta 1, com o modelo ainda carregando do disco.
+                    espera = 30 * tentativa
+                    print("  ! indice %d tentativa %d/3 falhou (%s); nova em %ds"
+                          % (row["index"], tentativa, type(e).__name__, espera))
+                    if tentativa == 3:
+                        print("  ! indice %d desistindo apos 3 tentativas" % row["index"])
+                        break
+                    time.sleep(espera)
+            if result is None:
+                continue
             correct = is_correct(result.text, gold)
             n += 1
             n_correct += int(correct)
@@ -253,6 +270,11 @@ def main():
     p.add_argument("--parquet-dir", type=Path, default=ROOT / "results" / "leaderboard")
     p.add_argument("--config", type=Path, default=None, help="JSON overriding the tier ladder")
     p.add_argument("--out", type=Path, default=None)
+    p.add_argument("--timeout", type=float, default=1800.0,
+                   help="timeout HTTP em segundos; um 9B FP16 leva minutos so para carregar")
+    p.add_argument("--threads", type=int, default=None,
+                   help="threads do Ollama; menor reduz calor (decode e memory-bound, "
+                        "entao o custo em tempo e sublinear)")
     p.add_argument("--tolerance", type=float, default=0.02,
                    help="max |measured - published| accuracy gap the gate accepts")
     args = p.parse_args()
@@ -286,7 +308,8 @@ def main():
                 f"    -o {path}")
         rows = load_parquet(path)
         layer = OllamaGenerativeLayer(layer_name="validation", model=src["ollama_model"],
-                                      max_tokens=256, temperature=0.0)
+                                      max_tokens=256, temperature=0.0,
+                                      timeout_s=args.timeout, num_thread=args.threads)
         acc = replay(rows, layer, "validation", src["ollama_model"], golds,
                      out, done, args.limit)
         gap = abs(acc - src["published_acc"])
@@ -325,7 +348,8 @@ def main():
         tier = tier.strip()
         cfg = ladder[tier]
         layer = OllamaGenerativeLayer(layer_name=tier, model=cfg["model"],
-                                      max_tokens=256, temperature=0.0)
+                                      max_tokens=256, temperature=0.0,
+                                      timeout_s=args.timeout, num_thread=args.threads)
         acc = replay(rows, layer, tier, cfg["model"], golds, out, done, args.limit)
         print(f"[{tier}] acurácia final {acc:.4f}\n")
 

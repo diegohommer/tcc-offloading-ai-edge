@@ -79,6 +79,7 @@ class OllamaGenerativeLayer:
     max_tokens: int = 512
     temperature: float = 0.0            # deterministic: confidence must be reproducible
     timeout_s: float = 300.0
+    num_thread: int | None = None       # None -> Ollama decide; menor = menos calor
 
     def generate(self, prompt: str, stop: list[str] | None = None) -> GenerationResult:
         """Generate for `prompt`, optionally halting at any string in `stop`.
@@ -122,7 +123,8 @@ class OllamaGenerativeLayer:
                 "stream": False,
                 "logprobs": True,
                 "options": {"temperature": self.temperature, "num_predict": self.max_tokens,
-                            **({"stop": stop} if stop else {})},
+                            **({"stop": stop} if stop else {}),
+                            **({"num_thread": self.num_thread} if self.num_thread else {})},
             },
             timeout=self.timeout_s,
         )
