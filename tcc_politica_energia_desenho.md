@@ -761,3 +761,131 @@ publicados, declarando que nenhum foi medido no regime do harness.
 - Dataset: https://huggingface.co/datasets/open-llm-leaderboard-old/details_meta-llama__Meta-Llama-3-70B-Instruct
 - Arquivo: `2024-04-21T11-59-48.701689/details_harness|gsm8k|5_2024-04-21T11-59-48.701689.parquet`
 - Companheiro para validação: `open-llm-leaderboard-old/details_meta-llama__Meta-Llama-3-8B`
+
+## 16. Escada de quatro camadas: resultados (2026-09-03)
+
+Primeira coleta completa das quatro camadas nas **mesmas 200 instâncias**, com
+o mesmo prompt — o `full_prompt` do harness GSM8K 5-shot, copiado verbatim do
+arquivo do leaderboard e enviado sem reconstrução a cada camada.
+
+### 16.1 Procedência: cada camada na precisão da sua fonte de energia
+
+| Camada | Modelo | Precisão | Executado em | Energia (fonte) |
+|---|---|---|---|---|
+| user | llama3.2:1b | Q4_K_M | CPU local (Ollama) | 0.074 J/tok — Snapdragon 8 Elite, Cai et al. |
+| onu | qwen2.5:1.5b | Q4_K_M | CPU local (Ollama) | 0.22 J/tok — Jetson AGX Orin, EdgeReasoning |
+| fog | gemma-2-9b-it | **FP16** | **NVIDIA L4 (Modal)** | 1.75 J/tok — L4/A30/A10, Bench360 |
+| cloud | Llama-3-70B-Instruct | BF16 | leaderboard (não executado) | 1.002 J/tok — 4xH100, Caravaca Tab. IV |
+
+A execução heterogênea é **fidelidade, não inconsistência**: cada camada roda na
+precisão que o hardware de referência emprega — 4 bits na borda, onde a
+quantização é o que viabiliza um acelerador de ONU; FP16 no fog sobre GPU de
+datacenter; BF16 na nuvem. Um celular não executa BF16.
+
+Fog e cloud têm correspondência **exata** de precisão e classe de hardware. O
+resíduo irredutível fica confinado ao par user/ONU (Q4_K_M contra AWQ/GPTQ),
+como a §7.4 da proposta enuncia.
+
+### 16.2 Validação do pipeline
+
+Antes da coleta, o replay foi verificado contra um resultado público:
+Meta-Llama-3-8B base reproduziu **0.4400** contra os **0.4579** publicados
+(Δ 0.0179, n=50). Isso valida em conjunto o replay do prompt, a condição de
+parada, a extração da resposta e o critério de correção. Separadamente, o
+`--check-rule` mediu **99,47%** de concordância (1312/1319) entre
+`tasks.gsm8k.is_correct` e o veredito do próprio harness, sem executar modelo.
+
+### 16.3 A escada
+
+| Camada | Acurácia | Tokens gerados (mediana) | J/consulta (decode) |
+|---|---|---|---|
+| user | 0.1200 | 34 | 2.5 |
+| onu | 0.2900 | 49 | 10.8 |
+| fog | **0.7950** | 90 | **157.5** |
+| cloud | **0.8800** | 83 | **83.2** |
+
+Monotônica em acurácia. **Não monotônica em energia** — ver §16.5.
+
+### 16.4 Saltos pareados
+
+| Salto | Conserta | Quebra | Líquido |
+|---|---|---|---|
+| user → onu | 46 | 12 | **+34** |
+| onu → fog | **102** | **1** | **+101** |
+| fog → cloud | 30 | 13 | **+17** |
+
+Todos positivos — a escada não repete a inversão do SOLAR (§13.1). O degrau
+`onu → fog` é o que carrega a cascata: conserta 102 respostas e quebra uma.
+
+### 16.5 A energia inverte no topo, e agora está medido
+
+**O fog custa 157.5 J/consulta e a nuvem custa 83.2 J** — a nuvem é quase 2x
+mais barata apesar de um modelo 8x maior. É o efeito de lote que a §3 deste
+documento já registrava a partir da literatura ("cloud's best regime beats
+fog's production point"), agora medido na própria escada deste trabalho: o fog
+roda em L4 de stream único, a nuvem roda em lote otimizado sobre 4xH100.
+
+Consequência direta: `fog → cloud` conserta 17 respostas líquidas **e economiza
+74 J**. É um salto energeticamente gratuito. Um β global não consegue
+representar isso — é exatamente o argumento por calibração por par de camadas
+da §4.
+
+### 16.6 A confiança separa em todas as camadas de decisão
+
+| Camada | Base | Top 25% mais confiantes | Ganho | Welch t |
+|---|---|---|---|---|
+| user | 0.120 | 0.340 | 2.8x | +6.64 |
+| onu | 0.290 | 0.620 | 2.1x | **+10.44** |
+| fog | 0.795 | 0.980 | 1.2x | +6.70 |
+
+O t = +10.44 da ONU é a separação mais forte medida neste trabalho. Isso
+responde a preocupação de que uma camada base fraca (12%) inviabilizaria o
+mecanismo: ela não inviabiliza — a confiança identifica quais consultas reter, e
+reter o quartil mais confiante quase triplica a acurácia daquele subconjunto.
+
+### 16.7 A cascata simulada
+
+Escalonamento passo a passo, limiar = quantil β da confiança de cada camada:
+
+| β | Acurácia | J/consulta | Distribuição final |
+|---|---|---|---|
+| 0.00 | 0.120 | 3.3 | user 200 |
+| 0.10 | 0.150 | 7.9 | user 180, onu 16, fog 1, cloud 3 |
+| 0.25 | 0.245 | 24.3 | user 150, onu 33, fog 5, cloud 12 |
+| 0.50 | 0.465 | 74.2 | user 100, onu 40, fog 17, cloud 43 |
+| 0.75 | 0.710 | 161.7 | user 50, onu 26, fog 17, cloud 107 |
+| 0.90 | 0.810 | 225.3 | user 20, onu 12, fog 10, cloud 158 |
+| 1.00 | 0.880 | 273.6 | cloud 200 |
+
+Fronteira de **83x em energia** para **76 pontos de acurácia**. Compare com o
+SST-2, onde a §12.5 reclamava de um vão de 4.6 pontos entre a melhor e a pior
+camada: aqui há espaço real para negociar.
+
+**A distribuição final é exatamente β por construção** — o limiar por quantil
+escalona a fração de menor confiança por *ranking*, não por acurácia. Uma camada
+fraca não escalona mais; ela apenas entrega respostas piores no que retém. A
+cascata nunca degenera.
+
+### 16.8 Ressalva: estes números são decode apenas
+
+A energia acima usa J/token de decode multiplicado pelos tokens gerados. No
+regime deste experimento o prompt tem ~1000 tokens e é **reprocessado em cada
+camada visitada** — a escalada stepwise repaga prefill a cada degrau (§5.1 da
+proposta). Portanto:
+
+- os J/consulta da §16.7 **subestimam** o custo de escalar, e a subestimação
+  cresce com β;
+- o joelho da fronteira é provavelmente mais agudo em favor de β baixo do que a
+  tabela sugere;
+- **nenhuma camada tem J/token de prefill tabulado** no `layer_energy.yaml`
+  (`E_pf_J_per_token` é None em todas), então a correção de dois termos exige
+  ou uma fonte nova ou uma suposição declarada.
+
+Este é o item que mais importa resolver antes de citar a fronteira.
+
+### 16.9 Onde estão os dados
+
+- `results/traces/lb_full.raw.jsonl` — 800 registros, 4 camadas x 200 instâncias
+- `results/traces/fog_modal.jsonl` — a camada fog isolada (custou ~$0.49 na Modal)
+- Ambos gerados, **não versionados** (`.gitignore`). Vale copiar para fora do
+  repositório: recoletar o fog custa dinheiro e as camadas locais custam horas.
