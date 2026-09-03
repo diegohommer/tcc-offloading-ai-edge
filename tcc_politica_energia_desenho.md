@@ -1168,3 +1168,81 @@ o paper não declara. Fica documentado em vez de corrigido às cegas.
 Não é 100%: dois dos quatro valores de prefill são derivados, e a nuvem tem
 um erro de 3% conhecido e documentado. Mas todo desvio conhecido é conservador,
 e nenhuma conclusão estrutural depende dos números incertos.
+
+## 20. RQ4: transporte na PON (2026-09-03)
+
+Calculado a partir dos bytes efetivamente movidos, substituindo a constante de
+0,1 J/salto que o config carregava sem derivação.
+
+### 20.1 O resultado
+
+Uma consulta move **4,2 KB** — prompt mediano de 1022 tokens mais resposta de
+49, a 4 bytes por token. Um salto reenvia o prompt inteiro, porque nenhum KV
+cache atravessa fronteira de camada.
+
+| Taxa | Tempo | Energia marginal |
+|---|---|---|
+| GPON legado (1,244 Gb/s upstream) | 27,6 µs | 1,10 × 10⁻⁴ J |
+| XGS-PON (10 Gb/s) | 3,4 µs | 1,37 × 10⁻⁵ J |
+| **TWDM-PON, 25 Gb/s por λ** (o do Pakpahan) | **1,4 µs** | **5,46 × 10⁻⁶ J** |
+
+Contra a computação por consulta:
+
+| Camada | Computação | Transporte | Fração |
+|---|---|---|---|
+| user | 16,90 J | 5,5 µJ | 3 × 10⁻⁷ |
+| onu | 11,70 J | 5,5 µJ | 5 × 10⁻⁷ |
+| fog | 190,81 J | 5,5 µJ | 3 × 10⁻⁸ |
+| cloud | 85,53 J | 5,5 µJ | 6 × 10⁻⁸ |
+
+**Sete ordens de magnitude.** Não existe ponto de cruzamento: mesmo em GPON
+legado, vinte vezes mais lento, o transporte fica cinco ordens abaixo.
+
+### 20.2 Por que a PON torna isso categórico
+
+Uma PON é **passiva** — nenhum elemento alimentado na rede de distribuição, só um
+splitter óptico. Toda a energia está nos dois extremos, a ONU do assinante e a
+porta do OLT, e **ambos são sempre-ligados**. Uma ONU consome ~4 W transmitindo
+ou não.
+
+Isso separa duas grandezas que a constante antiga confundia:
+
+| | Valor | Serve para |
+|---|---|---|
+| **Marginal** | 5,5 µJ | a **decisão** de escalonar — a ONU está ligada de qualquer forma |
+| **Amortizado** | 3,98 W ÷ consultas/s | a **contabilidade total** do sistema |
+
+O amortizado é dominado pela carga da residência, não pela cascata:
+
+| Carga | J/consulta |
+|---|---|
+| 1 consulta/hora | 14.328 |
+| 1 consulta/minuto | 238,8 |
+| 1 consulta/segundo | 3,98 |
+| 40 consultas/segundo | 0,10 |
+
+### 20.3 Correção: a constante de 0,1 J era amortizada, e indocumentada
+
+Os 0,1 J/salto correspondem exatamente a **39,8 consultas por segundo por ONU**.
+Era um valor amortizado apresentado como marginal, e essa premissa de carga
+nunca esteve escrita. A descrição do bloco também afirmava "three orders of
+magnitude below inference terms" — o número certo é sete.
+
+Config reescrito: `marginal` com três taxas derivadas dos bytes, `amortised`
+como função da carga declarada, e `link_energy_per_hop_J()` passando a devolver
+o marginal. Adicionado `link_energy_amortised_J(queries_per_second)`, que exige
+declarar a taxa.
+
+### 20.4 O que isso dá para a tese
+
+> Para inferência de LLM sobre PON, o transporte da rede de acesso é sete ordens
+> de magnitude menor que a computação. O offloading energy-aware nessa
+> arquitetura não é problema de rede — é problema de alocação de computação. A
+> premissa central da literatura clássica de MEC, que troca energia de computar
+> local contra energia de transmitir, não se transfere: uma consulta move
+> kilobytes e queima centenas de joules.
+
+Corolário: **o que importa numa PON não é o tráfego, é o tempo ligado.** A
+alavanca para energia na rede de acesso é o estado de sleep da ONU (0,40 W
+contra 3,98 W), que é um eixo de projeto diferente de tudo que a decisão de
+offloading toca.

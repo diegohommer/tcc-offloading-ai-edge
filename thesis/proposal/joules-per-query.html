@@ -520,14 +520,30 @@
     </div>
     <p>Accuracy falls by a factor of three; confidence varies by under 0.01 and on this tier drifts <em>upward</em>. The pattern holds identically at 1B, 8B and 10.7B, so it is a property of perplexity-based confidence rather than of scale. The consequence for routing is direct, and it is the same root cause as §6.2: escalation catches wrong answers but cannot preferentially route the genuinely hard ones. The underlying calibration phenomenon — the hard–easy effect — is documented independently by Michael et al. [12]; the contribution here is its consequence for stepwise cascade routing.</p>
 
-    <h3><span class="num">6.6</span>Access-network transport is second-order <span class="pill prog">in progress</span></h3>
-    <p>At 0.1 J per access hop against tens to hundreds of joules of computation per generative query, PON transport is roughly 0.1–1% of cascade energy. In the classification regime, where a whole query costs 0.638 J, the same hop is ~16%. There is a crossover, and locating it is arithmetic over traces already collected.</p>
-    <p>The claim this supports is worth stating precisely, because it inverts the premise of the classical mobile-edge-computing literature, where local computation is traded against transmission energy: <strong>for LLM inference over PON, that trade has collapsed.</strong> A query moves kilobytes and burns hundreds of joules. Energy-aware offloading here is a compute-placement problem, not a networking problem — which is also why no per-query energy signal could beat β (§6.2): the cost is dominated by static per-tier configuration.</p>
-  </section>
+    <h3><span class="num">6.6</span>Access-network transport is seven orders of magnitude below computation <span class="pill done">established</span></h3>
+    <p>A query moves <strong>4.2&nbsp;KB</strong> &mdash; a median 1022-token prompt plus a 49-token answer, at four bytes per token, with the whole prompt re-sent at each hop because no KV cache crosses a tier boundary. On the 25&nbsp;Gb/s-per-wavelength TWDM-PON the reference architecture specifies, that is <strong>1.4&nbsp;&micro;s</strong> of transmission; at the ONU's 3.98&nbsp;W that is <strong>5.5&nbsp;&micro;J</strong>.</p>
 
-  <section>
-    <h2><span class="num">07</span>Methodological Limitations</h2>
-    <p>Stated with bounds rather than as open questions, since in a characterisation study these are the substance rather than a disclaimer.</p>
+    <div class="tw">
+      <table>
+        <caption>Marginal transport against per-query computation</caption>
+        <thead><tr><th>Tier</th><th class="n">Computation</th><th class="n">Transport</th><th class="n">Fraction</th></tr></thead>
+        <tbody>
+          <tr><td>User</td><td class="n">16.90 J</td><td class="n">5.5 &micro;J</td><td class="n">3&times;10<sup>&minus;7</sup></td></tr>
+          <tr><td>ONU</td><td class="n">11.70 J</td><td class="n">5.5 &micro;J</td><td class="n">5&times;10<sup>&minus;7</sup></td></tr>
+          <tr><td>Fog</td><td class="n">190.81 J</td><td class="n">5.5 &micro;J</td><td class="n">3&times;10<sup>&minus;8</sup></td></tr>
+          <tr><td>Cloud</td><td class="n">85.53 J</td><td class="n">5.5 &micro;J</td><td class="n">6&times;10<sup>&minus;8</sup></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>There is no crossover to locate. Even legacy GPON at 1.244&nbsp;Gb/s upstream, twenty times slower, leaves transport five orders below computation. An earlier version of this section put the share at 0.1&ndash;1% and treated the crossover as something still to be found; that estimate rested on a flat 0.1&nbsp;J-per-hop constant rather than on bytes moved, and is withdrawn.</p>
+
+    <div class="note">
+      <span class="lbl">Why PON makes this categorical</span>
+      <p>A PON is passive: no powered element sits in the distribution network, only an optical splitter. All energy is at the two endpoints &mdash; the subscriber's ONU and the OLT port &mdash; and both are always on, drawing power whether or not anything is transmitted. Transport energy therefore splits into two quantities that the old constant conflated. The <em>marginal</em> cost of one more query is transmission time times power, 5.5&nbsp;&micro;J, and it is the figure the escalation decision should use, because the ONU is powered regardless. The <em>amortised</em> share of always-on power is 3.98&nbsp;W divided by the household's query rate, which spans 0.10&nbsp;J at forty queries per second to 14.3&nbsp;kJ at one per hour &mdash; governed by household load, not by the cascade. The retired 0.1&nbsp;J constant was the amortised figure at 39.8 queries per second per ONU, a load assumption that was never written down.</p>
+    </div>
+
+    <p>The claim this supports inverts the premise of the classical mobile-edge-computing literature, where local computation is traded against transmission energy: <strong>for LLM inference over PON that trade has collapsed.</strong> A query moves kilobytes and burns hundreds of joules. Energy-aware offloading here is a compute-placement problem, not a networking one &mdash; which is also why no per-query energy signal could beat &beta; (&sect;6.2): the cost is dominated by static per-tier configuration. The corollary is that what matters on a PON is time powered rather than traffic, making the ONU sleep state (0.4&nbsp;W against 3.98&nbsp;W) the access-network energy lever, on a design axis the offloading decision never touches.</p>
 
     <h3><span class="num">7.1</span>Phase reporting is inconsistent across sources</h3>
     <p>The user and ONU sources report decode isolated from prefill, matching the convention adopted in §5.1. The fog and cloud sources report blended figures. That gap has since been closed from the other direction: a per-tier prefill energy is now tabulated, measured for the user and ONU tiers and derived from published ratios for fog and cloud, so the two-term model is populated rather than approximated.</p>

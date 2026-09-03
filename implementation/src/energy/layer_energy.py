@@ -71,8 +71,32 @@ class LayerEnergyTable:
     def cloud_production_J_per_token(self) -> float:
         return float(self.layers["cloud"]["production_regime"]["ml_energy_v3"]["derived_J_per_token"])
 
-    def link_energy_per_hop_J(self) -> float:
-        return float(self.link["per_hop_energy_J"])
+    def link_energy_per_hop_J(self, rate: str = "twdm_pon_25_Gbps_per_lambda") -> float:
+        """Energia MARGINAL de transporte por salto, em joules.
+
+        Este e o custo de mandar uma consulta a mais, e e o numero certo para a
+        decisao de escalonar: numa PON a ONU esta ligada de qualquer forma, entao
+        o custo incremental e apenas tempo de transmissao vezes potencia.
+
+        NAO confundir com o custo amortizado sempre-ligado (potencia da ONU
+        dividida por consultas por segundo), que e da ordem de joules e depende
+        inteiramente da carga da residencia, nao da cascata. Ver
+        link_energy_amortised_J() e o bloco `link:` do layer_energy.yaml.
+
+        Ate 2026-09-03 este metodo devolvia uma constante de 0.1 J que, apurada
+        depois, era um valor amortizado a 39.8 consultas por segundo -- premissa
+        de carga que nunca esteve documentada.
+        """
+        return float(self.link["marginal"]["J_per_hop"][rate])
+
+    def link_energy_amortised_J(self, queries_per_second: float) -> float:
+        """Parcela da potencia sempre-ligada da ONU atribuida a uma consulta.
+
+        Para contabilidade total do sistema, nao para a decisao de escalonar.
+        Exige declarar a taxa de consultas assumida: o valor varia cinco ordens
+        de magnitude entre uma consulta por hora e quarenta por segundo.
+        """
+        return float(self.link["onu_power_active_W"]) / queries_per_second
 
     def pue(self, kind: str = "average") -> float:
         return float(self.environment["pue"][kind])

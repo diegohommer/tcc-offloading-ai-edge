@@ -394,12 +394,69 @@ layers:
         note: "SECONDARY, see above."
 
 link:
-  description: "ONU/PON access-network hop energy -- three orders of magnitude below inference terms, second-order for routing decisions."
+  description: >
+    PON access-network transport. REWRITTEN 2026-09-03 after computing this from
+    bytes actually moved instead of carrying a constant. The previous description
+    said "three orders of magnitude below inference terms, second-order for
+    routing decisions". Both halves were wrong: the correct figure is SEVEN
+    orders of magnitude, and the 0.1 J constant was an amortised number
+    masquerading as a marginal one.
+
+    A PON is passive -- no powered element in the distribution network, only an
+    optical splitter -- so all energy sits at the two endpoints, the subscriber's
+    ONU and the OLT port, and BOTH ARE ALWAYS ON. An ONU draws ~4 W whether it is
+    transmitting or not. That splits transport energy into two quantities that
+    differ by orders of magnitude, and conflating them is what the old constant
+    did:
+
+      MARGINAL    cost of sending one more query: transmission time x power.
+                  This is the figure relevant to the ESCALATION DECISION, because
+                  the ONU is powered regardless.
+      AMORTISED   share of always-on power attributed per query: power divided by
+                  queries per second. Relevant to TOTAL system accounting, and
+                  entirely determined by household load, not by the cascade.
+
   onu_power_active_W: 3.98
   onu_power_dozing_W: 1.2
   onu_power_sleep_W: 0.4
   onu_share_of_ftth_consumption_pct: 60
-  per_hop_energy_J: 0.1
+
+  marginal:
+    bytes_per_hop: 4288
+    bytes_per_hop_derivation: "median 1022 prompt tokens + 49 response tokens at 4 bytes/token, from results/traces/lb_full.matrix.jsonl. A hop carries the prompt up and the answer back; no KV cache crosses a tier boundary, so the full prompt is re-sent."
+    J_per_hop:
+      gpon_1244_Mbps_upstream: 1.097e-4      # 27.6 us
+      xgs_pon_10_Gbps: 1.365e-5              # 3.4 us
+      twdm_pon_25_Gbps_per_lambda: 5.459e-6  # 1.4 us -- the rate Pakpahan specifies
+    note: >
+      Against per-query compute of 11.7 J (onu) to 190.8 J (fog), the marginal
+      transport term is 3e-8 to 5e-7 of the total. There is no crossover: even
+      legacy GPON at 1.244 Gb/s, twenty times slower, stays five orders below.
+      RQ4 therefore has a categorical answer rather than a range.
+
+  amortised:
+    formula: "onu_power_active_W / queries_per_second"
+    J_per_query_by_load:
+      one_per_hour: 14328.0
+      one_per_minute: 238.8
+      one_per_second: 3.98
+      forty_per_second: 0.10
+    note: >
+      The 0.1 J/hop constant this block used to carry corresponds to exactly 39.8
+      queries per second per ONU. It was an amortised figure, and that load
+      assumption was never written down anywhere. Any use of an amortised
+      transport number must state the assumed household query rate, because the
+      value spans five orders of magnitude across plausible rates.
+
+  implication: >
+    For LLM inference over PON, energy-aware offloading is a compute-placement
+    problem, not a networking one. The classical mobile-edge-computing premise --
+    trading local computation energy against transmission energy -- does not
+    transfer: a query moves kilobytes and burns hundreds of joules.
+    The corollary is that what matters on a PON is TIME POWERED, not traffic. The
+    lever for access-network energy is the ONU sleep state (0.4 W against 3.98 W),
+    which is a different design axis from anything the offloading decision
+    touches.
   sources:
     - "Loading-Aware TDMA Sleep (MDPI Sustainability), https://www.mdpi.com/2071-1050/14/16/10238"
     - "Sarigiannidis et al., IET Networks 2016, https://ietresearch.onlinelibrary.wiley.com/doi/10.1049/iet-net.2015.0087"
