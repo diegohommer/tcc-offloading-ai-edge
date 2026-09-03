@@ -1067,3 +1067,104 @@ estavam as economias — é a que mais encareceu.
 
 Este é o resultado que a §16.7 não podia dar. Ela agora está superada e não deve
 ser citada.
+
+## 19. Auditoria da base (2026-09-03)
+
+Revisão de consistência do que foi construído, motivada pela pergunta direta
+"está tudo sólido?". Três verificações, duas resolvidas e uma correção real.
+
+### 19.1 O λ×β sobrevive ao modelo de dois termos
+
+O teste da §17 foi rodado com energia só de decode, antes do prefill existir.
+Refeito com os dois termos:
+
+| Modelo de energia | Saltos (J) | Ganho médio do λ |
+|---|---|---|
+| Só decode | 10.9 → 157.6 → 83.3 | −0.0138 |
+| Dois termos | 11.8 → 190.9 → 85.6 | **−0.0145** |
+
+Praticamente idêntico. A conclusão da §14 é insensível ao modelo de custo, o que
+era o risco real de tê-la testado antes de ter o prefill.
+
+### 19.2 O prefill/token depende do comprimento da entrada, e as plataformas divergem
+
+Verificação motivada pelo fato de as fontes de prefill terem sido medidas em
+comprimentos de entrada diferentes do regime deste trabalho (~1000 tokens).
+
+**Jetson** (EdgeReasoning, 33 pontos por modelo, entradas de 3 a 4097):
+
+| Entrada | Qwen-1.5B | Llama-8B | Qwen-14B |
+|---|---|---|---|
+| 256 | 0.00118 | 0.0050 | 0.0094 |
+| ~1000 | 0.00093 | 0.0153 | 0.0375 |
+| 4097 | 0.00090 | 0.0223 | 0.0522 |
+
+Modelo de 1.5B é plano; 8B e 14B **crescem 3-4×** de 256 para 1000.
+
+**A10** (Solovyeva & Castor, invertendo a fração de prefill da Tab. 2 com as
+entradas da Tab. 3): a razão e_dec/e_pre **cresce** com a entrada em 4 de 5
+modelos (CodeLlama 77→122→220, Qwen2.5-Coder 32→48→146), o que significa
+prefill/token **caindo** — amortização de custo fixo, não penalidade O(n²).
+
+**As duas plataformas divergem em sinal.** Não é contradição entre fontes: é
+diferença entre um dispositivo de borda com memória restrita e uma GPU de
+datacenter. Vale reportar como achado.
+
+Consequência para as ressalvas:
+
+- **fog**: o número foi derivado de entradas de 155-559 e aplicado a 1010. Na
+  A10 o prefill/token cai com a entrada, então 0.033 é **cota superior**. Erro
+  conservador.
+- **user**: medido a 256, aplicado a 900. Modelos de 1-1.5B são planos no
+  Jetson de 256 a 4097, então a extrapolação é segura por analogia de porte.
+- **cloud**: derivado de contexto 16K aplicado a 875 tokens; contexto menor tem
+  prefill/token menor, então **superestima**. Conservador.
+
+As três ressalvas apontam na mesma direção: superestimam energia. As conclusões
+ficam declaradas contra o próprio viés.
+
+### 19.3 Correção: a ressalva "blended" do Bench360 estava errada
+
+O `layer_energy.yaml` afirmava que os valores do Bench360 misturavam prefill e
+decode, e que usar a coluna cnn_dm como proxy de decode superestimava o fog.
+**Isso era suposição minha, nunca verificada, e é falso.**
+
+A tabela de métricas do próprio paper define Energy Efficiency como *"Energy per
+token/sentence (J)"* medida como **"Power × GENERATION time"** — tempo de
+geração, não de inferência ponta a ponta. Confirmado numericamente: potência ×
+TPOT reproduz o J/token tabulado dentro de 1% em todas as linhas conferidas
+(Gemma-2-9B CNN/DM: 107.4 W × 16.3 ms = 1.74 contra 1.75 tabulado).
+
+O Bench360 mede **decode**. Somar um termo de prefill separado para o fog é
+**correto**, não dupla contagem. Config corrigido.
+
+### 19.4 Correção real: a nuvem conta prefill duas vezes
+
+A âncora de decode da nuvem (Caravaca, 1.002 J/token) **é** misturada — aquele
+paper declara explicitamente *"no separate prefill/decode phase breakdown
+reported due to continuous batching"*. Somar 0.0027 × 875 = 2.36 J por cima
+conta o prefill duas vezes.
+
+Magnitude: 2.36 J num total de 85.5 J por consulta, **~3%**, na direção
+conservadora. Registrado no config como `double_counts_against_decode_anchor`.
+
+A correção adequada seria decompor os 1.002 usando a razão 1:370 em vez de
+somar, mas isso exige saber o n_in/n_gen do regime em que o Caravaca mediu, que
+o paper não declara. Fica documentado em vez de corrigido às cegas.
+
+### 19.5 Estado da base
+
+| Item | Estado |
+|---|---|
+| Trace: 4 camadas × 200 instâncias pareadas | ✅ medido |
+| Portão de validação (0.4400 vs 0.4579) | ✅ verificado |
+| Regra de correção (99.47% de concordância) | ✅ verificado |
+| Acurácia, saltos pareados, separação de confiança | ✅ do trace |
+| λ perde para β por camada | ✅ robusto: 3 cenários × 2 modelos de custo |
+| Prefill user, onu | ✅ medidos, fases separadas |
+| Prefill fog | ✅ derivado, cota superior, soma correta |
+| Prefill cloud | ⚠️ derivado, dupla contagem de ~3% declarada |
+
+Não é 100%: dois dos quatro valores de prefill são derivados, e a nuvem tem
+um erro de 3% conhecido e documentado. Mas todo desvio conhecido é conservador,
+e nenhuma conclusão estrutural depende dos números incertos.
