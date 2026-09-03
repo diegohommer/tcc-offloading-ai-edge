@@ -446,8 +446,8 @@
         <tbody>
           <tr><td>User</td><td>Llama-3.2-1B</td><td class="n">Q4_K_M</td><td class="n">0.074</td><td>Snapdragon 8 Elite [4]</td></tr>
           <tr><td>ONU</td><td>Qwen2.5-1.5B</td><td class="n">Q4_K_M</td><td class="n">0.22</td><td>Jetson AGX Orin [5]</td></tr>
-          <tr><td>Fog</td><td>Gemma-2-9B</td><td class="n">FP16</td><td class="n">1.75</td><td>L4 / A30 / A10 [7]</td></tr>
-          <tr><td>Cloud</td><td>Llama-3-70B-Instruct</td><td class="n">BF16</td><td class="n">1.002</td><td>4×H100 [15]</td></tr>
+          <tr><td>Fog</td><td>Gemma-2-9B</td><td class="n">FP16</td><td class="n">1.75</td><td>L4 / A10 / A30 class [7]</td></tr>
+          <tr><td>Cloud</td><td>Llama-3-70B-Instruct</td><td class="n">BF16</td><td class="n">1.002</td><td>4&#215;H100, optimised batch [15]</td></tr>
         </tbody>
       </table>
     </div>
@@ -552,14 +552,15 @@
         <tbody>
           <tr><td>User</td><td class="n">Q4_K_M (k-quant)</td><td class="n">W4 (AWQ/GPTQ)</td><td>approximate — both ~4-bit, different algorithms</td></tr>
           <tr><td>ONU</td><td class="n">Q4_K_M</td><td class="n">W4, INT8 compute fallback</td><td>approximate — as above, plus the Ampere fallback</td></tr>
-          <tr><td>Fog</td><td class="n">FP16</td><td class="n">FP16</td><td><strong>exact</strong>, if served at FP16</td></tr>
+          <tr><td>Fog</td><td class="n">FP16, Modal L4</td><td class="n">FP16, L4/A10/A30 class</td><td><strong>class</strong>, not chip &mdash; see below</td></tr>
           <tr><td>Cloud</td><td class="n">BF16 (leaderboard)</td><td class="n">BF16 [15]</td><td><strong>exact</strong></td></tr>
         </tbody>
       </table>
     </div>
 
     <p>The cloud tier, the one this work cannot execute, turns out to be the best-matched: the leaderboard ran the model unquantised and its energy was measured unquantised, so both sides refer to the same weights. The fog tier is the one that requires care — its energy figure is an FP16 measurement, so serving Gemma-2-9B through a 4-bit local runtime would introduce a wider mismatch than exists at the edge tiers, where at least both sides are 4-bit. FP16 weights for a 9B model are roughly 18.5 GB, which fits the available memory, so this gap is closable by serving choice rather than by caveat.</p>
-    <p>What remains irreducible is the edge pair: Q4_K_M against AWQ/GPTQ-style W4 is a difference of quantisation <em>algorithm</em>, and closing it would require measuring energy on the exact quantisation served — which is not possible without owning a Snapdragon and a Jetson. That residual is the honest bound on how tightly the correspondence can be claimed, and it applies to two tiers rather than to all four.</p>
+    <p><strong>A correction to how tightly the fog claim can be made.</strong> Bench360 does not state the serving scenario behind its energy table, and it reports figures for three 24&nbsp;GB GPUs without saying which row ran on which. Implied power &mdash; energy per token divided by seconds per token &mdash; is a near-constant 94&ndash;116&nbsp;W across every model and task in that table, and the latency metric reported is TPOT, a per-request quantity: both are single-stream signatures, so the regime is inferred rather than declared. That same ~107&nbsp;W also exceeds the L4's 72&nbsp;W TDP, which places those rows on the A10 (150&nbsp;W) or A30 (165&nbsp;W) rather than the L4. This work's fog tier was collected on a Modal L4, so the correspondence claimed here is to the declared <em>hardware class</em>, not to an identical chip.</p>
+<p>What remains irreducible is the edge pair: Q4_K_M against AWQ/GPTQ-style W4 is a difference of quantisation <em>algorithm</em>, and closing it would require measuring energy on the exact quantisation served — which is not possible without owning a Snapdragon and a Jetson. That residual is the honest bound on how tightly the correspondence can be claimed, and it applies to two tiers rather than to all four.</p>
   </section>
 
   <section>

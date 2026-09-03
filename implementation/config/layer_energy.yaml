@@ -81,6 +81,51 @@ layers:
       decode_J_per_token_upper_bound: 0.625
       derivation: "25W (Figure 1 mean power at the ITL<=25ms SLA filter) * 0.025s -- the 25ms is an SLA threshold used to filter which GPUs are 'viable' on the chart, not a measured ITL, so this is a ceiling, not a point estimate."
       note: "Supports the memory-pressure-outlier reading: an 8B model that fits comfortably in 24GB comes in well under the SOLAR-10.7B point."
+    bench360:
+      source: "Stuhlmann, Fadel Argerich and Fuerst, Bench360: Benchmarking Local LLM Inference from 360 Degrees, arXiv:2511.16682, Table 2 (RQ1, 24GB VRAM budget). Read from the PDF text layer, not a summarisation pass."
+      hardware: "NVIDIA L4 24GB / A30 24GB / A10 24GB -- three machines, all within this file's declared fog hardware_class. Table 2 does not state which of the three each row ran on."
+      regime: "GPU energy via NVML telemetry; the paper defines Efficiency = Joules/Token explicitly. Prefill and decode are NOT separated."
+      note: >
+        This is the fog point the generative ladder actually uses: Gemma-2-9B at
+        FP16 is the model collected on a Modal L4, so confidence and energy refer
+        to the same model at the same precision on the same hardware class --
+        the tightest correspondence in this ladder.
+      models:
+        gemma2_9b_fp16:
+          precision: FP16
+          J_per_token: {mmlu: 4.65, squad_v2: 4.12, cnn_dm: 1.75}
+          quality: {mmlu: 0.714, squad_v2: 0.903, cnn_dm: 0.380}
+        mistral_7b_fp16:
+          precision: FP16
+          J_per_token: {mmlu: 9.03, squad_v2: 4.23, cnn_dm: 0.81}
+        qwen2.5_7b_fp16:
+          precision: FP16
+          J_per_token: {mmlu: 17.86, squad_v2: 6.32, cnn_dm: 0.82}
+        qwen2.5_14b_int8:
+          precision: INT8
+          J_per_token: {mmlu: 26.14, squad_v2: 11.24}
+          note: "14B is marginally above this file's 7-13B fog band; recorded for completeness."
+      caveats:
+        - >
+          J/token varies 2.7x across tasks for the SAME model on the SAME hardware
+          (Gemma-2-9B: 4.65 MMLU vs 1.75 CNN/DM). The metric is a ratio whose
+          denominator is the generation length: J/token = e_decode + E_prefill/n_gen.
+          MMLU emits a handful of tokens so unamortised prefill dominates; CNN/DM
+          emits ~50-100 so it converges toward pure decode. Pick the column whose
+          generation length matches the workload being priced -- for this repo's
+          GSM8K replay (median 83-90 generated tokens) that is cnn_dm.
+        - >
+          Blended prefill+decode, unlike the phase-separated user and onu sources.
+          Using cnn_dm as a decode proxy therefore slightly OVER-prices fog, which
+          is the conservative direction: it makes escalation look more expensive
+          and PON transport look more negligible, so both headline conclusions are
+          stated against the bias rather than with it.
+        - >
+          The serving scenario for Table 2 (single-stream vs batch vs server) was
+          not confirmed in the section read. The paper implements all three; RQ1
+          is a memory-budget question. This matters because the fog/cloud energy
+          inversion recorded in the design document section 16.5 depends on which
+          regime each side was measured in.
     batch_curve_source: "Fadel Argerich and Patino-Martinez, Measuring and Improving the Energy Efficiency of Large Language Models Inference, IEEE Access vol. 12, 2024, DOI 10.1109/ACCESS.2024.3409745 (open access, CC BY 4.0). Batch=1 values read from Figure 4; batch=5/10/20 values read from Figure 6, Section VI-C ('Batch size')."
     batch_curve_regime: "FP16, HuggingFace Transformers/PyTorch backend (not vLLM, unlike primary_point/cross_check above), short prompts (<10 tokens) sampled from The Pile, up to 100 output tokens, 10 repeated trials per config, EnergyMeter tool (RAPL+NVML+eBPF); batch = number of concurrent prompts"
     batch_curve_caveats:
@@ -213,6 +258,51 @@ layers:
           benchmark: "llama3.1-8b (well below the 65-70B+ target -- included only for the same-hardware trend, not as cloud-tier evidence)"
           offline: {avg_power_W: 8211.685147, tokens_per_s: 146960, decode_J_per_token: 0.0559}
           server: {avg_power_W: 7733.873483, tokens_per_s: 128689.32, decode_J_per_token: 0.0601}
+    bench360:
+      source: "Stuhlmann, Fadel Argerich and Fuerst, Bench360: Benchmarking Local LLM Inference from 360 Degrees, arXiv:2511.16682, Table 2 (RQ1, 24GB VRAM budget). Read from the PDF text layer, not a summarisation pass."
+      hardware: "NVIDIA L4 24GB / A30 24GB / A10 24GB -- three machines, all within this file's declared fog hardware_class. Table 2 does not state which of the three each row ran on."
+      regime: "GPU energy via NVML telemetry; the paper defines Efficiency = Joules/Token explicitly. Prefill and decode are NOT separated."
+      note: >
+        This is the fog point the generative ladder actually uses: Gemma-2-9B at
+        FP16 is the model collected on a Modal L4, so confidence and energy refer
+        to the same model at the same precision on the same hardware class --
+        the tightest correspondence in this ladder.
+      models:
+        gemma2_9b_fp16:
+          precision: FP16
+          J_per_token: {mmlu: 4.65, squad_v2: 4.12, cnn_dm: 1.75}
+          quality: {mmlu: 0.714, squad_v2: 0.903, cnn_dm: 0.380}
+        mistral_7b_fp16:
+          precision: FP16
+          J_per_token: {mmlu: 9.03, squad_v2: 4.23, cnn_dm: 0.81}
+        qwen2.5_7b_fp16:
+          precision: FP16
+          J_per_token: {mmlu: 17.86, squad_v2: 6.32, cnn_dm: 0.82}
+        qwen2.5_14b_int8:
+          precision: INT8
+          J_per_token: {mmlu: 26.14, squad_v2: 11.24}
+          note: "14B is marginally above this file's 7-13B fog band; recorded for completeness."
+      caveats:
+        - >
+          J/token varies 2.7x across tasks for the SAME model on the SAME hardware
+          (Gemma-2-9B: 4.65 MMLU vs 1.75 CNN/DM). The metric is a ratio whose
+          denominator is the generation length: J/token = e_decode + E_prefill/n_gen.
+          MMLU emits a handful of tokens so unamortised prefill dominates; CNN/DM
+          emits ~50-100 so it converges toward pure decode. Pick the column whose
+          generation length matches the workload being priced -- for this repo's
+          GSM8K replay (median 83-90 generated tokens) that is cnn_dm.
+        - >
+          Blended prefill+decode, unlike the phase-separated user and onu sources.
+          Using cnn_dm as a decode proxy therefore slightly OVER-prices fog, which
+          is the conservative direction: it makes escalation look more expensive
+          and PON transport look more negligible, so both headline conclusions are
+          stated against the bias rather than with it.
+        - >
+          The serving scenario for Table 2 (single-stream vs batch vs server) was
+          not confirmed in the section read. The paper implements all three; RQ1
+          is a memory-budget question. This matters because the fog/cloud energy
+          inversion recorded in the design document section 16.5 depends on which
+          regime each side was measured in.
     batch_curve_source: "Caravaca, A. Cuevas and R. Cuevas, From Prompts to Power: Measuring the Energy Footprint of LLM Inference, arXiv:2511.05597 (same author group as the production_regime 'caravaca_2025' AI Energy Score row above). The Llama-3.1-405B batch=1-vs-100 numbers are quoted prose in Section IV-B ('Batch size', discussing Figure 3); the per-model batch=1 ('Energy1' column) vs optimized-batch ('Energy' column) numbers are read from Table IV ('Summary of models tested'). Both were verified against the raw arXiv HTML text (arxiv.org/html/2511.05597), not just a summarization pass, to avoid the GPU-mislabeling risk documented in the caveats below."
     batch_curve_regime: "vLLM continuous batching, GPU-only energy metering via CodeCarbon/NVML (chip/module boundary, matching this file's declared base). All prompts are P(300 T_input, 300 T_out) -- 300 output tokens each. Precision/quantization is not stated in the sections read (framework default, presumably BF16/FP16). 'batch=1' = the Energy1 column / single-prompt case in Table IV, or the explicit single-prompt case in Section IV-B; 'optimized' = the Energy column, the paper's best-found batching configuration -- Table IV never states this as a specific integer batch size (only the Section IV-B prose gives one explicit intermediate point, batch=100, for Llama-3.1-405B)."
     batch_curve_caveats:

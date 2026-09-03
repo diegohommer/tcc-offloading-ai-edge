@@ -106,11 +106,35 @@ def cost_configs(table: LayerEnergyTable) -> dict[str, dict[str, float]]:
     cloud_32b_batch1 = _qwq(1)
     cloud_32b_opt = _qwq("optimized")
 
+    # --- A escada do replay do leaderboard (design doc section 16) ---
+    # As quatro camadas efetivamente coletadas, cada uma precificada com a
+    # energia publicada PARA AQUELE MODELO em hardware da classe da sua camada.
+    # E a unica config em que confianca e energia se referem ao mesmo modelo,
+    # na mesma precisao, nas quatro camadas.
+    #
+    # O fog usa a coluna cnn_dm do Bench360 (~50-100 tokens gerados), nao mmlu:
+    # o workload deste repo gera mediana de 83-90 tokens, e J/token e uma razao
+    # cujo denominador e o comprimento da geracao. Usar mmlu inflaria o fog em
+    # 2.7x e distorceria toda a fronteira.
+    fog_gemma9b = float(
+        table.layers["fog"]["bench360"]["models"]["gemma2_9b_fp16"]["J_per_token"]["cnn_dm"])
+    cloud_llama3_70b = next(
+        float(e["decode_J_per_token"]) for e in table.layers["cloud"]["batch_curve"]
+        if e["model"].startswith("Meta-Llama-3-70B"))
+
     return {
         # Rung 1: monotonically increasing, as directed. Achievable with real
         # numbers by selecting the cheapest ONU config and the BF16 (not FP4)
         # cloud point.
         "monotonic": {"user": user_1b, "onu": onu_15b, "fog": fog_prod, "cloud": cloud_prod},
+        # A escada realmente coletada. NAO e monotonica em energia: o fog custa
+        # 1.75 J/token contra 1.002 da nuvem, porque o fog foi medido em stream
+        # unico numa L4 e a nuvem em lote otimizado em 4xH100. Escalar fog->cloud
+        # portanto ECONOMIZA energia -- a assimetria que a secao 4 argumenta que
+        # um beta global nao consegue representar.
+        "leaderboard-ladder": {
+            "user": user_1b, "onu": onu_15b, "fog": fog_gemma9b, "cloud": cloud_llama3_70b,
+        },
         # Rung 2: the batched-cloud point undercuts fog -- escalating to cloud
         # becomes cheaper per token than staying at fog.
         "batched-cloud": {"user": user_1b, "onu": onu_15b, "fog": fog_prod, "cloud": cloud_mlperf},

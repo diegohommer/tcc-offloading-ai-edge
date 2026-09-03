@@ -889,3 +889,88 @@ Este é o item que mais importa resolver antes de citar a fronteira.
 - `results/traces/fog_modal.jsonl` — a camada fog isolada (custou ~$0.49 na Modal)
 - Ambos gerados, **não versionados** (`.gitignore`). Vale copiar para fora do
   repositório: recoletar o fog custa dinheiro e as camadas locais custam horas.
+
+## 17. A escada travada e o teste λ×β refeito (2026-09-03)
+
+### 17.1 A escada, definitiva
+
+| Camada | Modelo | Precisão | J/token | Fonte | Regime |
+|---|---|---|---|---|---|
+| user | `llama3.2:1b` | Q4_K_M | 0.074 | Cai et al., Snapdragon 8 Elite Gen 5 | batch=1, decode isolado |
+| onu | `qwen2.5:1.5b` | Q4_K_M | 0.22 | EdgeReasoning, Jetson AGX Orin W4 | batch=1, fases separadas |
+| fog | `gemma-2-9b-it` | FP16 | 1.75 | Bench360, classe L4/A10/A30, coluna CNN/DM | stream único (inferido, §17.4) |
+| cloud | `Meta-Llama-3-70B` | BF16 | 1.002 | Caravaca Tab. IV, 4×H100 | lote otimizado (tamanho não declarado) |
+
+Modelo exato dos dois lados nas quatro camadas. Não há mais escolha de modelo
+pendente; o que resta é redação.
+
+### 17.2 O teste λ×β, refeito em três cenários de energia
+
+A §14 testou uma escada de três camadas com energia emprestada. Aqui são quatro
+camadas reais, energia por camada da fonte declarada, e três formatos de escada.
+
+**Contra β global** (um só para todas as camadas), λ **vence**: ganho médio
++0.0233, máximo +0.0850, supera em 44 de 63 pontos. Isso ocorre porque os custos
+de salto invertem (user→onu 10.9 J, onu→fog 157.6 J, fog→cloud 83.3 J) e um β
+global não representa assimetria de sinal entre saltos.
+
+**Contra um vetor de β por camada** (9261 vetores avaliados, fronteira de Pareto
+com 95 pontos), λ **perde** em todos os cenários:
+
+| Cenário de energia | Saltos (J) | Monotônica? | Ganho médio do λ |
+|---|---|---|---|
+| Medido (fog stream único / cloud lote) | 10.9 → 157.6 → 83.3 | não | **−0.0138** |
+| fog A30 produção / cloud produção BF16 | 10.9 → 34.2 → 33.2 | não (quase empata) | **−0.0217** |
+| cloud ocioso lote=1 (QwQ-32B 12.904) | 10.9 → 34.2 → 1071.1 | **sim** | **−0.0548** |
+
+λ perde **mais** quanto mais monotônica a escada. Faz sentido: com custos
+crescentes, `exp(−λ·custo)` empurra todos os limiares na mesma direção, que é o
+que um β decrescente por camada já faz — e o β escolhe a magnitude por camada
+livremente, enquanto λ é um único parâmetro amarrado à razão entre custos.
+
+**Enunciado final:**
+
+> Ponderar o limiar de confiança por um custo de energia é redundante com um
+> vetor de β por camada. Vale tanto na escada monotônica quanto na invertida, e
+> a redundância é mais acentuada no caso monotônico. O ganho aparente do termo
+> de energia existe apenas contra um β *global* e desaparece assim que o β pode
+> variar por camada.
+
+Isso corrige a §4: a calibração por par de camadas **é** necessária, mas se
+expressa como **β por camada**, não como termo de energia no limiar.
+
+### 17.3 Sensibilidade ao lote
+
+user e onu são dispositivos de usuário único: batch=1 por definição. Para as
+duas camadas de cima:
+
+| Camada | Lote 1 | Lote otimizado | Razão |
+|---|---|---|---|
+| fog (Gemma-2-9B) | 1.75 (medido) | ~0.68 (derivado) | 2.58× |
+| cloud (Llama-3-70B) | ~38.6 (derivado) | 1.002 (medido) | 38.5× |
+
+**Derivação do fog:** forma da curva de Fadel Argerich (RTX 4090, 7B, lotes
+1/5/10/20: 7.30 → 3.19 → 2.93 → 2.83 J/token), aplicada à âncora do Bench360.
+
+**Derivação da nuvem:** razão lote=1/otimizado medida pelo Caravaca em quatro
+modelos — QwQ-32B 29.8×, Qwen1.5-32B 30.2×, fin-llama-33b 25.5×, Llama-3.1-405B
+61.3× — interpolada em log(params) para 70.55B → 38.5×. A razão cresce com o
+tamanho, coerente com modelos maiores serem mais memory-bound.
+
+Consequência: **a inversão de energia só existe no cenário misto** (fog ocioso
+contra nuvem saturada). Com ambas as camadas no mesmo regime, a escada é
+monotônica. O cenário misto é o fisicamente realista — um nó de fog atende um
+segmento PON, a nuvem atende o mundo — mas isso precisa ser declarado como
+premissa, não apresentado como propriedade do hardware.
+
+### 17.4 Regime do Bench360: inferido, não declarado
+
+O paper não declara o cenário de serving da Tabela 3. Evidência indireta:
+potência implícita = (J/token) ÷ (s/token) fica **constante em 94–116 W** em
+todos os modelos e tarefas, e a métrica de latência reportada é TPOT, que é por
+requisição. Ambos são assinatura de stream único.
+
+**Ressalva:** ~107 W excede o TDP de 72 W da L4, então as linhas provavelmente
+vêm da A10 (150 W) ou da A30 (165 W), não da L4. A camada fog foi coletada numa
+L4 da Modal — mesma **classe declarada** (L4/A10/A30, 24 GB), não o mesmo chip.
+A §7.4 deve reivindicar classe de hardware, não hardware idêntico.
