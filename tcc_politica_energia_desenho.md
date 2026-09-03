@@ -881,7 +881,9 @@ proposta). Portanto:
   (`E_pf_J_per_token` é None em todas), então a correção de dois termos exige
   ou uma fonte nova ou uma suposição declarada.
 
-Este é o item que mais importa resolver antes de citar a fronteira.
+**SUPERADO pela §18** (2026-09-03): as fontes de prefill foram encontradas para
+as quatro camadas e a fronteira foi refeita com os dois termos. Os J/consulta
+desta seção não devem ser citados.
 
 ### 16.9 Onde estão os dados
 
@@ -974,3 +976,94 @@ requisição. Ambos são assinatura de stream único.
 vêm da A10 (150 W) ou da A30 (165 W), não da L4. A camada fog foi coletada numa
 L4 da Modal — mesma **classe declarada** (L4/A10/A30, 24 GB), não o mesmo chip.
 A §7.4 deve reivindicar classe de hardware, não hardware idêntico.
+
+## 18. Prefill: fontes, correções e a fronteira refeita (2026-09-03)
+
+A §16.8 registrava que nenhuma camada tinha J/token de prefill tabulado, e que
+a correção de dois termos exigiria uma fonte nova ou uma premissa declarada.
+Uma busca dirigida achou fonte para as quatro camadas. Nenhuma premissa foi
+necessária.
+
+### 18.1 As fontes
+
+| Camada | J/token de entrada | Evidência | Fonte |
+|---|---|---|---|
+| user | **0.016** | **medido** | Cai et al. arXiv:2607.05475, Tabela 5, linha Llama3.2-1B / CPU / llama.cpp / w4, coluna OnePlus 15 |
+| onu | **0.0009** | **medido** | EdgeReasoning, Zenodo doi:10.5281/zenodo.17168238, `validation/prefill.json`, Qwen-1.5B, 33 pontos |
+| fog | 0.033 | derivado | Solovyeva & Castor, Tab. 2 + Tab. 3, A10 24GB via pyNVML — invertendo a fração de prefill |
+| cloud | 0.0027 | derivado | arXiv:2605.11999, H200, razão ~1:370 aplicada à âncora de decode |
+
+### 18.2 Três correções a informação que estava errada no repositório
+
+**(a) A nota do user no `layer_energy.yaml` estava errada em dois pontos.**
+Dizia que o prefill custa "1-2 ordens de grandeza menos que o decode" e que
+nenhum valor estava tabulado na fonte. A Tabela 5 do Cai tabula prefill **e**
+decode lado a lado, em µJ/token, por dispositivo e backend. Para a configuração
+exata que este arquivo precifica: prefill 1.6e4 µJ/token contra decode 7.4e4 —
+razão de **1:4.6**, não 1:10 a 1:100. A afirmação de ordens de grandeza vale
+para *latência*, não para energia por token. Corrigido no config.
+
+**(b) A cota de "prefill ≤3.4%" da §7.1 da proposta não se aplica a este
+regime.** Esse número vem de cargas com ~300 tokens de saída. Aqui a saída tem
+34–90 tokens contra ~1000 de entrada. As frações reais estão na §18.3.
+
+**(c) O estimador analítico da nuvem contradiz a medição, e foi descartado.**
+From Tokens to Watt-hours (arXiv:2607.26571) dá Llama-3.3-70B em H100 como
+262.080 mJ por token de entrada contra 218.400 por token de saída — prefill
+**mais caro** que decode. O arXiv:2605.11999, que mede em vez de estimar, diz o
+oposto por ampla margem. O próprio paper analítico declara que não valida o
+split do 70B empiricamente, só a energia agregada por requisição. Onde
+estimativa analítica e medição divergem no sinal, o config adota a medição, e
+registra a contradição em vez de omiti-la.
+
+### 18.3 A razão prefill:decode varia com o backend, e isso é mecanismo
+
+```
+Snapdragon CPU (user)    1 : 4.6      ← prefill comparativamente CARO
+Jetson GPU (onu)         1 : 244
+A10 GPU (fog)            1 : 53
+H200 (cloud)             1 : 370
+```
+
+Não é ruído entre fontes. Prefill é compute-bound e decode é memory-bound, então
+CPU — ruim em computação, bom em banda — tem prefill relativamente caro, e GPU
+tem prefill baratíssimo. Cai et al. enunciam o mecanismo diretamente: *"NPUs
+excel at compute-bound prefilling, while CPUs outperform all other backends in
+memory-bound decoding."*
+
+Consequência: **a camada de usuário é dominada por prefill (85%)**, porque é a
+única que decodifica em CPU.
+
+### 18.4 Custo por camada, decomposto
+
+| Camada | Tokens entrada | Tokens gerados | Prefill J | Decode J | Prefill % |
+|---|---|---|---|---|---|
+| user | 900 | 34 | **14.40** | 2.52 | **85%** |
+| onu | 1024 | 49 | 0.92 | 10.78 | 8% |
+| fog | 1010 | 90 | 33.33 | 157.50 | 17% |
+| cloud | 875 | 83 | 2.36 | 83.17 | 3% |
+
+### 18.5 A fronteira refeita
+
+| β | Acurácia | J (dois termos) | J (só decode) | Erro do modelo antigo |
+|---|---|---|---|---|
+| 0.00 | 0.120 | **17.8** | 3.3 | **+432%** |
+| 0.10 | 0.150 | 23.1 | 7.9 | +194% |
+| 0.25 | 0.245 | 42.2 | 24.3 | +74% |
+| 0.50 | 0.465 | 100.0 | 74.2 | +35% |
+| 0.75 | 0.710 | 199.0 | 161.7 | +23% |
+| 0.90 | 0.810 | 270.7 | 225.3 | +20% |
+| 1.00 | 0.880 | **324.6** | 273.6 | +19% |
+
+**O erro é maior no β baixo, não no alto** — o oposto do que a §16.8 previa. A
+razão: no β baixo quase tudo para na camada de usuário, que é 85% prefill, então
+o modelo só-decode subestimava massivamente a ponta barata. As camadas de cima
+são dominadas por decode, então o erro encolhe conforme β sobe.
+
+**A fronteira comprimiu de 83× para 18×.** No modelo antigo ela ia de 3.3 a
+273.6 J; agora vai de 17.8 a 324.6. A economia disponível por offloading é
+substancialmente menor do que o corte só-decode sugeria, e a ponta barata — onde
+estavam as economias — é a que mais encareceu.
+
+Este é o resultado que a §16.7 não podia dar. Ela agora está superada e não deve
+ser citada.

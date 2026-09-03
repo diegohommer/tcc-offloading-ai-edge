@@ -40,9 +40,17 @@ layers:
         best_backend_decode: cpu
         decode_throughput_tok_s: {cpu: 31}
     notes: >
-      Prefill costs 1-2 orders of magnitude less than decode and runs best
-      on NPU (>2000 tok/s for the 1B model), but no exact prefill J/token
-      value is tabulated in the source. Report by best backend per phase.
+      CORRECTED 2026-09-03. This block previously claimed prefill costs "1-2
+      orders of magnitude less than decode" and that no prefill J/token value
+      was tabulated. Both were wrong. Cai et al. Table 5 tabulates prefill AND
+      decode energy per token side by side, in uJ/token, per device and
+      backend. For Llama-3.2-1B on the OnePlus 15 with llama.cpp on CPU at W4 --
+      the exact configuration this file prices the user tier with -- prefill is
+      1.6e4 uJ/token and decode is 7.4e4 uJ/token: a ratio of 1:4.6, not 1:10
+      to 1:100. The orders-of-magnitude claim holds for LATENCY, not for energy
+      per token. See the prefill block below.
+      Prefill runs best on NPU (>2000 tok/s for the 1B model); decode runs best
+      on CPU. Report by best backend per phase.
 
   onu:
     hardware: "NVIDIA Jetson AGX Orin 64GB, 204.8 GB/s, MAXN"
@@ -388,6 +396,108 @@ link:
     - "Loading-Aware TDMA Sleep (MDPI Sustainability), https://www.mdpi.com/2071-1050/14/16/10238"
     - "Sarigiannidis et al., IET Networks 2016, https://ietresearch.onlinelibrary.wiley.com/doi/10.1049/iet-net.2015.0087"
     - "FTTH EE analysis (PMC), https://pmc.ncbi.nlm.nih.gov/articles/PMC12526558/"
+
+# =============================================================================
+# PREFILL: energia por token de ENTRADA, por camada
+# =============================================================================
+# Convencao da area (Solovyeva & Castor; TokenPowerBench; arXiv:2605.11999):
+# reportar as fases separadamente, com denominadores distintos -- tokens de
+# ENTRADA para prefill, tokens de SAIDA para decode. E a forma que
+# src/energy/cost.py ja implementa:
+#
+#     E_query = E_pf_per_token * n_prompt  +  E_dec_per_token * n_gen
+#
+# Antes deste bloco, E_pf_J_per_token era None em todas as camadas e o custo
+# so podia ser calculado por decode. Isso era aceitavel no regime CoT original
+# (~50 tokens de prompt para ~200 gerados) e deixou de ser no regime do replay
+# do leaderboard (~1000 de prompt para 34-90 gerados), onde o prefill deixa de
+# ser segunda ordem.
+#
+# A RAZAO prefill:decode VARIA COM O BACKEND, e nao e ruido. Prefill e
+# compute-bound e decode e memory-bound, entao CPU (ruim em compute, bom em
+# banda) tem prefill comparativamente CARO, e GPU tem prefill baratissimo.
+# Cai et al. enunciam o mecanismo: "NPUs excel at compute-bound prefilling,
+# while CPUs outperform all other backends in memory-bound decoding."
+prefill:
+  user:
+    J_per_input_token: 0.016
+    evidence: measured
+    source: "Cai et al., Is Your NPU Ready for LLMs?, arXiv:2607.05475, Table 5 ('Averaged Throughput and Energy across Devices, Models, Frameworks, and Backends with 256 tokens'), row Llama3.2-1B / CPU / llama.cpp / w4, column OnePlus 15."
+    raw: "1.6e4 uJ/token prefill against 7.4e4 uJ/token decode -- the decode figure is exactly the 0.074 this file already prices the user tier with, confirming the same row."
+    ratio_to_decode: 0.216          # 1 : 4.6
+    note: >
+      The most expensive prefill of the four tiers, relatively speaking,
+      because the user tier decodes on CPU. Table 5's NPU rows are far cheaper
+      for prefill (MLLM w4a16: 3.2e3 uJ/token, a 1:23 ratio against CPU
+      decode), so a deployment splitting phases across backends would pay much
+      less. This file prices the single-backend CPU case actually run.
+
+  onu:
+    J_per_input_token: 0.0009
+    evidence: measured
+    source: "EdgeReasoning artifact, Zenodo doi:10.5281/zenodo.17168238, validation/prefill.json, model DeepSeek_R1_Distill_Qwen_1.5B. Metadata states: 'Measured prefill traces: energy per token (J), plus raw timing/power columns.' 33 points, input lengths 3 to 897 tokens."
+    raw: "median 0.00090 J/token (min 0.00087, max 0.06733 -- the max is the 3-token case, where fixed overhead dominates the denominator)."
+    ratio_to_decode: 0.0041         # 1 : 244
+    note: >
+      Same Zenodo artifact as this file's onu decode source, so both phases
+      come from one measurement campaign on one device. The companion file
+      validation/decode.json covers Qwen-1.5B and Qwen-14B.
+      Cross-check: Llama-8B prefill is 0.0200 and Qwen-14B is 0.0456 J/token,
+      so prefill cost rises with model size roughly in line with decode.
+
+  fog:
+    J_per_input_token: 0.033
+    evidence: derived
+    source: "Solovyeva and Castor, Towards Green AI (thesis/papers/TowardsGreenLLM.pdf), Table 2 (mean prefill contribution to total inference energy) with Table 3 (mean input tokens), measured on an NVIDIA A10 24GB via pyNVML -- the same hardware class this file declares for fog."
+    derivation: >
+      Table 2 gives prefill's share of total energy per workload, not J/token.
+      Inverting share = (n_in * e_pf) / (n_in * e_pf + n_out * e_dec) for
+      CodeGemma-7B, the closest family match to the fog tier's Gemma-2-9B:
+      0-shot (155 in, 300 out max, 1.2% share) gives e_dec/e_pf = 42.5;
+      2-shot (559 in, 300 out max, 2.8% share) gives 64.7. Taking ~53 as the
+      ratio and applying it to this file's fog decode anchor of 1.75 J/token
+      yields 0.033 J per input token.
+    ratio_to_decode: 0.019          # 1 : 53
+    caveats:
+      - "Derived from a percentage, not read from a J/token table."
+      - "CodeGemma-7B on A10, not Gemma-2-9B on L4: same family lineage and same declared hardware class, not the same model."
+      - "The 300-output cases are used because they are the reliable regime; Table 2's CU case (max 10 output tokens) gives prefill shares of 64.9-84.4% and a much larger implied ratio, but with only ten output tokens the denominator is too small to invert stably."
+
+  cloud:
+    J_per_input_token: 0.0027
+    evidence: derived
+    source: "The Illusion of Power Capping in LLM Decode: A Phase-Aware Energy Characterisation Across Attention Architectures, arXiv:2605.11999, NVIDIA H200. States its primary metric explicitly: 'energy per token (mJ/tok), measured separately for prefill and decode. For prefill, the denominator is the number of input tokens processed.'"
+    derivation: >
+      The paper reports decode at 107-242 mJ/token for GQA (the attention
+      architecture Llama-3-70B uses) across 4K-16K context, and states that at
+      BS=32/16K "Mamba2's prefill costs ~35x more energy per token than GQA --
+      but the absolute difference is only ~10 mJ/tok, because prefill is
+      already extremely cheap". Solving 35x - x = 10 gives GQA prefill ~0.29
+      mJ/token, a ratio of roughly 1:370 against its own decode. Applying that
+      ratio to this file's cloud decode anchor of 1.002 J/token gives 0.0027 J
+      per input token.
+    ratio_to_decode: 0.0027         # 1 : 370
+    caveats:
+      - "H200 single GPU, not the 4xH100 of the cloud decode anchor."
+      - "The ratio is read from a prose comparison, not from a tabulated prefill row."
+      - >
+        SUPERSEDES an analytical estimate. From Tokens to Watt-hours
+        (arXiv:2607.26571) Table 3 gives Llama-3.3-70B on H100 as 262.080
+        mJ per input token against 218.400 mJ per output token -- prefill more
+        expensive than decode, the opposite sign. That paper is an analytical
+        estimator and states it does not validate the 70B phase split
+        empirically, only aggregate request energy. Where an analytical
+        estimate and a measurement disagree on sign, this file takes the
+        measurement. The analytical figure is recorded here so the
+        contradiction is documented rather than silently dropped.
+
+  regime_note: >
+    All four values are per token of INPUT and must be multiplied by prompt
+    length, never by generated length. In this repo's leaderboard-replay regime
+    (~1000 prompt tokens against 34-90 generated), prefill's share of each
+    tier's energy is roughly: user 86%, fog 20%, cloud 3%, onu 5%. The user
+    tier is prefill-DOMINATED, which is the opposite of the assumption the
+    proposal's section 7.1 carried before this block existed.
 
 environment:
   pue:
