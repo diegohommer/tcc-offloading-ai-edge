@@ -1246,3 +1246,135 @@ Corolário: **o que importa numa PON não é o tráfego, é o tempo ligado.** A
 alavanca para energia na rede de acesso é o estado de sleep da ONU (0,40 W
 contra 3,98 W), que é um eixo de projeto diferente de tudo que a decisão de
 offloading toca.
+
+## 21. Dominância, poda e β calibrado por energia (2026-09-06)
+
+Esta seção fecha o arco do resultado negativo: o que ele derruba, e o que
+sobra como recomendação prática, medida.
+
+### 21.1 A pré-condição formal das cascatas
+
+Bouchard (*Is Escalation Worth It?*, arXiv:2605.06350, §3.1) enuncia a
+pré-condição do método:
+
+> *"We assume the model pool is non-dominated: the models are ordered such
+> that c₁ < c₂ < ··· < c_k and E[U₁] < E[U₂] < ··· < E[U_k]."*
+
+E a nota de rodapé 3 deixa explicitamente em aberto:
+
+> *"Average dominance does not preclude a model from being useful on particular
+> conditional subpopulations; ruling this out would require a stronger
+> conditional-dominance condition on all reachable score-prefix regions."*
+
+**O RecServe não declara essa condição.** Ele ordena por escala:
+
+> *"Assume RecServe deploy n LLMs of increasing scale... M₁ is the smallest LLM
+> and Mₙ is the most powerful one."*
+
+E seu modelo de custo é `min Csystem = (1−τ)·Clocal + τ·(Ccomm + Cremote)`, onde
+`Clocal` é *"the accuracy loss incurred by executing a lightweight LLM locally"*
+— perda de acurácia somada a consumo computacional e custo de transmissão numa
+grandeza única sem unidade. Nenhum joule aparece no paper.
+
+Ou seja: a premissa é **herdada da formulação geral, não declarada**, e o
+trabalho assume que ordenar por escala equivale a ordenar por custo.
+
+### 21.2 Duas das quatro camadas são dominadas
+
+| Camada | Custo (J) | Acurácia | Situação |
+|---|---|---|---|
+| user | 17,77 | 0.120 | **dominada pela onu** |
+| onu | 14,67 | 0.290 | fronteira |
+| fog | 201,76 | 0.795 | **dominada pela nuvem** |
+| cloud | 90,15 | 0.880 | fronteira |
+
+O *non-dominated pool* da arquitetura de quatro camadas é **{onu, cloud}**.
+Ordenar por escala de modelo não implica ordenar por custo medido.
+
+### 21.3 Mas a ressalva da nota 3 se confirma
+
+Por bucket de dificuldade do GSM8K (★ = fronteira de Pareto daquele bucket):
+
+| Passos | user | onu | fog | cloud |
+|---|---|---|---|---|
+| 2 | 17,1J 0.150 | 13,3J 0.417 ★ | 160,5J 0.917 ★ | 71,8J 0.883 ★ |
+| 3 | 17,4J 0.080 | 13,3J 0.280 ★ | 192,3J 0.840 | 83,2J 0.900 ★ |
+| 4 | **18,2J 0.135 ★** | 18,4J 0.243 ★ | 242,6J 0.676 | 106,1J 0.919 ★ |
+| 5 | **18,8J 0.148 ★** | 13,2J 0.111 ★ | 233,0J 0.667 | 106,2J 0.889 ★ |
+
+- **user sobrevive em 4 e 5 passos** — nas consultas mais difíceis supera a ONU
+  (0.148 contra 0.111 em 5 passos)
+- **fog sobrevive em 2 passos** — bate a nuvem em acurácia (0.917 contra 0.883)
+
+Dominância média não implica inutilidade condicional. É a verificação empírica
+que Bouchard declara não ter feito.
+
+### 21.4 A poda vale 63–70%
+
+Cascata de 4 camadas contra a podada {onu, cloud}, mesma matriz:
+
+| Acurácia alvo | 4 camadas | 2 camadas | Economia |
+|---|---|---|---|
+| 0.30 | 59,6 J | 20,0 J | **−66%** |
+| 0.50 | 120,4 J | 45,1 J | −63% |
+| 0.70 | 198,8 J | 66,3 J | −67% |
+| 0.85 | 324,3 J | 95,9 J | **−70%** |
+
+A podada domina em toda a fronteira, e não perde a ponta barata: 0.290 a 14,7 J
+contra 0.120 a 17,8 J da completa — mais acurácia por menos energia.
+
+### 21.5 Custo estrutural: 46% a 72% da energia é descartada
+
+Energia gasta em camadas cuja resposta é jogada fora, na cascata completa:
+
+| β | J total | J descartado | % |
+|---|---|---|---|
+| 0.25 | 42,2 | 12,7 | 30% |
+| 0.50 | 99,9 | 46,0 | 46% |
+| 0.75 | 198,8 | 118,4 | 60% |
+| 1.00 | 324,3 | 234,2 | **72%** |
+
+É o *structural cost* que Bouchard caracteriza em custo monetário, aqui medido
+em joules: *"cascades pay the cheap model before any escalation decision"*.
+
+### 21.6 A proposta: β calibrado por energia, e a assimetria de regime
+
+O §17 mostrou que o termo de energia é redundante com um vetor β por camada. A
+forma construtiva disso é calibrar β **a partir da energia medida**. Mas o vetor
+ótimo depende do regime de lote da camada de destino, e a penalidade por errar é
+fortemente assimétrica:
+
+| Acurácia | β ótimo (nuvem em lote) | Penalidade se aplicado com nuvem ociosa |
+|---|---|---|
+| 0.4 | (0.8, 0.1, 0.1) | **+219%** |
+| 0.5 | (1.0, 0.2, 0.4) | **+554%** |
+| 0.6 | (0.8, 0.4, 0.2) | **+388%** |
+| 0.8 | (1.0, 0.6, 0.3) | **+395%** |
+
+Na direção inversa — calibrar para nuvem ociosa e rodar em lote — a penalidade é
+de apenas 2% a 25%.
+
+E o vetor ótimo muda de **forma**, não só de magnitude: em 0.5 de acurácia, o
+componente fog→cloud vai de 0.4 (nuvem barata) para **0.0** (nuvem ociosa). Sob
+nuvem ociosa a política ótima é nunca escalonar para a nuvem. Nenhum β fixo faz
+as duas coisas.
+
+**Regra de projeto que sai disso:** na dúvida sobre o regime, calibre para o
+caro. O erro conservador custa até 25%; o otimista custa até 554%.
+
+### 21.7 O que fica como extensão, e por quê
+
+Um β recalculado dinamicamente capturaria essa perda. Ele **escapa** do colapso
+algébrico do §14, porque um custo variante no tempo não é constante — mas recai
+na mesma relação um nível acima: equivale a um cronograma de β, e o sinal de
+energia é a forma de calibrá-lo, não um mecanismo distinto. O resultado do §14
+generaliza em vez de ser contornado.
+
+Não foi avaliado porque exigiria dados de processo de chegada, inexistentes em
+todas as fontes consultadas — a mesma lacuna que a §2 deste documento já
+registrava. O prêmio máximo, porém, está quantificado: até 5,5× em energia.
+
+Tensão que vale registrar: se a nuvem é mais barata em lote alto, e lote alto
+ocorre no pico, a política ótima em energia **escalona mais no pico** — o oposto
+do que o operador de rede quer. Ótimo energético e ótimo operacional apontam em
+direções contrárias.
