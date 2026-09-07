@@ -1406,64 +1406,117 @@ direções contrárias.
 
 ## 22. Sumário: os dados, sua procedência, e o que foi testado
 
-### 22.1 A matriz por camada
+### 22.1 Tabela A — energia por token (os parâmetros)
 
-| Camada | Modelo | Precisão | Confiança | Prefill J/tok | Decode J/tok | Fonte da energia |
-|---|---|---|---|---|---|---|
-| user | `llama3.2:1b` | Q4_K_M | 0.120 acc, t=+6.64 | **0.016** ᴹ | **0.074** ᴹ | Cai et al. arXiv:2607.05475, Tab. 5 — Snapdragon 8 Elite Gen5 |
-| onu | `qwen2.5:1.5b` | Q4_K_M | 0.290 acc, t=+10.44 | **0.0009** ᴹ | **0.22** ᴹ | EdgeReasoning arXiv:2511.01866 + Zenodo 10.5281/zenodo.17168238 — Jetson AGX Orin |
-| fog | `gemma-2-9b-it` | FP16 | 0.795 acc, t=+6.70 | 0.033 ᴰ | **1.75** ᴹ | Bench360 arXiv:2511.16682, Tab. 3 — L4/A10/A30 |
-| cloud | `Llama-3-70B-Instruct` | BF16 | 0.880 acc, terminal | 0.0027 ᴰ | **1.002** ᴹ | Caravaca arXiv:2511.05597, Tab. IV — 4×H100 |
+| Camada | Modelo | Precisão | **Prefill** J/tok | **Decode** J/tok | Fonte |
+|---|---|---|---|---|---|
+| user | `llama3.2:1b` | Q4_K_M | **0.016** ᴹ | **0.074** ᴹ | Cai et al. arXiv:2607.05475, Tab. 5 — Snapdragon 8 Elite Gen5 |
+| onu | `qwen2.5:1.5b` | Q4_K_M | **0.0009** ᴹ | **0.22** ᴹ | EdgeReasoning arXiv:2511.01866 + Zenodo 10.5281/zenodo.17168238 — Jetson AGX Orin |
+| fog | `gemma-2-9b-it` | FP16 | 0.033 ᴰ | **1.75** ᴹ | Bench360 arXiv:2511.16682, Tab. 3 — L4/A10/A30 |
+| cloud | `Llama-3-70B-Instruct` | BF16 | 0.0027 ᴰ | **1.002** ᴹ | Caravaca arXiv:2511.05597, Tab. IV — 4×H100 |
 
 ᴹ medido na fonte · ᴰ derivado de razão publicada
 
-**Custo por consulta** (média, prompt ~1000 tok): user 17,8 J · onu 14,7 J ·
-fog 201,8 J · cloud 90,2 J.
+Nesta tabela, **decode** é crescente até o topo (`0.074 < 0.22 < 1.75`) e inverte
+apenas no fog→cloud. **Prefill** já inverte no user→onu: o celular é **18× mais
+caro por token de prompt** que o Jetson, porque prefill é compute-bound e CPU é
+ruim nisso — mecanismo que Cai et al. enunciam ("NPUs excel at compute-bound
+prefilling, while CPUs outperform all other backends in memory-bound decoding").
 
-### 22.2 Como os dados foram obtidos
+### 22.2 Tabela B — energia por consulta, e a inversão é condicional
 
-**Confiança:** coletada por nós. 200 instâncias do GSM8K, **as mesmas nas quatro
+J/consulta = parâmetros × tokens do regime. **Só existe relativa a um regime.**
+
+| Camada | Leaderboard (~1000 ent / 45 ger) | CoT original (~50 ent / 200 ger) |
+|---|---|---|
+| user | **17,7 J** | 15,6 J |
+| onu | **14,6 J** | 44,0 J |
+| fog | 201,3 J | 351,6 J |
+| cloud | 90,5 J | 200,5 J |
+| **Inverte em** | **user→onu e fog→cloud** | **só fog→cloud** |
+
+**A inversão de baixo é condicional ao regime**, não propriedade do hardware. O
+cruzamento sai de `0.016·P + 0.074·G = 0.0009·P + 0.22·G`:
+
+> **P ≈ 9,7 · G**
+
+| Tokens gerados | Cruza em (tokens de prompt) |
+|---|---|
+| 45 | **435** |
+| 62 | 600 |
+| 200 | 1.934 |
+
+Abaixo do cruzamento o user é mais barato (ordem normal); acima, a ONU. O regime
+do leaderboard tem ~1000 para ~45, bem acima. O regime CoT tinha ~50 para ~200,
+bem abaixo.
+
+**A inversão do topo (fog→cloud) vale nos dois regimes** — é robusta, e vem do
+lote, não do comprimento do prompt.
+
+### 22.3 Confiança e acurácia
+
+| Camada | Acurácia | Separação da confiança (Welch t) | Top 25% mais confiantes |
+|---|---|---|---|
+| user | 0.120 | +6.64 | 0.340 (2,8×) |
+| onu | 0.290 | **+10.44** | 0.620 (2,1×) |
+| fog | 0.795 | +6.70 | 0.980 (1,2×) |
+| cloud | 0.880 | terminal, não usa | — |
+
+### 22.4 Como os dados foram obtidos
+
+**Confiança: coletada por nós.** 200 instâncias do GSM8K, **as mesmas nas quatro
 camadas**, com o prompt 5-shot do lm-evaluation-harness copiado verbatim do
-arquivo público do Open LLM Leaderboard v1. As três camadas locais rodaram
-(user/onu no CPU via Ollama, fog numa L4 da Modal); a nuvem foi **importada** do
-mesmo arquivo, o que é suficiente porque a camada terminal nunca usa a própria
-confiança. Logprobs completos por token guardados: qualquer definição de
-confiança é recomputável offline.
+arquivo público do Open LLM Leaderboard v1. User e onu rodaram no CPU via
+Ollama; fog numa L4 da Modal; a nuvem foi **importada** do mesmo arquivo, o que
+basta porque a camada terminal nunca usa a própria confiança. Logprobs completos
+por token guardados — qualquer definição de confiança é recomputável offline.
 
-**Validação:** o replay foi verificado contra um resultado público —
-Meta-Llama-3-8B base reproduziu **0.4400 contra 0.4579 publicado** (n=50).
+**Validação:** Meta-Llama-3-8B base reproduziu **0.4400 contra 0.4579 publicado**
+(n=50).
 
-**Energia:** nunca medida por nós. Vem das quatro fontes acima, escolhidas para
-que cada camada seja precificada com energia publicada **para aquele modelo, na
-precisão em que ele rodou, em hardware da classe declarada para aquela camada**.
+**Energia: nunca medida por nós.** Vem das quatro fontes da Tabela A, escolhidas
+para que cada camada seja precificada com energia publicada para aquele modelo,
+naquela precisão, em hardware da classe declarada para aquela camada.
 
-### 22.3 Testes do parâmetro novo (λ)
+### 22.5 Testes do parâmetro novo (λ)
 
 | Comparação | Método | Resultado |
 |---|---|---|
 | λ contra β **global** | 63 pontos, forma exponencial | λ vence, **+0.023** |
-| λ contra β **por camada** | 9.261 vetores, fronteira de Pareto com 95 pontos | λ **perde, −0.014** |
-| idem, escada quase-plana | mesma grade | λ perde, **−0.022** |
-| idem, escada monotônica | mesma grade | λ perde, **−0.055** |
-| idem, com energia de dois termos | prefill + decode | λ perde, **−0.015** |
+| λ contra β **por camada** | 9.261 vetores, Pareto com 95 pontos | λ **perde, −0.014** |
+| idem, escada quase-plana | mesma grade | −0.022 |
+| idem, escada monotônica | mesma grade | **−0.055** |
+| idem, energia de dois termos | prefill + decode | −0.015 |
 
-O ganho aparente do λ existe apenas contra um β **global** e desaparece quando o
-β pode variar por camada. Testado sob energia variando 30× e sob dois modelos de
-custo, sem mudar de sinal.
+O ganho aparente existe só contra β **global** e some quando β varia por camada.
 
-### 22.4 Transporte PON
+**Assimetria de regime** (calibrar para um regime de lote e rodar em outro),
+testada em toda a faixa de razão que o Caravaca mede:
 
-4,2 KB por salto (prompt de 1022 tok + resposta de 49, a 4 B/tok). A 25 Gb/s por
-λ do TWDM-PON: **1,4 µs**. A 3,98 W da ONU: **5,5 µJ** — sete ordens de magnitude
-abaixo da computação.
+| Razão lote1/otimizado | Penalidade otimista | Penalidade conservadora |
+|---|---|---|
+| 25,5× (menor medida) | mediana +251% | mediana +9%, máx +25% |
+| 38,5× (interpolada) | mediana +388% | mediana +9%, máx +25% |
+| 61,3× (maior medida) | mediana +626% | mediana +9%, máx +25% |
 
-**Fontes:** potência da ONU (3,98 W ativa / 0,4 W sleep) de **Sarigiannidis et
-al., IET Networks 2016**; taxa de 25 Gb/s por comprimento de onda da
-especificação TWDM-PON (ITU-T G.989 NG-PON2) adotada por Pakpahan e Hwang. Os
-bytes vêm do trace. A energia em si é **derivada** — tempo de transmissão vezes
-potência —, não medida.
+A assimetria é robusta — pelo menos uma ordem de magnitude em toda a faixa — e a
+penalidade conservadora **não depende** do número interpolado. A magnitude exata
+do lado otimista, sim.
 
-### 22.5 Ressalvas, com a direção do erro
+### 22.6 Transporte PON
+
+4,2 KB por salto (1022 tok de prompt + 49 de resposta, a 4 B/tok). A 25 Gb/s por
+λ: **1,4 µs**. A 3,98 W da ONU: **5,5 µJ** — sete ordens abaixo da computação.
+
+**Fontes:** potência da ONU (3,98 W ativa / 0,4 W sleep) de Sarigiannidis et al.,
+IET Networks 2016; taxa de 25 Gb/s por comprimento de onda da especificação
+TWDM-PON (ITU-T G.989 NG-PON2) adotada por Pakpahan e Hwang; bytes do trace.
+**A energia é derivada** — tempo de transmissão × potência —, não medida.
+
+Vale só para o custo **marginal**. O amortizado (potência sempre-ligada ÷
+consultas por segundo) varia cinco ordens de magnitude com a carga da residência.
+
+### 22.7 Ressalvas, com a direção do erro
 
 | | Direção |
 |---|---|
@@ -1471,17 +1524,16 @@ potência —, não medida.
 | Regime do Bench360 inferido de potência, não declarado | — |
 | Fog coletado em L4; fonte provavelmente A10/A30 | mesma classe, não mesmo chip |
 | Nuvem soma prefill sobre âncora misturada | +3%, conservador |
-| Nuvem ociosa a 38,6 J/tok (usada na assimetria de regime) | **estimativa, não medição** |
+| Nuvem ociosa a 38,6 J/tok | estimativa; assimetria robusta, magnitude não |
 | n=200; buckets de dificuldade de 27 a 60 | poder limitado nos buckets |
-| Transporte de 7 ordens é **marginal** | o amortizado varia 5 ordens com a carga |
 
-### 22.6 Superado — não citar
+### 22.8 Superado — não citar
 
 `§4`, `§5` (desenho do λ) → §14 · `§6` (perfil por hora) → §21.6 ·
 `§12` (classificação, encoders 66M-400M) → não é o sistema alvo ·
 `§16.7` (fronteira só-decode) → §18.5 · `§16.8` ("sem prefill tabulado") → §18
 
 E uma inconsistência a resolver: §16 e §18.4 calculam custo com a **mediana** dos
-tokens; §21 usa a **média** dos custos. Divergem até 25% (ONU: 11,70 vs 14,67 J).
-A média é a correta — energia é aditiva e a cauda é longa. Prevalecem os números
-da §21.
+tokens; §21 e esta seção usam a **média** dos custos. Divergem até 25% (ONU:
+11,70 contra 14,67 J). A média é a correta — energia é aditiva e a cauda dos
+tokens gerados é longa.
