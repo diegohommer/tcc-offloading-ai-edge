@@ -1404,90 +1404,84 @@ ocorre no pico, a política ótima em energia **escalona mais no pico** — o op
 do que o operador de rede quer. Ótimo energético e ótimo operacional apontam em
 direções contrárias.
 
-## 22. Sumário e auditoria final (2026-09-07)
+## 22. Sumário: os dados, sua procedência, e o que foi testado
 
-Documento acumulou 21 seções com correções sobre correções. Esta seção é o
-ponto de entrada: o que foi testado, o que vale, e o que já não vale.
+### 22.1 A matriz por camada
 
-### 22.1 O que foi testado
+| Camada | Modelo | Precisão | Confiança | Prefill J/tok | Decode J/tok | Fonte da energia |
+|---|---|---|---|---|---|---|
+| user | `llama3.2:1b` | Q4_K_M | 0.120 acc, t=+6.64 | **0.016** ᴹ | **0.074** ᴹ | Cai et al. arXiv:2607.05475, Tab. 5 — Snapdragon 8 Elite Gen5 |
+| onu | `qwen2.5:1.5b` | Q4_K_M | 0.290 acc, t=+10.44 | **0.0009** ᴹ | **0.22** ᴹ | EdgeReasoning arXiv:2511.01866 + Zenodo 10.5281/zenodo.17168238 — Jetson AGX Orin |
+| fog | `gemma-2-9b-it` | FP16 | 0.795 acc, t=+6.70 | 0.033 ᴰ | **1.75** ᴹ | Bench360 arXiv:2511.16682, Tab. 3 — L4/A10/A30 |
+| cloud | `Llama-3-70B-Instruct` | BF16 | 0.880 acc, terminal | 0.0027 ᴰ | **1.002** ᴹ | Caravaca arXiv:2511.05597, Tab. IV — 4×H100 |
 
-| Experimento | Escala | Resultado |
+ᴹ medido na fonte · ᴰ derivado de razão publicada
+
+**Custo por consulta** (média, prompt ~1000 tok): user 17,8 J · onu 14,7 J ·
+fog 201,8 J · cloud 90,2 J.
+
+### 22.2 Como os dados foram obtidos
+
+**Confiança:** coletada por nós. 200 instâncias do GSM8K, **as mesmas nas quatro
+camadas**, com o prompt 5-shot do lm-evaluation-harness copiado verbatim do
+arquivo público do Open LLM Leaderboard v1. As três camadas locais rodaram
+(user/onu no CPU via Ollama, fog numa L4 da Modal); a nuvem foi **importada** do
+mesmo arquivo, o que é suficiente porque a camada terminal nunca usa a própria
+confiança. Logprobs completos por token guardados: qualquer definição de
+confiança é recomputável offline.
+
+**Validação:** o replay foi verificado contra um resultado público —
+Meta-Llama-3-8B base reproduziu **0.4400 contra 0.4579 publicado** (n=50).
+
+**Energia:** nunca medida por nós. Vem das quatro fontes acima, escolhidas para
+que cada camada seja precificada com energia publicada **para aquele modelo, na
+precisão em que ele rodou, em hardware da classe declarada para aquela camada**.
+
+### 22.3 Testes do parâmetro novo (λ)
+
+| Comparação | Método | Resultado |
 |---|---|---|
-| Cascata de classificação (SST-2) | n=872, 4 encoders | fronteira existe, joelho agudo — **superado**, não é o sistema alvo |
-| Cascata generativa (GSM8K, CoT) | n=200, 3 decoders | escada não-monotônica (SOLAR pior que 8B) |
-| Portão de validação | n=50 | replay reproduz 0.4400 vs 0.4579 publicado |
-| **Escada de 4 camadas (GSM8K, prompt do harness)** | **n=200, pareado** | **acurácia 0.120 / 0.290 / 0.795 / 0.880** |
-| λ contra β global | 63 pontos | λ vence, +0.0233 |
-| λ contra β por camada | 9.261 vetores × 3 cenários | **λ perde, −0.014 a −0.055** |
-| Transporte PON | dos bytes | **7 ordens abaixo da computação** |
-| Dominância do pool | marginal + por dificuldade | **2 de 4 camadas dominadas** |
-| Poda para {onu, cloud} | fronteira inteira | **−63% a −70% de energia** |
-| Penalidade por regime de lote errado | 2 regimes | **+25% vs +554%, assimétrico** |
+| λ contra β **global** | 63 pontos, forma exponencial | λ vence, **+0.023** |
+| λ contra β **por camada** | 9.261 vetores, fronteira de Pareto com 95 pontos | λ **perde, −0.014** |
+| idem, escada quase-plana | mesma grade | λ perde, **−0.022** |
+| idem, escada monotônica | mesma grade | λ perde, **−0.055** |
+| idem, com energia de dois termos | prefill + decode | λ perde, **−0.015** |
 
-### 22.2 Base de dados
+O ganho aparente do λ existe apenas contra um β **global** e desaparece quando o
+β pode variar por camada. Testado sob energia variando 30× e sob dois modelos de
+custo, sem mudar de sinal.
 
-- 800 registros: 4 camadas × 200 instâncias do GSM8K, **mesmas instâncias, mesmo prompt**
-- Logprobs completos por token guardados — qualquer definição de confiança é recomputável offline
-- Energia por camada, **duas fases**: user e onu medidos, fog e cloud derivados
+### 22.4 Transporte PON
 
-### 22.3 Correções pendentes de aplicação
+4,2 KB por salto (prompt de 1022 tok + resposta de 49, a 4 B/tok). A 25 Gb/s por
+λ do TWDM-PON: **1,4 µs**. A 3,98 W da ONU: **5,5 µJ** — sete ordens de magnitude
+abaixo da computação.
 
-**(a) Média contra mediana.** A §18.4 calcula custo por camada com a mediana
-dos tokens; a §21.2 usa a média dos custos por consulta. Divergem em até 25%
-(ONU: 11,70 contra 14,67 J). **A média é a correta** — energia é aditiva, e a
-distribuição de tokens gerados tem cauda longa (ONU: mediana 49, média 62,5,
-máximo 251). Os números da §21 devem prevalecer; os da §18.4 e §16 subestimam.
+**Fontes:** potência da ONU (3,98 W ativa / 0,4 W sleep) de **Sarigiannidis et
+al., IET Networks 2016**; taxa de 25 Gb/s por comprimento de onda da
+especificação TWDM-PON (ITU-T G.989 NG-PON2) adotada por Pakpahan e Hwang. Os
+bytes vêm do trace. A energia em si é **derivada** — tempo de transmissão vezes
+potência —, não medida.
 
-**(b) O 554% repousa sobre número derivado.** A penalidade assimétrica da §21.6
-usa nuvem ociosa a 38,6 J/token, que é **estimativa** — razão lote1/otimizado
-interpolada em log(params) a partir de quatro modelos do Caravaca, não medição.
-A direção do achado (assimetria forte) é robusta; a **magnitude exata não é**.
-Deve ser reportada como faixa ou com a ressalva explícita no ponto de uso.
+### 22.5 Ressalvas, com a direção do erro
 
-### 22.4 O que está superado e não deve ser citado
-
-| Seção | Estado |
+| | Direção |
 |---|---|
-| §4, §5 | desenho do mecanismo λ — **superado pela §14** (é redundante com β) |
-| §6 | perfil de lote por hora do dia — **substituído pela §21.6/21.7** |
-| §12 | resultados da cascata de classificação — encoders de 66M-400M, não é o sistema alvo |
-| §16.7 | fronteira só-decode — **superada pela §18.5** |
-| §16.8 | "nenhum prefill tabulado" — **falso desde a §18** |
-| §17.3 | ressalva de que o teste λ×β usou só decode — **resolvida na §19.1** |
-
-### 22.5 Ressalvas que permanecem, e sua direção
-
-| Ressalva | Direção do erro |
-|---|---|
-| Prefill do fog e da nuvem derivados, não medidos | superestimam energia |
+| Prefill de fog e cloud derivados | superestimam |
 | Regime do Bench360 inferido de potência, não declarado | — |
-| Fog coletado em L4, fonte provavelmente A10/A30 | mesma classe, não mesmo chip |
+| Fog coletado em L4; fonte provavelmente A10/A30 | mesma classe, não mesmo chip |
 | Nuvem soma prefill sobre âncora misturada | +3%, conservador |
-| n=200; buckets de dificuldade com n=27 a 60 | poder estatístico limitado nos buckets |
-| Transporte de 7 ordens é **marginal** | o amortizado depende da carga e varia 5 ordens |
+| Nuvem ociosa a 38,6 J/tok (usada na assimetria de regime) | **estimativa, não medição** |
+| n=200; buckets de dificuldade de 27 a 60 | poder limitado nos buckets |
+| Transporte de 7 ordens é **marginal** | o amortizado varia 5 ordens com a carga |
 
-Todos os desvios conhecidos superestimam energia ou são conservadores. Nenhuma
-conclusão estrutural depende dos números incertos: o resultado λ×β foi testado
-com energia variando 30× e sob dois modelos de custo, e não mudou.
+### 22.6 Superado — não citar
 
-### 22.6 As quatro conclusões
+`§4`, `§5` (desenho do λ) → §14 · `§6` (perfil por hora) → §21.6 ·
+`§12` (classificação, encoders 66M-400M) → não é o sistema alvo ·
+`§16.7` (fronteira só-decode) → §18.5 · `§16.8` ("sem prefill tabulado") → §18
 
-1. **A escada de energia inverte nas duas pontas.** user (17,8 J) custa mais que
-   onu (14,7 J) porque prefill em CPU é caro; fog (201,8 J) custa mais que cloud
-   (90,2 J) por amortização de lote. Mecanismos já documentados (AutoScale 2020;
-   literatura de batching), aqui compostos na mesma escada.
-
-2. **A pré-condição formal das cascatas falha.** *Non-dominated pool* exige
-   custos e qualidades ambos crescentes; duas de quatro camadas são dominadas.
-   O RecServe ordena por escala de modelo e herda a premissa sem declará-la.
-
-3. **O termo de energia no limiar é redundante com um vetor β por camada.**
-   Vale na escada monotônica e na invertida, e a redundância é mais acentuada no
-   caso monotônico.
-
-4. **Transporte é irrelevante.** Sete ordens de magnitude abaixo da computação.
-   A premissa central do MEC clássico não se transfere para LLM sobre PON.
-
-E a recomendação medida: podar para o pool non-dominated vale 63–70%, e calibrar
-β pelo regime caro quando houver dúvida — errar para o lado conservador custa
-25%, para o otimista custa até 554%.
+E uma inconsistência a resolver: §16 e §18.4 calculam custo com a **mediana** dos
+tokens; §21 usa a **média** dos custos. Divergem até 25% (ONU: 11,70 vs 14,67 J).
+A média é a correta — energia é aditiva e a cauda é longa. Prevalecem os números
+da §21.
