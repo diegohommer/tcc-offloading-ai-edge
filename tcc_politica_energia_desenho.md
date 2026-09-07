@@ -1,13 +1,15 @@
 # Energy-aware offloading policy — design and results
 
-**Status (2026-08-30): investigation complete, result is negative.** The
+**Status (2026-09-07): base experimental completa, 22 seções.** Comece pela **§22**,
+que sumariza o que foi testado, marca o que está superado e lista as ressalvas.
+O resultado central segue negativo: o
 proposed mechanism — weighting RecServe's confidence threshold by an energy
 cost — turned out to be *redundant with RecServe's existing β parameter*.
 See **§14** (in Portuguese) for that result and what to do about it.
 
-This document is now a record of the investigation, not a proposal. §1–§11
-define the mechanism and the reasoning behind it (needed to understand §14);
-§12–§14 are the measured results.
+Registro da investigação, não proposta. §1–§11 são a fase de desenho (as §4, §5
+e §6 estão marcadas como superadas); §12–§14 os primeiros resultados; §15–§21 a
+escada de quatro camadas medida; **§22 o sumário e a auditoria**.
 
 ## Summary — the idea, in plain terms
 
@@ -109,6 +111,10 @@ threshold adjustment, so which one is being served must be stated.
 
 ## 4. The mechanism
 
+> **SUPERADO pela §14.** O termo λ descrito aqui é redundante com um vetor
+> β por camada. Mantido como registro do desenho que o §14 testou e refutou.
+
+
 Give the β-quantile threshold an explicit joules-per-quality-point exchange
 rate, using **static** per-tier-pair cost data from `layer_energy.yaml`:
 
@@ -158,6 +164,10 @@ be free or a net saving depending on cloud's regime.
 
 ## 5. How a tier learns its neighbour's cost — without telemetry
 
+> **SUPERADO pela §14.** Distribuir o custo estático a cada camada só faz
+> sentido se o custo mudar a decisão, e o §14 mostra que não muda.
+
+
 No runtime discovery needed: measure once offline (done —
 `layer_energy.yaml`), ship the relevant slice to each tier as static
 deployment config, reusing the base paper's existing ONU registration flow
@@ -166,6 +176,11 @@ hardware or model actually changes — never per query, never on a polling
 loop.
 
 ## 6. Batch variation without going live
+
+> **SUBSTITUÍDO pelas §21.6 e §21.7.** O perfil por hora do dia proposto aqui
+> foi superado pela penalidade de regime medida, que quantifica o prêmio
+> (até 5,5×) sem precisar do padrão diurno não verificado.
+
 
 A single static point poorly summarizes a tier whose cost swings 3×–100× with
 load. The fix is a small **static profile**, not a live signal:
@@ -304,6 +319,11 @@ RecServe** — more intuitive than A's λ→∞ baseline, and matching GreenServ
 boundedness alone.
 
 ## 12. Results (run 2026-08-29)
+
+> **NÃO É O SISTEMA ALVO.** Encoders de 66M-400M em tarefa de classificação.
+> Validou o mecanismo e o pipeline; os números não devem ser citados como
+> resultado da tese. Ver §16 a §21 para a cascata generativa de 4 camadas.
+
 
 Everything below was produced by `src/scripts/sweep_energy_policy.py` over
 the full SST-2 test split (n=872), replaying the matrix from
@@ -1344,6 +1364,11 @@ forma construtiva disso é calibrar β **a partir da energia medida**. Mas o vet
 ótimo depende do regime de lote da camada de destino, e a penalidade por errar é
 fortemente assimétrica:
 
+O regime de nuvem ociosa usa 38,6 J/token, que é **estimativa** — razão
+lote1/otimizado interpolada em log(params) a partir de quatro modelos do
+Caravaca (§17.3), não medição. A assimetria é robusta em direção; as
+magnitudes abaixo devem ser lidas como ordem de grandeza.
+
 | Acurácia | β ótimo (nuvem em lote) | Penalidade se aplicado com nuvem ociosa |
 |---|---|---|
 | 0.4 | (0.8, 0.1, 0.1) | **+219%** |
@@ -1378,3 +1403,91 @@ Tensão que vale registrar: se a nuvem é mais barata em lote alto, e lote alto
 ocorre no pico, a política ótima em energia **escalona mais no pico** — o oposto
 do que o operador de rede quer. Ótimo energético e ótimo operacional apontam em
 direções contrárias.
+
+## 22. Sumário e auditoria final (2026-09-07)
+
+Documento acumulou 21 seções com correções sobre correções. Esta seção é o
+ponto de entrada: o que foi testado, o que vale, e o que já não vale.
+
+### 22.1 O que foi testado
+
+| Experimento | Escala | Resultado |
+|---|---|---|
+| Cascata de classificação (SST-2) | n=872, 4 encoders | fronteira existe, joelho agudo — **superado**, não é o sistema alvo |
+| Cascata generativa (GSM8K, CoT) | n=200, 3 decoders | escada não-monotônica (SOLAR pior que 8B) |
+| Portão de validação | n=50 | replay reproduz 0.4400 vs 0.4579 publicado |
+| **Escada de 4 camadas (GSM8K, prompt do harness)** | **n=200, pareado** | **acurácia 0.120 / 0.290 / 0.795 / 0.880** |
+| λ contra β global | 63 pontos | λ vence, +0.0233 |
+| λ contra β por camada | 9.261 vetores × 3 cenários | **λ perde, −0.014 a −0.055** |
+| Transporte PON | dos bytes | **7 ordens abaixo da computação** |
+| Dominância do pool | marginal + por dificuldade | **2 de 4 camadas dominadas** |
+| Poda para {onu, cloud} | fronteira inteira | **−63% a −70% de energia** |
+| Penalidade por regime de lote errado | 2 regimes | **+25% vs +554%, assimétrico** |
+
+### 22.2 Base de dados
+
+- 800 registros: 4 camadas × 200 instâncias do GSM8K, **mesmas instâncias, mesmo prompt**
+- Logprobs completos por token guardados — qualquer definição de confiança é recomputável offline
+- Energia por camada, **duas fases**: user e onu medidos, fog e cloud derivados
+
+### 22.3 Correções pendentes de aplicação
+
+**(a) Média contra mediana.** A §18.4 calcula custo por camada com a mediana
+dos tokens; a §21.2 usa a média dos custos por consulta. Divergem em até 25%
+(ONU: 11,70 contra 14,67 J). **A média é a correta** — energia é aditiva, e a
+distribuição de tokens gerados tem cauda longa (ONU: mediana 49, média 62,5,
+máximo 251). Os números da §21 devem prevalecer; os da §18.4 e §16 subestimam.
+
+**(b) O 554% repousa sobre número derivado.** A penalidade assimétrica da §21.6
+usa nuvem ociosa a 38,6 J/token, que é **estimativa** — razão lote1/otimizado
+interpolada em log(params) a partir de quatro modelos do Caravaca, não medição.
+A direção do achado (assimetria forte) é robusta; a **magnitude exata não é**.
+Deve ser reportada como faixa ou com a ressalva explícita no ponto de uso.
+
+### 22.4 O que está superado e não deve ser citado
+
+| Seção | Estado |
+|---|---|
+| §4, §5 | desenho do mecanismo λ — **superado pela §14** (é redundante com β) |
+| §6 | perfil de lote por hora do dia — **substituído pela §21.6/21.7** |
+| §12 | resultados da cascata de classificação — encoders de 66M-400M, não é o sistema alvo |
+| §16.7 | fronteira só-decode — **superada pela §18.5** |
+| §16.8 | "nenhum prefill tabulado" — **falso desde a §18** |
+| §17.3 | ressalva de que o teste λ×β usou só decode — **resolvida na §19.1** |
+
+### 22.5 Ressalvas que permanecem, e sua direção
+
+| Ressalva | Direção do erro |
+|---|---|
+| Prefill do fog e da nuvem derivados, não medidos | superestimam energia |
+| Regime do Bench360 inferido de potência, não declarado | — |
+| Fog coletado em L4, fonte provavelmente A10/A30 | mesma classe, não mesmo chip |
+| Nuvem soma prefill sobre âncora misturada | +3%, conservador |
+| n=200; buckets de dificuldade com n=27 a 60 | poder estatístico limitado nos buckets |
+| Transporte de 7 ordens é **marginal** | o amortizado depende da carga e varia 5 ordens |
+
+Todos os desvios conhecidos superestimam energia ou são conservadores. Nenhuma
+conclusão estrutural depende dos números incertos: o resultado λ×β foi testado
+com energia variando 30× e sob dois modelos de custo, e não mudou.
+
+### 22.6 As quatro conclusões
+
+1. **A escada de energia inverte nas duas pontas.** user (17,8 J) custa mais que
+   onu (14,7 J) porque prefill em CPU é caro; fog (201,8 J) custa mais que cloud
+   (90,2 J) por amortização de lote. Mecanismos já documentados (AutoScale 2020;
+   literatura de batching), aqui compostos na mesma escada.
+
+2. **A pré-condição formal das cascatas falha.** *Non-dominated pool* exige
+   custos e qualidades ambos crescentes; duas de quatro camadas são dominadas.
+   O RecServe ordena por escala de modelo e herda a premissa sem declará-la.
+
+3. **O termo de energia no limiar é redundante com um vetor β por camada.**
+   Vale na escada monotônica e na invertida, e a redundância é mais acentuada no
+   caso monotônico.
+
+4. **Transporte é irrelevante.** Sete ordens de magnitude abaixo da computação.
+   A premissa central do MEC clássico não se transfere para LLM sobre PON.
+
+E a recomendação medida: podar para o pool non-dominated vale 63–70%, e calibrar
+β pelo regime caro quando houver dúvida — errar para o lado conservador custa
+25%, para o otimista custa até 554%.
