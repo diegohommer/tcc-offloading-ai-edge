@@ -53,6 +53,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1]
@@ -146,6 +147,51 @@ def consolidate(raw_path: Path, out_path: Path, tiers: list[str]) -> int:
     return len(complete)
 
 
+def generate_all(layer, todo: list, concurrency: int):
+    """Yield (index, item, result_or_None) for every query, in completion order.
+
+    concurrency=1 is the original sequential path and stays the default: the local
+    Ollama tiers keep ONE model resident, so parallel requests queue behind each
+    other and buy nothing.
+
+    Concurrency only pays against a rented GPU, where billing is per SECOND rather
+    than per token: vLLM batches the in-flight requests, so 200 concurrent calls
+    finish in roughly the time 200 sequential ones spend on their first few. That
+    inverts the original design assumption (written against a per-token API, where
+    concurrency saved nothing and only risked rate limits).
+
+    Ordering is by completion, not by index -- which is fine because every record
+    carries its own index, and consolidate() pivots by index rather than by
+    position. Writes stay in the caller's single thread, so resumability is
+    unaffected: still one flushed record at a time.
+    """
+    def run_one(pair):
+        index, item = pair
+        try:
+            return index, item, layer.generate(build_prompt(item.question))
+        except Exception as exc:  # noqa: BLE001 - one bad query must not end the run
+            print(f"  [{index}] FAILED: {type(exc).__name__}: {exc}")
+            return index, item, None
+
+    if concurrency <= 1:
+        for pair in todo:
+            yield run_one(pair)
+        return
+
+    # ThreadPoolExecutor rather than asyncio: OllamaGenerativeLayer calls
+    # requests.post, which releases the GIL while blocking on the socket, and is
+    # stateless per call -- so one layer instance is safely shared across threads.
+    #
+    # as_completed rather than pool.map: map yields in SUBMISSION order, so one
+    # slow query would block every finished result behind it and a hard kill would
+    # lose them. On a per-second-billed GPU that is real money, so results are
+    # persisted the moment they land.
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = [pool.submit(run_one, pair) for pair in todo]
+        for future in as_completed(futures):
+            yield future.result()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--split", default="test")
@@ -155,6 +201,11 @@ def main() -> None:
     parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.0,
                         help="0 keeps the run reproducible; EcoThink uses 0 for math tasks too")
+    parser.add_argument("--concurrency", type=int, default=1,
+                        help="concurrent requests for remote (openai) tiers; local tiers stay at 1. "
+                             "Against a per-second-billed GPU this is the main cost lever -- vLLM "
+                             "batches the in-flight requests, so 32 cuts wall time (and the bill) "
+                             "several-fold. Against a per-token API it saves nothing.")
     parser.add_argument("--config", type=Path, default=None, help="JSON overriding the tier ladder")
     parser.add_argument("--raw-out", type=Path, default=None)
     parser.add_argument("--out", type=Path, default=None)
@@ -212,14 +263,19 @@ def main() -> None:
             print(f"\n{tier}: {cfg['model']} ({cfg['backend']}) -- {len(todo)} to go")
             layer = build_layer(tier, cfg, args.max_tokens, args.temperature)
 
-            n_correct = 0
-            for n, (index, item) in enumerate(todo, start=1):
-                prompt = build_prompt(item.question)
-                try:
-                    result = layer.generate(prompt)
-                except Exception as exc:  # noqa: BLE001 - one bad query must not end the run
-                    print(f"  [{index}] FAILED: {type(exc).__name__}: {exc}")
-                    continue
+            # Concurrency is per-tier: only the remote (openai) tiers benefit, and
+            # forcing 1 for local Ollama avoids thrashing its single resident model.
+            tier_concurrency = args.concurrency if cfg["backend"] == "openai" else 1
+            if tier_concurrency > 1:
+                print(f"  sending up to {tier_concurrency} concurrent requests")
+
+            n_correct = n_ok = 0
+            for n, (index, item, result) in enumerate(
+                generate_all(layer, todo, tier_concurrency), start=1
+            ):
+                if result is None:
+                    continue  # already reported by run_one
+                n_ok += 1
 
                 correct = is_correct(result.text, item.reference_answer)
                 n_correct += int(correct)
@@ -243,7 +299,7 @@ def main() -> None:
                 f.flush()  # survive a hard kill without losing the last calls
 
                 if n % 10 == 0 or n == len(todo):
-                    print(f"  {n}/{len(todo)}  running accuracy {n_correct / n:.3f}")
+                    print(f"  {n}/{len(todo)}  running accuracy {n_correct / n_ok:.3f}")
 
     n_rows = consolidate(raw_path, out_path, tiers)
     print(f"\nElapsed: {time.perf_counter() - started:.1f}s")
