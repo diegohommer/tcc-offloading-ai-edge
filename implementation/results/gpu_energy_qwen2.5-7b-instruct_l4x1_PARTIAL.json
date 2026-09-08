@@ -1,0 +1,56 @@
+{
+  "_status": "PARTIAL -- the run was killed at batch=8 when the Modal workspace was disabled mid-sweep (ConflictError: workspace ac-3kYtPqAaJte81vgAPR42Ct is disabled). Batches 1/2/4 completed all 3 trials each and are recorded below verbatim from the run log; batches 8/16/32 were never measured.",
+  "_provenance": "Values transcribed from the run's stdout, not from the script's own JSON writer -- the writer never ran, because the local entrypoint died before sweep.remote() returned. Re-run to get a machine-written file.",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "gpu": "NVIDIA L4",
+  "gpu_count": 1,
+  "precision": "fp8",
+  "vllm_version": "0.21.0",
+  "max_model_len": 2048,
+  "gpu_memory_utilization": 0.9,
+  "boundary": "chip_or_module (NVML per-GPU counter; excludes host CPU/DRAM and datacenter PUE)",
+  "energy_source": "nvmlDeviceGetTotalEnergyConsumption (cumulative mJ counter)",
+  "method": "ignore_eos fixed-length decode; warm-up generation discarded; median of repeats",
+  "output_tokens_per_sequence": 300,
+  "repeats": 3,
+  "idle_power_W": 29.9,
+  "values_are": "GROSS (idle not subtracted)",
+  "_why_this_matters": [
+    "L4 IS inside the fog hardware_class layer_energy.yaml declares (T4/L4/A30/A2/A16/L40S).",
+    "The curve this would replace is transcribed from an RTX 4090, which is NOT in that",
+    "class, and is measured at NODE boundary (CPU+GPU+DRAM) rather than the chip boundary",
+    "the file declares as its base. So even three points are an evidence upgrade in kind,",
+    "not just in count -- but they are three points, and the interesting part of the curve",
+    "(where batching saturates) starts past batch=8 and was not reached."
+  ],
+  "_observation": [
+    "Over batches 1-4 the scaling is almost exactly linear: package power pins at 72 W while",
+    "throughput doubles with each batch doubling, so J/token halves (2.443 -> 1.234 -> 0.623).",
+    "That is the memory-bound regime -- the GPU is idle-waiting on weight loads, so extra",
+    "concurrent sequences ride along nearly free. The saturation knee, where power finally",
+    "rises and J/token stops halving, is what batches 8-32 were meant to find."
+  ],
+  "batch_curve": [
+    {
+      "batch": 1,
+      "decode_J_per_token": 2.4433,
+      "tokens_per_s": 29.3,
+      "mean_power_W": 72.0,
+      "trials_J_per_token": [2.4427, 2.4668, 2.4433]
+    },
+    {
+      "batch": 2,
+      "decode_J_per_token": 1.2337,
+      "tokens_per_s": 58.1,
+      "mean_power_W": 72.0,
+      "trials_J_per_token": [1.2457, 1.2337, 1.2336]
+    },
+    {
+      "batch": 4,
+      "decode_J_per_token": 0.6228,
+      "tokens_per_s": 115.6,
+      "mean_power_W": 72.0,
+      "trials_J_per_token": [0.6228, 0.6226, 0.6228]
+    }
+  ]
+}
