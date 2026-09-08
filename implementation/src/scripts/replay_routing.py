@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Three offline tests over the SST-2 policy matrix. No GPU, no network, no billing.
+"""Five offline tests over the SST-2 policy matrix. No GPU, no network, no billing.
+
+HEADLINE, stated up front because four of the five tests land on it:
+
+    The geometric decay beta^k is ALREADY an effective energy-saving device. It
+    makes expensive events rare by construction, so per-escalation optimizations
+    have very little left to save. Every mechanism tried here dies on that same
+    fact -- not on four separate accidents.
+
+      * energy-weighted threshold  -> beta is already that knob      (Test 1)
+      * jump to a destination      -> beta^k already makes the
+                                      expensive tiers rare           (Tests 3, 4)
+      * per-tier beta vector       -> reach is a PRODUCT, so tiers
+                                      cannot be targeted separately  (Test 5)
+
+    What is left as a real lever is beta itself, the history window (Test 2),
+    and which tiers exist at all.
+
 
 Everything here is pure replay against results/traces/sst2_test.matrix.jsonl,
 which run_policy_matrix.py produces on CPU from four locally cached classifiers.
@@ -45,16 +62,36 @@ already owns the first decision completely. The second is a discrete choice over
 targets that beta cannot express at all -- there is no value of beta that means
 "skip the fog tier".
 
-That asymmetry is the point. A query ending at cloud under stepwise recursion has
-paid for user + onu + fog + cloud, and the tiers it traversed contributed nothing
-to the answer -- they were wrong, which is why it escalated. On the RAPL-measured
-ladder in config/layer_energy.yaml that traversal is 4.588 J against 2.452 J for
-going straight there: 47% of the energy is spent on tiers whose answers were
-discarded.
+The intuition was that traversal is waste: a query ending at cloud paid for
+user + onu + fog + cloud, and the tiers it crossed contributed nothing -- they
+were wrong, which is why it escalated. On the RAPL ladder that path is 4.588 J
+against 2.452 J for going straight there.
 
-Three destination rules are compared, and the calibrated one is the interesting
-case -- it is fitted on half the queries and evaluated on the other half, so it
-cannot cheat.
+RESULT: THAT INTUITION IS WRONG, and this test refutes it. Skipping costs MORE
+at every beta. The error is that 4.588 J prices a full traversal, but Test 1's
+own beta^k law says almost nothing completes one -- at beta=0.3 only 2.7% of
+queries reach cloud. Most escalations stop at the cheap ONU, so routing 30% of
+traffic straight to fog costs more than letting 2.7% climb there.
+
+TEST 4 -- WHEN WOULD SKIPPING PAY?
+-----------------------------------
+Salvaging the general form from Test 3's refutation. Skipping to d beats stepwise
+iff  E_d < E_onu + beta*E_fog + beta^2*E_cloud: the destination must undercut the
+NEXT tier plus the discounted tail, not the full traversal. Applied to two real
+ladders, this says skipping pays only where the ladder INVERTS -- which the
+measured SST-2 ladder does not, and the fog/cloud batching numbers do.
+
+TEST 5 -- PER-TIER BETA VECTOR
+-------------------------------
+The last place an energy-aware choice could act without being redundant with beta.
+Reach(k) is the product of the betas below k, so one global beta forces a
+geometric profile while a vector could give any decreasing one.
+
+RESULT: it does not beat the scalar, on either ladder, with a train/test split.
+And the reason is structural, not statistical: reach is a PRODUCT, so to deliver
+traffic to a cheap top tier you must first pay the expensive tier beneath it. No
+beta vector decouples them. That is precisely the limit destination selection
+would break -- which is why skipping is about decoupling tiers, not about energy.
 
 Run:
     python src/scripts/run_policy_matrix.py --dataset sst2 --limit 0 --device -1
@@ -102,7 +139,8 @@ def quantile(sorted_vals: list[float], q: float) -> float:
     return sorted_vals[lo] * (1 - frac) + sorted_vals[hi] * frac
 
 
-def replay(rows: list[dict], beta: float, window: int, destination: str | None = None) -> dict:
+def replay(rows: list[dict], beta, window: int, destination: str | None = None,
+           energy: dict[str, float] | None = None) -> dict:
     """Replay the cascade once. destination=None is RecServe's stepwise recursion.
 
     With a destination, the escalation DECISION is identical -- same rule, same
@@ -111,6 +149,14 @@ def replay(rows: list[dict], beta: float, window: int, destination: str | None =
     isolates the routing choice from the escalation choice, so any difference is
     attributable to the destination alone.
     """
+    # beta may be a scalar (RecServe: one global beta) or a per-tier mapping.
+    # Per-tier is strictly more expressive: with one beta the traffic profile is
+    # forced to be geometric (beta, beta^2, beta^3), while a vector can be any
+    # decreasing sequence -- escalate freely at a cheap tier, sparingly at an
+    # expensive one.
+    betas = beta if isinstance(beta, dict) else {t: beta for t in TIERS}
+    E = energy if energy is not None else ENERGY_J
+
     history: dict[str, list[float]] = {t: [] for t in TIERS}
     reached = {t: 0 for t in TIERS}
     escalated_from = {t: 0 for t in TIERS}
@@ -126,7 +172,7 @@ def replay(rows: list[dict], beta: float, window: int, destination: str | None =
         tier = "user"
         while True:
             reached[tier] += 1
-            energy_total += ENERGY_J[tier]
+            energy_total += E[tier]
             cell = row["tiers"][tier]
             confidence = cell["confidence"]
 
@@ -135,7 +181,7 @@ def replay(rows: list[dict], beta: float, window: int, destination: str | None =
             if nxt is not None and len(history[tier]) > 1:
                 # RecServe's rule verbatim: beta-quantile of this tier's own
                 # recent confidences, escalate if below it.
-                threshold = quantile(sorted(history[tier]), beta)
+                threshold = quantile(sorted(history[tier]), betas[tier])
                 escalate = confidence < threshold
 
             history[tier].append(confidence)
@@ -166,6 +212,7 @@ def replay(rows: list[dict], beta: float, window: int, destination: str | None =
     n = len(rows)
     return {
         "beta": beta,
+        "betas": dict(betas),
         "window": window,
         "destination": destination or "stepwise",
         "accuracy": n_correct / n,
@@ -317,6 +364,66 @@ def test4_when_does_skipping_pay(rows: list[dict]) -> None:
     print("ladder inverts, which is what the fog/cloud batching numbers do.")
 
 
+def test5_per_tier_beta(rows: list[dict]) -> None:
+    """Does a per-tier beta VECTOR beat the single global beta RecServe uses?
+
+    Motivation: Test 1 showed reach(k) = prod of the betas below k. With one
+    global beta that product is forced to be geometric -- beta, beta^2, beta^3.
+    A vector can produce any decreasing sequence, so in principle it can escalate
+    freely at a cheap tier and sparingly at an expensive one. That is a real extra
+    degree of freedom, and the only place left where an energy-aware choice could
+    act without being redundant with beta itself.
+
+    The vector has 3 parameters against the scalar's 1, so it can overfit a
+    frontier. Both are therefore FITTED on one half and REPORTED on the other, and
+    the comparison is at matched energy: for each budget, take the configuration
+    with the best training accuracy that fits the budget, then read its held-out
+    accuracy.
+    """
+    print("\n" + "=" * 78)
+    print("TEST 5 -- per-tier beta vector vs. RecServe's single global beta")
+    print("=" * 78)
+
+    half = len(rows) // 2
+    train, test = rows[:half], rows[half:]
+    grid = (0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50)
+
+    scalar_cfgs = [{t: b for t in TIERS} for b in grid]
+    vector_cfgs = [{"user": a, "onu": b, "fog": c, "cloud": 0.0}
+                   for a in grid for b in grid for c in grid]
+
+    for ladder_name, E in (
+        ("SST-2 RAPL ladder (monotonic, measured on this CPU)", ENERGY_J),
+        ("generative/PON ladder (inverted) -- sensitivity, NOT a measurement",
+         {"user": 14.8, "onu": 196.0, "fog": 75.7, "cloud": 18.76}),
+    ):
+        print(f"\n{ladder_name}")
+
+        def fit(cfgs):
+            return [(replay(train, c, 10000, energy=E), c) for c in cfgs]
+
+        s_fit, v_fit = fit(scalar_cfgs), fit(vector_cfgs)
+        budgets = [r["J_per_query"] for r, _ in s_fit]
+
+        print(f"  {'budget J':>9} {'scalar acc':>11} {'vector acc':>11} "
+              f"{'delta':>8} {'best vector (user,onu,fog)':>28}")
+        for budget in sorted(budgets):
+            def best(fitted):
+                ok = [(r, c) for r, c in fitted if r["J_per_query"] <= budget * 1.001]
+                return max(ok, key=lambda rc: rc[0]["accuracy"]) if ok else None
+
+            bs, bv = best(s_fit), best(v_fit)
+            if bs is None or bv is None:
+                continue
+            # Held-out evaluation of the configurations chosen on train.
+            s_test = replay(test, bs[1], 10000, energy=E)
+            v_test = replay(test, bv[1], 10000, energy=E)
+            trio = tuple(round(bv[1][t], 2) for t in ("user", "onu", "fog"))
+            print(f"  {budget:>9.3f} {s_test['accuracy']:>11.4f} "
+                  f"{v_test['accuracy']:>11.4f} "
+                  f"{v_test['accuracy'] - s_test['accuracy']:>+8.4f} {str(trio):>28}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -334,6 +441,7 @@ def main() -> None:
     test2_window_ablation(rows)
     test3_stepwise_vs_destination(rows)
     test4_when_does_skipping_pay(rows)
+    test5_per_tier_beta(rows)
 
 
 if __name__ == "__main__":

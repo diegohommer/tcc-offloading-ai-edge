@@ -1,0 +1,109 @@
+850 queries, 4 tiers, replayed offline (no model loaded, no network)
+energy: RAPL local_measurement, net J/inference {'user': 0.2195, 'onu': 0.3899, 'fog': 1.7465, 'cloud': 2.2323}
+
+==============================================================================
+TEST 1 -- is beta a quality bar, or a traffic quota?
+==============================================================================
+If beta is a quota, escalation rate ~ beta at every tier, and the
+fraction reaching tier k ~ beta^k, independent of the data.
+
+  beta  esc user   esc onu   esc fog  reach onu  pred b^1  reach fog  pred b^2  reach cld  pred b^3
+  0.10     0.116     0.131     0.154     0.1165    0.1000     0.0153    0.0100     0.0024    0.0010
+  0.20     0.211     0.251     0.244     0.2106    0.2000     0.0529    0.0400     0.0129    0.0080
+  0.30     0.315     0.351     0.362     0.3153    0.3000     0.1106    0.0900     0.0400    0.0270
+  0.50     0.519     0.542     0.531     0.5188    0.5000     0.2812    0.2500     0.1494    0.1250
+
+==============================================================================
+TEST 2 -- history window, on a stream whose difficulty shifts
+==============================================================================
+Two regimes: the confidence-wise easier half arrives first, then the
+harder half. Queries are SHUFFLED WITHIN each regime, so the stream is
+stationary inside a regime and shifts once, in the middle -- rather
+than being a monotonic ramp, which would trivially escalate everything
+regardless of window and prove nothing.
+Only arrival order changes. Target escalation rate is beta = 0.30.
+
+  window  before shift  just after   settled  overall  accuracy   J/query
+   10000         0.282       1.000     0.753    0.575    0.9494    1.2066
+     500         0.282       1.000     0.478    0.493    0.9482    1.1220
+     200         0.271       0.976     0.255    0.380    0.9424    0.9031
+      50         0.294       0.600     0.286    0.331    0.9435    0.6864
+      20         0.282       0.412     0.294    0.318    0.9459    0.6305
+
+(RecServe ships window=10000 -- the top row -- and never ablates it.)
+
+==============================================================================
+TEST 3 -- stepwise recursion vs. choosing a destination
+==============================================================================
+Per-tier standalone accuracy on the calibration half:
+      user 0.9059   (0.2195 J/inference)
+       onu 0.9435   (0.3899 J/inference)
+       fog 0.9647   (1.7465 J/inference)
+     cloud 0.9553   (2.2323 J/inference)
+  -> calibrated destination: fog  (cheapest tier within one standard error of the best)
+
+Evaluated on the held-out half. Same beta, same rule, same history --
+only the destination of an escalating query differs.
+
+  beta                 routing  accuracy   J/query  vs stepwise
+  0.10     stepwise (RecServe)    0.9388    0.3213           --
+          jump to fog (calib.)    0.9318    0.4786        0.67x
+           jump to cloud (top)    0.9294    0.4769        0.67x
+
+  0.20     stepwise (RecServe)    0.9506    0.4304           --
+          jump to fog (calib.)    0.9459    0.7442        0.58x
+           jump to cloud (top)    0.9341    0.7290        0.59x
+
+  0.30     stepwise (RecServe)    0.9529    0.6389           --
+          jump to fog (calib.)    0.9435    1.0641        0.60x
+           jump to cloud (top)    0.9412    0.9969        0.64x
+
+  0.50     stepwise (RecServe)    0.9412    1.2572           --
+          jump to fog (calib.)    0.9412    1.7989        0.70x
+           jump to cloud (top)    0.9412    1.3855        0.91x
+
+
+==============================================================================
+TEST 4 -- when does skipping pay? (the criterion, on two real ladders)
+==============================================================================
+Skipping to d is cheaper than stepwise iff  E_d < E_onu + b*E_fog + b^2*E_cloud
+
+SST-2 classifiers, this CPU (RAPL, J/inference)
+    ladder [0.22, 0.39, 1.746, 2.232]  monotonic=True
+    beta=0.1: budget    0.587 J  ->  skipping pays for no destination
+    beta=0.3: budget    1.115 J  ->  skipping pays for no destination
+    beta=0.5: budget    1.821 J  ->  skipping pays for ['fog']
+
+generative/PON tables (J/query @200 tok, layer_energy.yaml)
+    ladder [14.8, 196.0, 75.7, 18.76]  monotonic=False
+    beta=0.1: budget  203.758 J  ->  skipping pays for ['fog', 'cloud']
+    beta=0.3: budget  220.398 J  ->  skipping pays for ['fog', 'cloud']
+    beta=0.5: budget  238.540 J  ->  skipping pays for ['fog', 'cloud']
+
+Reading: a monotonic ladder leaves nothing worth skipping toward -- the
+cheapest tier above you IS the next one. Skipping pays only where the
+ladder inverts, which is what the fog/cloud batching numbers do.
+
+==============================================================================
+TEST 5 -- per-tier beta vector vs. RecServe's single global beta
+==============================================================================
+
+SST-2 RAPL ladder (monotonic, measured on this CPU)
+   budget J  scalar acc  vector acc    delta   best vector (user,onu,fog)
+      0.245      0.9176      0.9176  +0.0000           (0.05, 0.05, 0.05)
+      0.295      0.9388      0.9365  -0.0024             (0.1, 0.1, 0.05)
+      0.334      0.9412      0.9365  -0.0047             (0.1, 0.2, 0.05)
+      0.415      0.9506      0.9506  +0.0000             (0.2, 0.2, 0.05)
+      0.575      0.9529      0.9553  +0.0024             (0.4, 0.2, 0.05)
+      0.925      0.9529      0.9529  +0.0000             (0.4, 0.5, 0.05)
+      1.341      0.9529      0.9529  +0.0000             (0.4, 0.5, 0.05)
+
+generative/PON ladder (inverted) -- sensitivity, NOT a measurement
+   budget J  scalar acc  vector acc    delta   best vector (user,onu,fog)
+     25.585      0.9176      0.9176  +0.0000           (0.05, 0.05, 0.05)
+     38.972      0.9388      0.9365  -0.0024             (0.1, 0.1, 0.05)
+     50.752      0.9412      0.9365  -0.0047             (0.1, 0.2, 0.05)
+     62.990      0.9506      0.9506  +0.0000             (0.2, 0.2, 0.05)
+     87.614      0.9529      0.9482  -0.0047             (0.2, 0.3, 0.05)
+    114.392      0.9529      0.9529  +0.0000             (0.3, 0.4, 0.05)
+    145.687      0.9529      0.9529  +0.0000             (0.4, 0.5, 0.05)
