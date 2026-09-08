@@ -53,6 +53,37 @@ MODEL=meta-llama/Llama-3.1-8B-Instruct GPU=L4:1 BATCHES=1,2,4,8,16,32 \
     modal run src/modal_apps/measure_gpu_energy.py
 ```
 
+## GPU availability on this account (checked 2026-09-08)
+
+Modal gates its larger GPUs behind a payment method, *independently* of the $30
+monthly free credit. Probed directly by running a trivial function on each:
+
+| GPU | memory | status on this account |
+|---|---|---|
+| T4 | 15 GB | **available** |
+| L4 | 24 GB | **available** |
+| A10 | 23 GB | **available** |
+| L40S | 48 GB | blocked — "Please add a payment method to use L40S GPU functions" |
+| H100 | 80 GB | blocked — same message |
+
+Consequences:
+
+* **The fog tier is fully measurable now.** T4 and L4 are both inside the
+  `hardware_class` that `layer_energy.yaml` declares for fog
+  ("T4 / L4 / A30 / A2 / A16 / L40S") — which the RTX 4090 the current curve is
+  transcribed from is *not*. So this is a strict evidence upgrade, not a
+  substitute.
+* **The cloud tier is not.** A 72B model does not fit in 24 GB at any usable
+  precision, and multi-GPU L4 for a 70B would be too slow to be worth it.
+  `cloud_tier_server.py` needs a payment method on the account before it will
+  deploy.
+
+If the goal is only the cloud tier's *answers* (which is what unblocks the
+cascade-vs-direct-to-cloud comparison), a per-token hosted API is the cheaper
+path and needs no GPU entitlement — that is what `DEFAULT_TIER_CONFIG` already
+points at, and 200 queries costs well under $1. Renting the GPU is what buys the
+first-party *energy* number on top of that.
+
 ## Cost
 
 Modal's published rates: H100 $3.95/h, L40S $1.95/h, A10 $1.10/h, L4 $0.80/h,

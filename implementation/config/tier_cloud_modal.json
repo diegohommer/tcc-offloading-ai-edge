@@ -6,20 +6,27 @@
     "Replace base_url with the URL `modal deploy` prints, then:",
     "  export MODAL_VLLM_KEY=unused",
     "  python src/scripts/run_generative_matrix.py --limit 200 --tiers cloud \\",
-    "      --config config/tier_cloud_modal.json",
+    "      --concurrency 16 --config config/tier_cloud_modal.json",
     "",
     "The server is deployed unauthenticated, so the key value is ignored -- but",
     "build_layer() refuses to start without the env var set, which is a useful",
     "guard against silently running a billed tier by accident, so it is kept.",
     "",
-    "Model is Qwen2.5-72B-Instruct because config/layer_energy.yaml already",
-    "tabulates that exact model on the cloud tier (1.044 J/token, 4xH100,",
-    "optimized batch), keeping confidence and energy referring to one model."
+    "MODEL: layer_energy.yaml tabulates Qwen2.5-72B on the cloud tier (1.044",
+    "J/token, 4xH100, optimized batch), which is why this family was chosen --",
+    "but that row is the BF16 checkpoint and this serves the AWQ 4-bit one, on",
+    "4xL4 rather than H100. So the ENERGY row and this run are NOT the same",
+    "configuration and must not be quoted as if they were. What this run is for",
+    "is the ANSWER matrix, which depends on the weights rather than the card.",
+    "The 4-bit choice is explained in cloud_tier_server.py: it is a 41.6 GB",
+    "download instead of 145.4 GB of billed GPU time, it leaves ~45 GB of KV",
+    "cache instead of ~15, and it matches the ONU tier, which already runs a",
+    "4-bit K-quant under Ollama."
   ],
   "cloud": {
-    "model": "Qwen/Qwen2.5-72B-Instruct",
+    "model": "Qwen/Qwen2.5-72B-Instruct-AWQ",
     "backend": "openai",
-    "base_url": "https://REPLACE-ME--tcc-cloud-tier-cloudtier.modal.run",
+    "base_url": "https://diegoufrgs2004--tcc-cloud-tier-cloudtier.us-east.modal.direct",
     "api_key_env": "MODAL_VLLM_KEY"
   }
 }

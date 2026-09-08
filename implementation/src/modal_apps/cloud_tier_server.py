@@ -36,10 +36,35 @@ Three reasons, in order of importance:
      for the broken fog tier), so the cloud tier will not repeat the SOLAR-10.7B
      inversion that made the fog hop destroy 44 correct answers.
 
-BF16 at 72B is ~145 GB of weights, so it needs 2xH100 (160 GB) with
-tensor-parallel-size 2. That also matches the precision the tabulated energy
-point was (presumably) measured at -- the source does not state quantization,
-so BF16 is the least-assumption choice.
+HARDWARE: 4xL4, AND WHY NOT H100
+---------------------------------
+This Modal account has no payment method, and Modal gates its larger GPUs behind
+one *independently* of the $30 monthly credit. Probed directly: T4, L4 and A10
+allocate; L40S and H100 refuse with "Please add a payment method to use <GPU> GPU
+functions". L4:4 does allocate, giving 4 x 22.03 GiB = 88 GiB -- enough for a 72B
+if it is quantized.
+
+An L4 is of course not a cloud-tier GPU. That is a real limitation for the
+*energy* story and is why measure_gpu_energy.py records the device it actually
+ran on. It is NOT a limitation for the *answers*: which questions a 72B gets
+right depends on its weights, not on the card, and the answer matrix is the thing
+that unblocks the cascade-vs-direct-to-cloud comparison.
+
+PRECISION: AWQ 4-bit
+--------------------
+Qwen2.5-72B-Instruct in BF16 is a 145.4 GB download; the AWQ checkpoint is 41.6
+GB for the same model. On a per-second-billed GPU the download is billed time, so
+that difference is most of the run's cost. It also leaves ~45 GB of KV cache
+instead of ~15, which is what lets the collector's concurrency actually be used.
+
+4-bit is consistent with the rest of the ladder rather than a departure from it:
+the ONU tier runs llama3.1:8b under Ollama, whose default is a 4-bit K-quant, and
+layer_energy.yaml's Jetson Orin numbers for that tier are W4.
+
+The tradeoff, stated plainly: layer_energy.yaml's Qwen2.5-72B point (1.044
+J/token) does not state its quantization and is presumed BF16/FP16, so this
+server does not reproduce that point's precision. Report the precision actually
+served; do not silently compare a 4-bit run against a BF16 literature row.
 
 USAGE
 -----
@@ -64,9 +89,9 @@ again. The HF cache volume makes that reload a load, not a re-download.
 
 import modal
 
-MODEL_NAME = "Qwen/Qwen2.5-72B-Instruct"
-GPU_TYPE = "H100"
-N_GPU = 2                      # 72B BF16 ~= 145 GB of weights; 2x80 GB fits with room for KV cache
+MODEL_NAME = "Qwen/Qwen2.5-72B-Instruct-AWQ"
+GPU_TYPE = "L4"
+N_GPU = 4                      # 4 x 22.03 GiB = 88 GiB; AWQ weights ~41 GB, rest is KV cache
 VLLM_VERSION = "0.21.0"
 
 vllm_image = (
@@ -120,9 +145,14 @@ class CloudTier:
             # only, no top-k. vLLM serves that shape natively; the confidence
             # definition (exp of mean logprob) therefore needs no client change.
             "--max-logprobs", "1",
-            # Long CoT answers plus the prompt; max_tokens is capped client-side
-            # at 512, so this only needs to leave room for both.
-            "--max-model-len", "4096",
+            # GSM8K prompts run ~200 tokens and the client caps max_tokens at 512,
+            # so 2048 is ample. Keeping it tight is what buys concurrency: KV cache
+            # holds max_model_len x concurrent sequences, and every token of slack
+            # here is a concurrent request the collector cannot make.
+            "--max-model-len", "2048",
+            "--gpu-memory-utilization", "0.90",
+            # Quantization is autodetected from the AWQ checkpoint's own
+            # quantization_config, so it is deliberately not forced here.
         ])
 
     @modal.exit()
