@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Overrides run_generative_matrix.py's cloud tier to point at the vLLM server",
+    "deployed by src/modal_apps/cloud_tier_server.py, instead of Together AI.",
+    "",
+    "Replace base_url with the URL `modal deploy` prints, then:",
+    "  export MODAL_VLLM_KEY=unused",
+    "  python src/scripts/run_generative_matrix.py --limit 200 --tiers cloud \\",
+    "      --config config/tier_cloud_modal.json",
+    "",
+    "The server is deployed unauthenticated, so the key value is ignored -- but",
+    "build_layer() refuses to start without the env var set, which is a useful",
+    "guard against silently running a billed tier by accident, so it is kept.",
+    "",
+    "Model is Qwen2.5-72B-Instruct because config/layer_energy.yaml already",
+    "tabulates that exact model on the cloud tier (1.044 J/token, 4xH100,",
+    "optimized batch), keeping confidence and energy referring to one model."
+  ],
+  "cloud": {
+    "model": "Qwen/Qwen2.5-72B-Instruct",
+    "backend": "openai",
+    "base_url": "https://REPLACE-ME--tcc-cloud-tier-cloudtier.modal.run",
+    "api_key_env": "MODAL_VLLM_KEY"
+  }
+}
