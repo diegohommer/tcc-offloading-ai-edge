@@ -40,6 +40,7 @@ from utils import clean_text  # noqa: E402  (vendored RecServe module)
 
 # Tier order mirrors the 4-tier reference architecture: user -> onu -> fog -> cloud.
 NEXT_TIER = {"user": "onu", "onu": "fog", "fog": "cloud"}
+TIER_ORDER = ("user", "onu", "fog", "cloud")
 MAX_INPUT_TOKENS = 512  # matches the pipeline's truncation=True, max_length=512
 
 
@@ -83,9 +84,14 @@ class TracedRecursiveServe:
         beta: float = 0.3,
         max_history_size: int = 10000,
         device: int = -1,
+        energy_now=None,
     ):
         self.beta = beta
         self.max_history_size = max_history_size
+        # None recovers RecServe's stepwise recursion exactly. When supplied, it
+        # is called as energy_now() -> {tier: J} and the escalation TARGET is
+        # chosen from it; the escalation DECISION is untouched.
+        self.energy_now = energy_now
         self.model_names = {
             "user": user_model_name,
             "onu": onu_model_name,
@@ -158,6 +164,31 @@ class TracedRecursiveServe:
             }
         return out
 
+    def _destination(self, tier: str) -> str:
+        """Which tier an escalating query should go to.
+
+        RecServe always answers "the next one up". That is right when the energy
+        ladder is monotonic, and wrong when batching inverts it -- a saturated
+        cloud can cost less per query than the ONU beneath it. The criterion
+        (design doc, Test 4) is that bypassing to d pays iff
+
+            E_d < E_onu + beta*E_fog + beta^2*E_cloud
+
+        i.e. d must undercut the NEXT tier plus the discounted tail, not the full
+        traversal -- because beta^k means almost nothing completes a traversal.
+
+        Evaluated per call against energy_now(), so it follows the load rather
+        than freezing an architecture that is only correct part of the day.
+        """
+        nxt = NEXT_TIER.get(tier)
+        if nxt is None or self.energy_now is None:
+            return nxt
+        E = self.energy_now()
+        above = [t for t in TIER_ORDER if TIER_ORDER.index(t) > TIER_ORDER.index(tier)]
+        budget = sum(E[t] * self.beta ** i for i, t in enumerate(above))
+        cheapest = min(above, key=lambda t: E[t])
+        return cheapest if E[cheapest] < budget else nxt
+
     def predict(self, input_text: str) -> QueryTrace:
         text = clean_text(input_text)
         trace = QueryTrace(input_text=text)
@@ -195,7 +226,7 @@ class TracedRecursiveServe:
             )
 
             if escalate and next_tier is not None:
-                tier = next_tier
+                tier = self._destination(tier)
                 continue
 
             trace.final_label = predicted_label
