@@ -572,6 +572,7 @@ def main() -> None:
     test5_per_tier_beta(rows)
     test6_closed_loop(rows)
     test7_which_tiers_should_exist(rows)
+    test8_time_varying_ladder(rows)
 
 
 
@@ -666,6 +667,99 @@ def test7_which_tiers_should_exist(rows: list[dict]) -> None:
             te = replay_chain(test, chain, beta, 10000, E)
             print(f"  {'->'.join(chain):>26} {beta:>5.2f} "
                   f"{te['accuracy']:>9.4f} {te['J_per_query']:>9.4f}")
+
+
+def test8_time_varying_ladder(rows: list[dict]) -> None:
+    """The energy ladder is not static -- so is tier-set selection even valid?
+
+    Test 7 chose a tier subset as if the ladder were fixed. It is not. Cloud
+    J/token swings ~30x with batch size (layer_energy.yaml: QwQ-32B, 12.904 at
+    batch=1 against 0.4332 optimized), and batch size follows load, which follows
+    time of day. The ladder is INVERTED at peak, when the cloud is saturated and
+    cheap per query, and MONOTONIC at night, when it is idle and expensive.
+
+    So a static architecture is wrong twice a day: a four-tier chain wastes the
+    middle tiers at peak, and a two-tier chain pays a cold cloud at night.
+
+    The fix is not to change what is installed -- you cannot uninstall an ONU at
+    3pm -- but to BYPASS it when the ladder currently says so, re-using Test 4's
+    criterion with a current energy estimate instead of a fixed one:
+
+        bypass to d  iff  E_d(t) < E_onu + beta*E_fog(t) + beta^2*E_cloud(t)
+
+    The load signal needs no telemetry: RecServe already gives each tier its own
+    escalation frequency, and section 6 of the design doc argues that is a
+    causally grounded proxy for the target tier's batch level, since a target's
+    load IS the aggregate escalation traffic of its children.
+
+    ASSUMPTION, and it is not measured here: the day/night load profile. Section
+    6 flags it as standard in telecom capacity planning but unverified for this
+    deployment. What IS measured is the 30x batch swing it is applied to.
+    """
+    import math
+
+    print("\n" + "=" * 78)
+    print("TEST 8 -- the ladder varies over the day; static architecture vs bypass")
+    print("=" * 78)
+    print("Cloud cost interpolated over the measured batch swing (0.43 -> 12.90")
+    print("J/token, QwQ-32B) by a synthetic 24h load profile. Fog follows its own")
+    print("measured swing. User and ONU are load-independent (batch=1 devices).\n")
+
+    E_BASE = {"user": 14.8, "onu": 196.0}
+
+    def ladder_at(load: float) -> dict[str, float]:
+        """load in [0,1]: 1 = peak (saturated, batched, cheap per query)."""
+        # 200 output tokens; cloud spans its measured batch=1 -> optimized range.
+        cloud = (12.904 * (1 - load) + 0.4332 * load) * 200 / 10.0
+        fog = (8.53 * (1 - load) + 2.74 * load) * 200 / 20.0
+        return {**E_BASE, "fog": fog, "cloud": cloud}
+
+    beta = 0.2
+    half = len(rows) // 2
+    test = rows[half:]
+
+    # 24 hourly buckets, load peaking in the evening.
+    hours = [(h, 0.5 + 0.5 * math.sin((h - 6) / 24 * 2 * math.pi)) for h in range(24)]
+
+    totals = {"static 4-tier": 0.0, "static 2-tier (user->cloud)": 0.0, "dynamic bypass": 0.0}
+    acc = {k: 0.0 for k in totals}
+    chose_bypass = 0
+
+    for _, load in hours:
+        E = ladder_at(load)
+        r4 = replay_chain(test, TIERS, beta, 10000, E)
+        r2 = replay_chain(test, ("user", "cloud"), beta, 10000, E)
+        # Test 4's criterion, evaluated with the CURRENT ladder.
+        budget = E["onu"] + beta * E["fog"] + beta * beta * E["cloud"]
+        bypass = E["cloud"] < budget
+        chose_bypass += int(bypass)
+        rd = r2 if bypass else r4
+
+        totals["static 4-tier"] += r4["J_per_query"]
+        totals["static 2-tier (user->cloud)"] += r2["J_per_query"]
+        totals["dynamic bypass"] += rd["J_per_query"]
+        acc["static 4-tier"] += r4["accuracy"]
+        acc["static 2-tier (user->cloud)"] += r2["accuracy"]
+        acc["dynamic bypass"] += rd["accuracy"]
+
+    print(f"  {'hour':>5} {'load':>5} {'E_cloud':>9} {'E_onu':>7} {'inverted?':>10} "
+          f"{'4-tier J':>9} {'2-tier J':>9}")
+    for h, load in hours[::3]:
+        E = ladder_at(load)
+        r4 = replay_chain(test, TIERS, beta, 10000, E)
+        r2 = replay_chain(test, ("user", "cloud"), beta, 10000, E)
+        print(f"  {h:>5} {load:>5.2f} {E['cloud']:>9.1f} {E['onu']:>7.1f} "
+              f"{str(E['cloud'] < E['onu']):>10} "
+              f"{r4['J_per_query']:>9.1f} {r2['J_per_query']:>9.1f}")
+
+    n = len(hours)
+    print(f"\n  Averaged over 24h (beta={beta}):")
+    print(f"  {'policy':>30} {'J/query':>9} {'accuracy':>9} {'vs 4-tier':>10}")
+    base = totals["static 4-tier"] / n
+    for k in ("static 4-tier", "static 2-tier (user->cloud)", "dynamic bypass"):
+        j, a = totals[k] / n, acc[k] / n
+        print(f"  {k:>30} {j:>9.2f} {a:>9.4f} {base / j:>9.2f}x")
+    print(f"\n  the bypass criterion fired in {chose_bypass}/{n} hourly buckets")
 
 
 if __name__ == "__main__":
