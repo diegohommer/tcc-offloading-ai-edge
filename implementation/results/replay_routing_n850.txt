@@ -123,3 +123,40 @@ quantile from few samples; the controller regulates the rate directly.
     closed loop, window=10000, g=0.5             0.247     0.353    0.356   0.056  0.9247  0.6381
     closed loop, window=200,   g=0.5             0.271     0.365    0.351   0.051  0.9224  0.6264
     closed loop, window=50,    g=0.5             0.353     0.384    0.359   0.059  0.9365  0.6343
+
+==============================================================================
+TEST 7 -- which tiers should exist at all?
+==============================================================================
+Every subset that keeps the entry tier, replayed at several betas.
+Chosen on one half, reported on the held-out half.
+
+
+SST-2 RAPL ladder (monotonic, measured on this CPU)
+                       chain  beta  test acc  test J/q
+  -- Pareto frontier (chosen on train, reported on held-out) --
+                        user  0.10    0.9153    0.2195
+                        user  0.20    0.9153    0.2195
+                        user  0.30    0.9153    0.2195
+                        user  0.50    0.9153    0.2195
+                   user->onu  0.10    0.9318    0.2645
+              user->onu->fog  0.10    0.9365    0.3055
+  -- full 4-tier chain (what RecServe's architecture fixes) --
+       user->onu->fog->cloud  0.10    0.9388    0.3213
+       user->onu->fog->cloud  0.20    0.9506    0.4304
+       user->onu->fog->cloud  0.30    0.9529    0.6389
+       user->onu->fog->cloud  0.50    0.9412    1.2572
+
+generative/PON ladder (inverted) -- sensitivity, not a measurement
+                       chain  beta  test acc  test J/q
+  -- Pareto frontier (chosen on train, reported on held-out) --
+                        user  0.10    0.9153   14.8000
+                        user  0.20    0.9153   14.8000
+                        user  0.30    0.9153   14.8000
+                        user  0.50    0.9153   14.8000
+                 user->cloud  0.10    0.9294   16.9629
+                 user->cloud  0.20    0.9341   19.0817
+  -- full 4-tier chain (what RecServe's architecture fixes) --
+       user->onu->fog->cloud  0.10    0.9388   39.3112
+       user->onu->fog->cloud  0.20    0.9506   63.7176
+       user->onu->fog->cloud  0.30    0.9529   92.0421
+       user->onu->fog->cloud  0.50    0.9412  142.1385

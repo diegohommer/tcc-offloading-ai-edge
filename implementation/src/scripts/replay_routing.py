@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Five offline tests over the SST-2 policy matrix. No GPU, no network, no billing.
+"""Seven offline tests over the SST-2 policy matrix. No GPU, no network, no billing.
 
 HEADLINE, stated up front because four of the five tests land on it:
 
@@ -14,8 +14,14 @@ HEADLINE, stated up front because four of the five tests land on it:
       * per-tier beta vector       -> reach is a PRODUCT, so tiers
                                       cannot be targeted separately  (Test 5)
 
-    What is left as a real lever is beta itself, the history window (Test 2),
-    and which tiers exist at all.
+      * closed-loop rate control   -> a shorter window is simpler
+                                      AND better                    (Test 6)
+
+    Test 7 is the exception, and it is the one positive mechanism here: choosing
+    WHICH TIERS EXIST changes the E_k vector rather than the traffic profile
+    beta^k imposes on it, so the degeneracy argument does not reach it. On the
+    measured monotonic ladder the full chain is justified; on an inverted ladder
+    the middle tiers are Pareto-dominated and two tiers deliver 3.3x less energy.
 
 
 Everything here is pure replay against results/traces/sst2_test.matrix.jsonl,
@@ -565,6 +571,101 @@ def main() -> None:
     test4_when_does_skipping_pay(rows)
     test5_per_tier_beta(rows)
     test6_closed_loop(rows)
+    test7_which_tiers_should_exist(rows)
+
+
+
+
+def replay_chain(rows: list[dict], chain: tuple[str, ...], beta: float, window: int,
+                 energy: dict[str, float]) -> dict:
+    """Replay over an ARBITRARY tier chain, not the fixed user->onu->fog->cloud.
+
+    This is the one lever left. Five mechanisms failed because they tried to make
+    the DECISION RULE energy-aware, and beta already owns that rule. Choosing
+    which tiers exist is different in kind: it changes the E_k vector itself
+    rather than the traffic profile beta^k imposes on it, so the beta-degeneracy
+    argument does not apply to it.
+
+    It is also the only lever that can exploit a non-monotonic energy ladder. A
+    beta vector cannot (Test 5: reach is a product) and skipping cannot pay
+    unless the ladder already inverts (Test 4). Deleting a tier, by contrast,
+    removes its term from the sum outright and promotes every tier above it to a
+    shallower -- hence more heavily trafficked -- position.
+    """
+    nxt = {chain[i]: chain[i + 1] for i in range(len(chain) - 1)}
+    history: dict[str, list[float]] = {t: [] for t in chain}
+    n_correct = 0
+    energy_total = 0.0
+    final = {t: 0 for t in chain}
+
+    for row in rows:
+        tier = chain[0]
+        while True:
+            energy_total += energy[tier]
+            cell = row["tiers"][tier]
+            up = nxt.get(tier)
+            escalate = False
+            if up is not None and len(history[tier]) > 1:
+                escalate = cell["confidence"] < quantile(sorted(history[tier]), beta)
+            history[tier].append(cell["confidence"])
+            if len(history[tier]) > window:
+                history[tier].pop(0)
+            if escalate:
+                tier = up
+                continue
+            n_correct += int(cell["correct"])
+            final[tier] += 1
+            break
+
+    n = len(rows)
+    return {"accuracy": n_correct / n, "J_per_query": energy_total / n,
+            "final_share": {t: final[t] / n for t in chain}}
+
+
+def test7_which_tiers_should_exist(rows: list[dict]) -> None:
+    """Choose the SUBSET of tiers that minimises energy under an accuracy floor."""
+    import itertools
+
+    print("\n" + "=" * 78)
+    print("TEST 7 -- which tiers should exist at all?")
+    print("=" * 78)
+    print("Every subset that keeps the entry tier, replayed at several betas.")
+    print("Chosen on one half, reported on the held-out half.\n")
+
+    half = len(rows) // 2
+    train, test = rows[:half], rows[half:]
+
+    for ladder, E in (
+        ("SST-2 RAPL ladder (monotonic, measured on this CPU)", ENERGY_J),
+        ("generative/PON ladder (inverted) -- sensitivity, not a measurement",
+         {"user": 14.8, "onu": 196.0, "fog": 75.7, "cloud": 18.76}),
+    ):
+        print(f"\n{ladder}")
+        results = []
+        for r in range(1, len(TIERS) + 1):
+            for chain in itertools.combinations(TIERS, r):
+                if chain[0] != "user":
+                    continue
+                for beta in (0.1, 0.2, 0.3, 0.5):
+                    results.append((chain, beta, replay_chain(train, chain, beta, 10000, E)))
+
+        front = [(c, b, t) for c, b, t in results
+                 if not any(o[2]["J_per_query"] < t["J_per_query"]
+                            and o[2]["accuracy"] >= t["accuracy"] for o in results)]
+        front.sort(key=lambda x: x[2]["J_per_query"])
+        full = [(c, b, t) for c, b, t in results if c == TIERS]
+
+        print(f"  {'chain':>26} {'beta':>5} {'test acc':>9} {'test J/q':>9}")
+        print("  -- Pareto frontier (chosen on train, reported on held-out) --")
+        for chain, beta, _ in front[:6]:
+            te = replay_chain(test, chain, beta, 10000, E)
+            print(f"  {'->'.join(chain):>26} {beta:>5.2f} "
+                  f"{te['accuracy']:>9.4f} {te['J_per_query']:>9.4f}")
+        print("  -- full 4-tier chain (what RecServe's architecture fixes) --")
+        for chain, beta, _ in sorted(full, key=lambda x: x[1]):
+            te = replay_chain(test, chain, beta, 10000, E)
+            print(f"  {'->'.join(chain):>26} {beta:>5.2f} "
+                  f"{te['accuracy']:>9.4f} {te['J_per_query']:>9.4f}")
 
 
 if __name__ == "__main__":
