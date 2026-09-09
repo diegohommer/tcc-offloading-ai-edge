@@ -1,13 +1,23 @@
 # Energy-aware offloading policy — design and results
 
-**Status (2026-08-30): investigation complete, result is negative.** The
-proposed mechanism — weighting RecServe's confidence threshold by an energy
-cost — turned out to be *redundant with RecServe's existing β parameter*.
-See **§14** (in Portuguese) for that result and what to do about it.
+**Status (2026-09-09): ver §15, que consolida onde o trabalho chegou.**
 
-This document is now a record of the investigation, not a proposal. §1–§11
-define the mechanism and the reasoning behind it (needed to understand §14);
-§12–§14 are the measured results.
+A proposta original — ponderar o limiar de confiança do RecServe por um custo de
+energia — é **redundante com o próprio β** (§14). Mais seis mecanismos foram
+testados depois disso; cinco também caíram, pela mesma causa estrutural, e o que
+sobrou é um mecanismo de **contorno de camada ciente de carga**, implementado e
+medido (§15).
+
+Duas correções importantes registradas na §15, obtidas lendo o artigo do RecServe
+integralmente: várias propriedades que pareciam achados nossos **já estão no
+artigo** (a cota de tráfego é a Assumption 2; a janela É ablacionada; o controle
+em malha fechada e a interface por orçamento já são propostos). O que o artigo
+de fato não faz é modelar energia — "communication burden" aparece 68 vezes,
+energia 2 vezes, ambas sobre outros trabalhos.
+
+Este documento é um registro da investigação, não uma proposta. §1–§11 definem o
+mecanismo original e o raciocínio (necessários para entender §14); §12–§15 são os
+resultados medidos.
 
 ## Summary — the idea, in plain terms
 
@@ -628,3 +638,251 @@ E o restante do trabalho continua de pé:
 
 A opção 2 é a que mais preserva a proposta original. A opção 1 é a de menor
 risco dado o prazo.
+
+## 15. Onde o trabalho chegou (2026-09-09)
+
+Esta seção consolida o que foi medido, o que foi refutado, e o que a literatura
+já cobre. Escrita em português pelo mesmo motivo da §14: é material de discussão
+com o orientador.
+
+**Resumo em uma frase.** Sete mecanismos foram testados; seis foram refutados
+pela mesma causa estrutural, e o que sobrou é um único mecanismo cujo
+comportamento depende de uma variável que a literatura não distingue — se a
+camada de nuvem é elástica ou de capacidade fixa.
+
+Tudo abaixo é reproduzível offline com um comando, sobre a matriz commitada:
+
+```
+python src/scripts/replay_routing.py results/matrices/sst2_test.matrix.n850.jsonl
+```
+
+Sem GPU, sem rede, sem custo. Saída completa em `results/replay_routing_n850.txt`.
+
+### 15.1 A correção que reordena tudo: o que o artigo já diz
+
+Antes de reivindicar qualquer coisa, o artigo do RecServe foi lido integralmente
+(13 mil palavras, `pdftotext`) e o repositório liberado foi analisado. Quatro
+afirmações que circularam durante a investigação estavam erradas:
+
+| afirmação | realidade no artigo |
+|---|---|
+| "β é cota de tráfego" seria achado nosso | está lá, **Assumption 2**: `P(C ≤ T(β)) ≈ β` |
+| "a janela nunca foi ablacionada" | **falso** — Seção VI-B, Fig. 4, varre k de 10 a 10000 |
+| propor controle em malha fechada | **já proposto**, Seção VII-C-2, controle proporcional sobre β |
+| propor interface por orçamento | **já proposto**, mas para orçamento de *comunicação* |
+
+O que sobra da leitura, e é sólido: o artigo menciona **"communication burden"
+68 vezes e energia 2 vezes**, ambas na seção de trabalhos relacionados
+descrevendo *outros* artigos. **O RecServe nunca modela energia.**
+
+Duas observações menores mas verificadas:
+
+- A ablação da Fig. 4 é feita em fluxo **estacionário**. A Assumption 1 assume
+  explicitamente confiança i.i.d. com o histórico. A conclusão deles ("a carga
+  fica estável conforme k varia") é exatamente o que a lei da cota prevê sob
+  estacionariedade — ablacionaram no único regime em que k não pode importar.
+- O **código liberado tem 183 linhas e não implementa nada** da calibração da
+  Seção VII-C-2. E usa `max_history_size=10000`, fora da faixa 300–1000 que o
+  próprio artigo recomenda.
+
+### 15.2 O que foi medido
+
+Replay sobre a matriz SST-2 (n=850, quatro camadas, energia RAPL medida nesta
+máquina). Divisão treino/teste onde há parâmetros a ajustar.
+
+**Teste 1 — a lei da cota, confirmada em dados reais.** Taxa de escalonamento
+acompanha β em toda camada; alcance acompanha β^k. Confirma a Assumption 2 do
+artigo empiricamente, o que o artigo não faz.
+
+**Teste 2 — violação da Assumption 1.** Fluxo com uma mudança de regime no meio
+(mesmas consultas, só a ordem de chegada muda, embaralhadas dentro de cada
+regime para não virar rampa monotônica):
+
+| janela | taxa entregue | erro vs alvo 0.30 | J/consulta |
+|---|---|---|---|
+| 10000 (padrão do código) | 0.575 | 0.275 | 1.207 |
+| 200 | 0.380 | 0.080 | 0.903 |
+| 20 | **0.318** | **0.018** | **0.631** |
+
+Pedindo 30%, o padrão entrega 57,5% e gasta 91% mais energia. **Este é o teste
+que o artigo não faz** — ele ablaciona k, mas só onde a Assumption 1 vale.
+
+### 15.3 O que foi refutado, e a causa comum
+
+| mecanismo | resultado |
+|---|---|
+| limiar ponderado por energia (§14) | redundante com o β |
+| salto de destino incondicional (Teste 3) | **1,1–1,7× mais caro**, e menos preciso |
+| β vetorial por camada (Teste 5) | deltas de −0.0047 a +0.0024 = ruído |
+| controle em malha fechada (Teste 6) | **pior que encurtar a janela** (erro 0.056 vs 0.018) |
+| sono da ONU (Teste 8 lateral) | real, mas 2–3% |
+
+**Não são cinco acidentes.** Todos morrem porque o decaimento β^k já torna os
+eventos caros raros por construção — a 30%, só 2,7% das consultas chegam à
+nuvem. Otimizações que agem *dentro de um escalonamento* têm pouco a economizar.
+
+Dois erros de raciocínio meus, registrados porque são instrutivos:
+
+- O salto foi precificado contra a travessia completa (4,588 J), ignorando que a
+  própria lei β^k diz que quase ninguém a completa.
+- O Teste 5 falha por razão **estrutural**, não estatística: o alcance é um
+  **produto**, então para entregar tráfego a uma camada superior barata é
+  obrigatório pagar a camada cara abaixo dela. Nenhum vetor de β desacopla isso.
+
+### 15.4 O mecanismo que sobrou
+
+Do Teste 4, o critério de quando contornar uma camada:
+
+```
+contornar para d  sse  E_d < E_onu + β·E_fog + β²·E_cloud
+```
+
+O destino tem que ser mais barato que a **próxima** camada mais a cauda
+descontada — não que a travessia completa. Avaliado com energia corrente, não
+fixa.
+
+**Implementado** em `traced_recursive_serve.py`: **+32 linhas, ~6 de lógica**, e
+verificado como superconjunto estrito:
+
+| configuração | destino a partir de `user` |
+|---|---|
+| `energy_now=None` | `onu` — RecServe exato |
+| escada invertida | `cloud` — contorna onu e fog |
+| escada monotônica | `onu` — permanece stepwise |
+
+### 15.5 A variável que decide: quem é dono da nuvem
+
+**Não são dois sistemas.** É um mecanismo só, e ele degenera corretamente em
+cada regime. Perfil de carga de 24 h, β=0.2, custos ociosos obtidos aplicando a
+**razão de variação medida** de cada camada ao seu ponto de produção em classe
+(fog ×3,1; nuvem ×29,8 — ambos de `layer_energy.yaml`).
+
+**A. Nuvem de capacidade fixa** (datacenter do próprio ISP — o cenário do
+Pakpahan). Não autoescala, batch segue a carga, escada só inverte no pico.
+
+| política | J/consulta | acurácia | vs 4 camadas |
+|---|---|---|---|
+| 4 camadas estáticas | 84,93 | 0.9506 | 1,00× |
+| 2 camadas estáticas | **295,10** | 0.9341 | **0,29×** |
+| contorno dinâmico | 81,67 | 0.9485 | 1,04× |
+
+Critério dispara em **3/24** baldes. O dinâmico se justifica, mas ganha só 4%.
+
+**B. Nuvem elástica** (API pública). Autoescala, fica no ponto de produção, que
+já está abaixo da ONU. Escada **permanentemente** invertida.
+
+| política | J/consulta | acurácia | vs 4 camadas |
+|---|---|---|---|
+| 4 camadas estáticas | 68,72 | 0.9506 | 1,00× |
+| 2 camadas estáticas | **33,01** | 0.9341 | **2,08×** |
+| contorno dinâmico | 33,01 | 0.9341 | 2,08× |
+
+Critério dispara em **24/24** — o dinâmico **colapsa no estático sozinho**, sem
+precisar ser configurado para isso. É essa degeneração automática que torna o
+mecanismo único, e não uma escolha entre dois sistemas.
+
+**O achado acionável:** a mesma escolha de duas camadas que ganha 2,08× sob
+nuvem elástica **perde 3,5× sob nuvem de capacidade fixa**. Errar o regime custa
+mais do que acertar o mecanismo.
+
+Isso vindica a §6, que já argumentava que o batching contínuo mantém a nuvem
+hyperscale quase saturada.
+
+### 15.6 O sono da ONU, como seção de PON
+
+Parâmetros do padrão (Hirafuji et al., *IEEE Comm Mag* 2015, Tabela 1):
+T_sleep 10 ms, T_aware 5 ms, T_watch 10 s, P_sleep 5% do ativo, T_transinit 3 ms.
+O alvo de projeto declarado é **56 ms** de atraso fim-a-fim, "aceitável para
+VoIP".
+
+Uma resposta de LLM em cascata leva ~27 s — **500× esse orçamento**. Existe uma
+janela de sono profundo que o protocolo não sabe que existe, e a decisão de
+escalonamento é o sinal que falta.
+
+Durante 21 s de espera: esquema atual ~1,88 W (47% do ativo, ciclando a 10 ms)
+contra 0,20 W se pudesse dormir fundo. **1,68 W recuperáveis, 27,45 J por
+consulta que passa da ONU.**
+
+**Mas a lei da cota morde aqui também:** só β² das consultas abrem essa janela.
+Média: **1,0–2,5 J/consulta, ou 2–3%.**
+
+**Importante — não soma com o contorno.** Medido: sem contorno, 4% das consultas
+esperam 16,33 s (1,10 J/consulta em média); com contorno, 20% esperam 3,00 s
+(1,01 J). Os dois colhem o mesmo tempo ocioso por lados opostos — o contorno o
+elimina, o sono o aproveita. **Não escrever que somam.**
+
+Valor real da seção: hoje a rede aparece como 0,1 J/salto num orçamento de
+~200 J — decorativa. Isso a coloca no jogo, com fundamento no padrão ITU-T.
+
+### 15.7 Verificação de novidade (seis buscas, não uma revisão sistemática)
+
+Honestidade obrigatória sobre o que já está publicado:
+
+| item | status |
+|---|---|
+| nuvem em lote mais barata que a borda | **publicado**, e em disputa |
+| escada invertida edge/fog/cloud | **publicado** — [Adaptive DNN Partitioning](https://arxiv.org/pdf/2605.09623): edge 0,86–8,00 J, fog 0,24–2,55 J, cloud 0,009–0,037 J (para DNN) |
+| travessia de cascata desperdiça computação | **publicado** — literatura de cascade routing; [CascadeDebate](https://arxiv.org/html/2604.12262v1) ataca "premature escalations" |
+| distinção nuvem elástica vs capacidade fixa | não apareceu nas buscas |
+| sono de ONU acoplado à latência de LLM | não apareceu |
+| teste da violação da Assumption 1 do RecServe | não apareceu |
+
+A disputa sobre borda vs nuvem é **inteiramente explicada por modelar batching
+ou não**: o [estudo Cloud versus Edge (ACM SIGMETRICS PER)](https://dl.acm.org/doi/10.1145/3764944.3764950)
+acha 90% a favor da borda, mas usa modelos idênticos dos dois lados e declara na
+seção de metodologia que processa *"without batching operations for a fair
+comparison"* — o regime batch=1, onde a nuvem é 30× pior que seu ponto de
+produção. Já [Intelligence per Watt](https://arxiv.org/abs/2511.07885) acha 1,4×
+a favor da nuvem em modelos idênticos.
+
+**Consequência para o enquadramento:** a premissa "nuvem em lote é mais barata"
+é emprestada e citada, não reivindicada. O que se reivindica é a consequência
+para uma **cascata com travessia obrigatória**, que nenhum desses trabalhos
+modela — todos comparam dois pontos, não uma hierarquia.
+
+### 15.8 Enquadramento recomendado
+
+Um TCC de graduação não precisa de novidade em nível de publicação. O
+enquadramento que os dados sustentam:
+
+> **Replicação e caracterização energética do RecServe em cenário PON.**
+> Verificamos empiricamente as premissas do artigo, medimos energia por camada
+> em primeira mão, e mostramos que a conclusão arquitetural depende de uma
+> variável que a literatura não distingue: se a camada de nuvem é elástica ou de
+> capacidade fixa.
+
+Estrutura sugerida:
+
+1. Caracterização de energia entre camadas — literatura verificada + medição
+   própria via RAPL e NVML
+2. Verificação empírica das premissas do RecServe — Assumption 2 confirmada,
+   Assumption 1 violada sob mudança de carga (91% de energia extra)
+3. O mecanismo de contorno ciente de carga — critério, implementação
+   (+32 linhas, superconjunto estrito), e os dois regimes
+4. Resultados negativos unificados — cinco mecanismos, uma causa estrutural
+5. Sono da ONU — seção de PON, 2–3%, honestamente rotulada
+
+O capítulo 4 não é enchimento: cinco mecanismos independentes falhando pela
+*mesma* causa identificada vale mais, e é mais defensável, que um mecanismo com
++0,3%.
+
+### 15.9 O que falta, e o que custa
+
+| pendência | custo |
+|---|---|
+| Perfil de carga real (Azure, BurstGPT, Mooncake) em vez do sintético | replay offline, grátis |
+| Confirmar o Teste 2 na cascata generativa, não só em classificação | precisa recoletar traces GSM8K (~10 h de CPU local, grátis) |
+| Fechar a curva de energia do fog (batches 8/16/32) | ~$0,13 no Modal, bloqueado no workspace desabilitado |
+| Camada cloud no GSM8K | cluster do GPPD, ou API hosted (~$1) |
+| Busca dirigida por "elasticity-aware offloading" e "autoscaling-aware" | antes de reivindicar 15.7 |
+
+**Ressalvas que precisam constar no texto:**
+
+- O perfil de carga de 24 h é **sintético e não verificado**. As razões de
+  variação e os pontos de produção a que ele é aplicado **são medidos**.
+- A rodada de escada invertida cruza energias da literatura generativa com
+  acurácias de classificadores — **análise de sensibilidade, não medição**. A
+  rodada monotônica é totalmente medida e chega à conclusão oposta, que é
+  precisamente o argumento.
+- A parte óptica da ONU é fração pequena do consumo se ela for o mesmo
+  equipamento que roda o modelo de 8B.
