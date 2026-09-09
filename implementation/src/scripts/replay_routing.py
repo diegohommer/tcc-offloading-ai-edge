@@ -670,97 +670,97 @@ def test7_which_tiers_should_exist(rows: list[dict]) -> None:
 
 
 def test8_time_varying_ladder(rows: list[dict]) -> None:
-    """The energy ladder is not static -- so is tier-set selection even valid?
+    """Is the tier decision static or dynamic? It depends on who owns the cloud.
 
-    Test 7 chose a tier subset as if the ladder were fixed. It is not. Cloud
-    J/token swings ~30x with batch size (layer_energy.yaml: QwQ-32B, 12.904 at
-    batch=1 against 0.4332 optimized), and batch size follows load, which follows
-    time of day. The ladder is INVERTED at peak, when the cloud is saturated and
-    cheap per query, and MONOTONIC at night, when it is idle and expensive.
+    Test 7 chose a tier subset as if the energy ladder were fixed. The objection
+    is that it is not: cloud J/token swings ~30x with batch size, batch follows
+    load, load follows time of day.
 
-    So a static architecture is wrong twice a day: a four-tier chain wastes the
-    middle tiers at peak, and a two-tier chain pays a cold cloud at night.
+    But that objection assumes the cloud's batch level tracks demand, and for an
+    ELASTIC provider it does not: hyperscalers autoscale, adding replicas rather
+    than growing batches, so utilisation -- and therefore J/token -- stays near a
+    production point. Section 6 of the design doc already concluded exactly this:
+    "continuous batching keeps hyperscale near-saturated in practice".
 
-    The fix is not to change what is installed -- you cannot uninstall an ONU at
-    3pm -- but to BYPASS it when the ladder currently says so, re-using Test 4's
-    criterion with a current energy estimate instead of a fixed one:
+    So there are two deployments, and they give opposite answers:
 
-        bypass to d  iff  E_d(t) < E_onu + beta*E_fog(t) + beta^2*E_cloud(t)
+      A. FIXED-CAPACITY cloud (an ISP's own datacentre, the setting Pakpahan's
+         architecture actually describes). Cannot autoscale, so batch really does
+         follow load and the ladder swings.
+      B. ELASTIC cloud (a public API). Stays near its production point, so the
+         ladder does not swing -- and since that point is already below the ONU,
+         it is permanently inverted.
 
-    The load signal needs no telemetry: RecServe already gives each tier its own
-    escalation frequency, and section 6 of the design doc argues that is a
-    causally grounded proxy for the target tier's batch level, since a target's
-    load IS the aggregate escalation traffic of its children.
+    METHOD. Rather than inventing absolute numbers, each tier's idle cost is its
+    in-class production point scaled by that tier's own MEASURED swing ratio:
 
-    ASSUMPTION, and it is not measured here: the day/night load profile. Section
-    6 flags it as standard in telecom capacity planning but unverified for this
-    deployment. What IS measured is the 30x batch swing it is applied to.
+      fog   75.70 J/query (A30, batch=1000)   x 3.1  (RTX 4090, batch 20 -> 1)
+      cloud 79.78 J/query (Oviedo, 4xH100)    x 29.8 (QwQ-32B, opt -> batch=1)
+
+    The production points and the swing ratios are both from layer_energy.yaml.
+    The 24h load profile is NOT measured -- section 6 flags it as standard
+    telecom practice but unverified here, and real traces (Azure, BurstGPT,
+    Mooncake) would replace it.
     """
     import math
 
     print("\n" + "=" * 78)
-    print("TEST 8 -- the ladder varies over the day; static architecture vs bypass")
+    print("TEST 8 -- does the tier decision have to be dynamic?")
     print("=" * 78)
-    print("Cloud cost interpolated over the measured batch swing (0.43 -> 12.90")
-    print("J/token, QwQ-32B) by a synthetic 24h load profile. Fog follows its own")
-    print("measured swing. User and ONU are load-independent (batch=1 devices).\n")
 
-    E_BASE = {"user": 14.8, "onu": 196.0}
+    E_USER, E_ONU = 14.8, 196.0
+    FOG_PROD, FOG_SWING = 75.70, 8.53 / 2.74
+    CLOUD_PROD, CLOUD_SWING = 79.78, 12.904 / 0.4332
 
-    def ladder_at(load: float) -> dict[str, float]:
-        """load in [0,1]: 1 = peak (saturated, batched, cheap per query)."""
-        # 200 output tokens; cloud spans its measured batch=1 -> optimized range.
-        cloud = (12.904 * (1 - load) + 0.4332 * load) * 200 / 10.0
-        fog = (8.53 * (1 - load) + 2.74 * load) * 200 / 20.0
-        return {**E_BASE, "fog": fog, "cloud": cloud}
+    def ladder(load: float, elastic_cloud: bool) -> dict[str, float]:
+        """load in [0,1]: 1 = peak = saturated = cheapest per query."""
+        fog = FOG_PROD * (FOG_SWING - (FOG_SWING - 1) * load)
+        cloud = CLOUD_PROD if elastic_cloud else \
+            CLOUD_PROD * (CLOUD_SWING - (CLOUD_SWING - 1) * load)
+        return {"user": E_USER, "onu": E_ONU, "fog": fog, "cloud": cloud}
 
     beta = 0.2
-    half = len(rows) // 2
-    test = rows[half:]
-
-    # 24 hourly buckets, load peaking in the evening.
+    test = rows[len(rows) // 2:]
     hours = [(h, 0.5 + 0.5 * math.sin((h - 6) / 24 * 2 * math.pi)) for h in range(24)]
 
-    totals = {"static 4-tier": 0.0, "static 2-tier (user->cloud)": 0.0, "dynamic bypass": 0.0}
-    acc = {k: 0.0 for k in totals}
-    chose_bypass = 0
+    for scenario, elastic in (("A. FIXED-CAPACITY cloud (ISP datacentre)", False),
+                              ("B. ELASTIC cloud (public API, autoscaled)", True)):
+        print(f"\n{scenario}")
+        print(f"  {'hour':>5} {'load':>5} {'E_fog':>8} {'E_cloud':>9} {'inverted?':>10} "
+              f"{'4-tier J':>9} {'2-tier J':>9}")
+        for h, load in hours[::4]:
+            E = ladder(load, elastic)
+            r4 = replay_chain(test, TIERS, beta, 10000, E)
+            r2 = replay_chain(test, ("user", "cloud"), beta, 10000, E)
+            print(f"  {h:>5} {load:>5.2f} {E['fog']:>8.1f} {E['cloud']:>9.1f} "
+                  f"{str(E['cloud'] < E_ONU):>10} "
+                  f"{r4['J_per_query']:>9.1f} {r2['J_per_query']:>9.1f}")
 
-    for _, load in hours:
-        E = ladder_at(load)
-        r4 = replay_chain(test, TIERS, beta, 10000, E)
-        r2 = replay_chain(test, ("user", "cloud"), beta, 10000, E)
-        # Test 4's criterion, evaluated with the CURRENT ladder.
-        budget = E["onu"] + beta * E["fog"] + beta * beta * E["cloud"]
-        bypass = E["cloud"] < budget
-        chose_bypass += int(bypass)
-        rd = r2 if bypass else r4
+        tot = {"static 4-tier": 0.0, "static 2-tier": 0.0, "dynamic bypass": 0.0}
+        acc = dict.fromkeys(tot, 0.0)
+        fired = 0
+        for _, load in hours:
+            E = ladder(load, elastic)
+            r4 = replay_chain(test, TIERS, beta, 10000, E)
+            r2 = replay_chain(test, ("user", "cloud"), beta, 10000, E)
+            budget = E["onu"] + beta * E["fog"] + beta * beta * E["cloud"]
+            bypass = E["cloud"] < budget
+            fired += int(bypass)
+            rd = r2 if bypass else r4
+            for k, r in (("static 4-tier", r4), ("static 2-tier", r2), ("dynamic bypass", rd)):
+                tot[k] += r["J_per_query"]
+                acc[k] += r["accuracy"]
 
-        totals["static 4-tier"] += r4["J_per_query"]
-        totals["static 2-tier (user->cloud)"] += r2["J_per_query"]
-        totals["dynamic bypass"] += rd["J_per_query"]
-        acc["static 4-tier"] += r4["accuracy"]
-        acc["static 2-tier (user->cloud)"] += r2["accuracy"]
-        acc["dynamic bypass"] += rd["accuracy"]
-
-    print(f"  {'hour':>5} {'load':>5} {'E_cloud':>9} {'E_onu':>7} {'inverted?':>10} "
-          f"{'4-tier J':>9} {'2-tier J':>9}")
-    for h, load in hours[::3]:
-        E = ladder_at(load)
-        r4 = replay_chain(test, TIERS, beta, 10000, E)
-        r2 = replay_chain(test, ("user", "cloud"), beta, 10000, E)
-        print(f"  {h:>5} {load:>5.2f} {E['cloud']:>9.1f} {E['onu']:>7.1f} "
-              f"{str(E['cloud'] < E['onu']):>10} "
-              f"{r4['J_per_query']:>9.1f} {r2['J_per_query']:>9.1f}")
-
-    n = len(hours)
-    print(f"\n  Averaged over 24h (beta={beta}):")
-    print(f"  {'policy':>30} {'J/query':>9} {'accuracy':>9} {'vs 4-tier':>10}")
-    base = totals["static 4-tier"] / n
-    for k in ("static 4-tier", "static 2-tier (user->cloud)", "dynamic bypass"):
-        j, a = totals[k] / n, acc[k] / n
-        print(f"  {k:>30} {j:>9.2f} {a:>9.4f} {base / j:>9.2f}x")
-    print(f"\n  the bypass criterion fired in {chose_bypass}/{n} hourly buckets")
-
+        n = len(hours)
+        base = tot["static 4-tier"] / n
+        print(f"\n  averaged over 24h (beta={beta}):")
+        print(f"  {'policy':>20} {'J/query':>9} {'accuracy':>9} {'vs 4-tier':>10}")
+        for k in tot:
+            print(f"  {k:>20} {tot[k] / n:>9.2f} {acc[k] / n:>9.4f} {base / (tot[k] / n):>9.2f}x")
+        print(f"  bypass criterion fired in {fired}/{n} buckets", end="")
+        print("  -> dynamic == static 2-tier, adds nothing" if fired == n
+              else ("  -> dynamic == static 4-tier, adds nothing" if fired == 0
+                    else "  -> genuinely mixed, dynamic earns its place"))
 
 if __name__ == "__main__":
     main()

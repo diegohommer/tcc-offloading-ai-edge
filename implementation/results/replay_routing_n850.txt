@@ -162,26 +162,37 @@ generative/PON ladder (inverted) -- sensitivity, not a measurement
        user->onu->fog->cloud  0.50    0.9412  142.1385
 
 ==============================================================================
-TEST 8 -- the ladder varies over the day; static architecture vs bypass
+TEST 8 -- does the tier decision have to be dynamic?
 ==============================================================================
-Cloud cost interpolated over the measured batch swing (0.43 -> 12.90
-J/token, QwQ-32B) by a synthetic 24h load profile. Fog follows its own
-measured swing. User and ONU are load-independent (batch=1 devices).
 
-   hour  load   E_cloud   E_onu  inverted?  4-tier J  2-tier J
-      0  0.00     258.1   196.0      False      67.6      73.7
-      3  0.15     221.6   196.0      False      66.6      65.4
-      6  0.50     133.4   196.0       True      64.3      45.2
-      9  0.85      45.2   196.0       True      62.0      25.1
-     12  1.00       8.7   196.0       True      61.1      16.8
-     15  0.85      45.2   196.0       True      62.0      25.1
-     18  0.50     133.4   196.0       True      64.3      45.2
-     21  0.15     221.6   196.0      False      66.6      65.4
+A. FIXED-CAPACITY cloud (ISP datacentre)
+   hour  load    E_fog   E_cloud  inverted?  4-tier J  2-tier J
+      0  0.00    235.7    2376.5      False     105.3     557.2
+      4  0.25    195.7    1802.3      False      95.1     426.1
+      8  0.75    115.7     653.9      False      74.8     164.1
+     12  1.00     75.7      79.8       True      64.6      33.0
+     16  0.75    115.7     653.9      False      74.8     164.1
+     20  0.25    195.7    1802.3      False      95.1     426.1
 
-  Averaged over 24h (beta=0.2):
-                          policy   J/query  accuracy  vs 4-tier
-                   static 4-tier     64.33    0.9506      1.00x
-     static 2-tier (user->cloud)     45.24    0.9341      1.42x
-                  dynamic bypass     44.43    0.9389      1.45x
+  averaged over 24h (beta=0.2):
+                policy   J/query  accuracy  vs 4-tier
+         static 4-tier     84.93    0.9506      1.00x
+         static 2-tier    295.10    0.9341      0.29x
+        dynamic bypass     81.67    0.9485      1.04x
+  bypass criterion fired in 3/24 buckets  -> genuinely mixed, dynamic earns its place
 
-  the bypass criterion fired in 17/24 hourly buckets
+B. ELASTIC cloud (public API, autoscaled)
+   hour  load    E_fog   E_cloud  inverted?  4-tier J  2-tier J
+      0  0.00    235.7      79.8       True      72.9      33.0
+      4  0.25    195.7      79.8       True      70.8      33.0
+      8  0.75    115.7      79.8       True      66.6      33.0
+     12  1.00     75.7      79.8       True      64.6      33.0
+     16  0.75    115.7      79.8       True      66.6      33.0
+     20  0.25    195.7      79.8       True      70.8      33.0
+
+  averaged over 24h (beta=0.2):
+                policy   J/query  accuracy  vs 4-tier
+         static 4-tier     68.72    0.9506      1.00x
+         static 2-tier     33.01    0.9341      2.08x
+        dynamic bypass     33.01    0.9341      2.08x
+  bypass criterion fired in 24/24 buckets  -> dynamic == static 2-tier, adds nothing
