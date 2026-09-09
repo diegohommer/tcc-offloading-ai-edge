@@ -424,6 +424,128 @@ def test5_per_tier_beta(rows: list[dict]) -> None:
                   f"{v_test['accuracy'] - s_test['accuracy']:>+8.4f} {str(trio):>28}")
 
 
+def replay_controlled(rows: list[dict], target: float, window: int, gain: float,
+                      rate_window: int = 50, energy: dict[str, float] | None = None) -> dict:
+    """Closed-loop variant: regulate the ESCALATION RATE instead of the quantile.
+
+    RecServe sets threshold = quantile(history, beta) and hopes the resulting
+    escalation rate equals beta. Test 2 shows it does not when the workload
+    shifts: a stale history makes everything look below average.
+
+    Here the tier measures its own recent escalation rate and corrects the
+    quantile level it asks for:
+
+        q <- q + gain * (target - measured_rate)
+
+    so if the history is stale and the tier is escalating everything, q falls
+    until the rate comes back to target. It regulates the OUTPUT rather than
+    trusting the input, which is the whole point.
+    """
+    E = energy if energy is not None else ENERGY_J
+    history: dict[str, list[float]] = {t: [] for t in TIERS}
+    recent: dict[str, list[int]] = {t: [] for t in TIERS}
+    q = {t: target for t in TIERS}
+
+    reached = {t: 0 for t in TIERS}
+    escalated_from = {t: 0 for t in TIERS}
+    decided_at = {t: 0 for t in TIERS}
+    n_correct = 0
+    energy_total = 0.0
+    entry_decisions: list[int] = []
+
+    for row in rows:
+        tier = "user"
+        while True:
+            reached[tier] += 1
+            energy_total += E[tier]
+            cell = row["tiers"][tier]
+
+            nxt = NEXT_TIER.get(tier)
+            escalate = False
+            if nxt is not None and len(history[tier]) > 1:
+                threshold = quantile(sorted(history[tier]), q[tier])
+                escalate = cell["confidence"] < threshold
+
+            history[tier].append(cell["confidence"])
+            if len(history[tier]) > window:
+                history[tier].pop(0)
+
+            if nxt is not None:
+                decided_at[tier] += 1
+                escalated_from[tier] += int(escalate)
+                if tier == "user":
+                    entry_decisions.append(int(escalate))
+                # Feedback: nudge the requested quantile toward the target rate.
+                recent[tier].append(int(escalate))
+                if len(recent[tier]) > rate_window:
+                    recent[tier].pop(0)
+                measured = sum(recent[tier]) / len(recent[tier])
+                q[tier] = min(1.0, max(0.0, q[tier] + gain * (target - measured)))
+
+            if escalate:
+                tier = nxt
+                continue
+            n_correct += int(cell["correct"])
+            break
+
+    n = len(rows)
+    return {
+        "accuracy": n_correct / n,
+        "J_per_query": energy_total / n,
+        "escalation_rate": {t: escalated_from[t] / decided_at[t] if decided_at[t] else 0.0
+                            for t in TIERS if t in NEXT_TIER},
+        "entry_decisions": entry_decisions,
+    }
+
+
+def test6_closed_loop(rows: list[dict]) -> None:
+    """Does closing the loop beat simply using a SHORT window?
+
+    This is the honest question. Test 2 already showed window=20 delivers 0.318
+    against a 0.30 target. If a short window is enough, then the "proposal" is a
+    config change, not a mechanism, and should be reported as such.
+    """
+    print("\n" + "=" * 78)
+    print("TEST 6 -- closed-loop rate control vs. just shortening the window")
+    print("=" * 78)
+    print("Same shifted stream as Test 2. Target escalation rate = 0.30.")
+    print("A short window tracks the current distribution but estimates the")
+    print("quantile from few samples; the controller regulates the rate directly.\n")
+
+    ranked = sorted(rows, key=lambda r: -r["tiers"]["user"]["confidence"])
+    half = len(ranked) // 2
+    rng = random.Random(0)
+    easy, hard = ranked[:half], ranked[half:]
+    rng.shuffle(easy)
+    rng.shuffle(hard)
+    stream = easy + hard
+
+    def rate(d):
+        return sum(d) / len(d) if d else 0.0
+
+    seg = max(1, len(stream) // 10)
+    print(f"  {'policy':>34} {'just after shift':>17} {'settled':>9} {'overall':>8} "
+          f"{'|err|':>7} {'acc':>7} {'J/q':>7}")
+
+    rows_out = []
+    for label, r in (
+        ("RecServe, window=10000", replay(stream, 0.30, 10000)),
+        ("RecServe, window=200", replay(stream, 0.30, 200)),
+        ("RecServe, window=50", replay(stream, 0.30, 50)),
+        ("RecServe, window=20", replay(stream, 0.30, 20)),
+        ("closed loop, window=10000, g=0.5", replay_controlled(stream, 0.30, 10000, 0.5)),
+        ("closed loop, window=200,   g=0.5", replay_controlled(stream, 0.30, 200, 0.5)),
+        ("closed loop, window=50,    g=0.5", replay_controlled(stream, 0.30, 50, 0.5)),
+    ):
+        d = r["entry_decisions"]
+        overall = rate(d)
+        rows_out.append((label, rate(d[half:half + seg]), rate(d[half + 2 * seg:]),
+                         overall, abs(overall - 0.30), r["accuracy"], r["J_per_query"]))
+    for label, after, settled, overall, err, acc, j in rows_out:
+        print(f"  {label:>34} {after:>17.3f} {settled:>9.3f} {overall:>8.3f} "
+              f"{err:>7.3f} {acc:>7.4f} {j:>7.4f}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -442,6 +564,7 @@ def main() -> None:
     test3_stepwise_vs_destination(rows)
     test4_when_does_skipping_pay(rows)
     test5_per_tier_beta(rows)
+    test6_closed_loop(rows)
 
 
 if __name__ == "__main__":

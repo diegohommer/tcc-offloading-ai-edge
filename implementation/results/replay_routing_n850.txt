@@ -107,3 +107,19 @@ generative/PON ladder (inverted) -- sensitivity, NOT a measurement
      87.614      0.9529      0.9482  -0.0047             (0.2, 0.3, 0.05)
     114.392      0.9529      0.9529  +0.0000             (0.3, 0.4, 0.05)
     145.687      0.9529      0.9529  +0.0000             (0.4, 0.5, 0.05)
+
+==============================================================================
+TEST 6 -- closed-loop rate control vs. just shortening the window
+==============================================================================
+Same shifted stream as Test 2. Target escalation rate = 0.30.
+A short window tracks the current distribution but estimates the
+quantile from few samples; the controller regulates the rate directly.
+
+                              policy  just after shift   settled  overall   |err|     acc     J/q
+              RecServe, window=10000             1.000     0.753    0.575   0.275  0.9494  1.2066
+                RecServe, window=200             0.976     0.255    0.380   0.080  0.9424  0.9031
+                 RecServe, window=50             0.600     0.286    0.331   0.031  0.9435  0.6864
+                 RecServe, window=20             0.412     0.294    0.318   0.018  0.9459  0.6305
+    closed loop, window=10000, g=0.5             0.247     0.353    0.356   0.056  0.9247  0.6381
+    closed loop, window=200,   g=0.5             0.271     0.365    0.351   0.051  0.9224  0.6264
+    closed loop, window=50,    g=0.5             0.353     0.384    0.359   0.059  0.9365  0.6343
