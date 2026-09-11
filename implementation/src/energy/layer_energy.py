@@ -61,9 +61,6 @@ class LayerEnergyTable:
     def fog_primary_J_per_token(self) -> float:
         return float(self.layers["fog"]["primary_point"]["decode_J_per_token"])
 
-    def fog_cross_check_upper_bound_J_per_token(self) -> float:
-        return float(self.layers["fog"]["cross_check"]["decode_J_per_token_upper_bound"])
-
     def cloud_isolated_query_J_per_token(self) -> tuple[float, float]:
         lo, hi = self.layers["cloud"]["isolated_query_regime"]["decode_J_per_token_range"]
         return float(lo), float(hi)
@@ -73,6 +70,3 @@ class LayerEnergyTable:
 
     def link_energy_per_hop_J(self) -> float:
         return float(self.link["per_hop_energy_J"])
-
-    def pue(self, kind: str = "average") -> float:
-        return float(self.environment["pue"][kind])

@@ -62,6 +62,28 @@ layers:
       Decode dominates >=99% of time and energy (prefill:decode latency
       ratio 1:192 to 1:569); confirms the memory-bound regime (FLOPs:bytes
       ~1375 on Orin). Relevant range for the ONU layer is 1.5B-8B.
+    orin_nano_super:
+      hardware: "NVIDIA Jetson Orin Nano Super 8GB developer kit ($249, 7-25 W, 67 TOPS)"
+      source: "Cloud to Edge: Benchmarking LLM Inference On Hardware-Accelerated Single-Board Computers, arXiv:2604.24785, Table 3"
+      regime: "Ollama native API, Q4_K_M, GPU, batch=1; fixed ~12-token prompt, 100 generated tokens (num_predict), n=5 runs; power mode not stated"
+      boundary: "whole board at the power input (Mecheer JK-PM07 meter), idle NOT subtracted"
+      models:
+        qwen2.5_1.5b:
+          J_per_generated_token_all_in: {q4_k_m: 1.11}
+          throughput_tok_s: {q4_k_m: 9.37}
+      notes: >
+        The ONU tier's hardware from 2026-09-11. The AGX Orin 64GB above is a
+        ~$2,000, 15-60 W developer module, not something an ISP would put in a
+        home ONU, which draws ~4 W (link.onu_power_active_W); the Orin Nano Super
+        is the realistic reading of the reference architecture's
+        'Jetson-class accelerator'. The figure is mean power x inference time /
+        generated tokens, so it is ALL-IN per generated token -- the short
+        prompt's prefill and the board's idle draw included -- not a decode-only
+        rate. Its boundary (whole board at the plug) is already the common,
+        whole-system boundary of boundary_consolidation, so it is used as is;
+        the OLT's GPU-card figure is the one converted. The paper's prompt (~12
+        tokens) is much shorter than the case study's (~122), so a few percent
+        of prefill energy is not captured.
 
   fog:
     hardware_class: "T4 / L4 / A30 / A2 / A16 / L40S -- any edge-datacenter class GPU with the best available measurement for a 7-13B model"
@@ -304,6 +326,35 @@ environment:
     hyperscale: 1.1
     average: 1.5
   applies_to: [fog, cloud]
+
+# ---------------------------------------------------------------------------
+# Common boundary for the three-tier case study (energy_tests.md §2).
+# ---------------------------------------------------------------------------
+# Tiers are compared at the SYSTEM boundary: what the device -- and for the OLT,
+# its server and data centre -- draws to answer a query. That is the
+# comprehensive boundary of Google's per-prompt methodology, which found the
+# narrow, accelerator-only view undercounts by 2.4x. User and ONU sources are
+# already at (or close to) it; only the OLT, measured at the GPU card, is converted.
+boundary_consolidation:
+  standard: "Google, Measuring the environmental impact of delivering AI at Google Scale, arXiv:2508.15734, Table 1"
+  comprehensive_shares:          # median Gemini Apps text prompt, 0.24 Wh total
+    active_accelerators: 0.58    # 0.14 Wh
+    host_cpu_and_dram: 0.25      # 0.06 Wh
+    idle_machines: 0.10          # 0.02 Wh
+    datacenter_overhead: 0.08    # 0.02 Wh, at Google's fleet PUE
+    google_fleet_pue: 1.09
+  pue:
+    isp_site: 1.54               # Uptime Institute Global Data Center Survey 2025, industry average
+    lower_bound: 1.09            # Google's fleet average: a best case, not a central office
+  tiers:
+    user: "Cai et al.: whole SoC (in CPU-only inference it equals the CPU rail); off-chip DRAM, display and radio excluded -> a lower bound"
+    onu: "Cloud to Edge: whole board at its power input, idle included -> already at the system boundary"
+    olt: "this work: GPU card (NVML) x (accelerators + host + idle) / accelerators x pue"
+  caveat: >
+    Google's shares come from large multi-accelerator hosts. A central-office
+    server holding a single 72 W L4 likely spends a LARGER share on its host,
+    so the converted OLT figure is, if anything, still low, and the crossover
+    it gives errs early rather than late.
 
 # ---------------------------------------------------------------------------
 # Locally measured energy -- NOT part of the literature tables above.

@@ -76,7 +76,7 @@ implementation/
       run_classification_cascade.py   # runs RecServe over a dataset, writes a trace (JSONL)
     energy/                    # reusable costing library, not tied to RecServe
       layer_energy.py          # loads config/layer_energy.yaml
-      cost.py                  # derivation formulas: J/query, J/token, gCO2/query, latency, cascade cost
+      cost.py                  # per-query formulas: J/query, J/token
     layers/
       generative_layer.py       # interface stub for the generative cascade (not implemented)
     scripts/

@@ -228,6 +228,9 @@ __marimo__/
 
 # Generated experiment output
 implementation/results/traces/
+# ...but the energy tests' raw run logs are results in their own right: keep them
+# (overrides the global *.log rule above)
+!implementation/results/energy_tests/*.log
 
 # LaTeX build artifacts (regenerate with latexmk/pdflatex, see thesis/latex/README.md)
 thesis/latex/*.aux

@@ -34,7 +34,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SRC))
 
-from energy.cost import LayerVisit, aggregate_J_per_token, cascade_cost_J  # noqa: E402
+from energy.cost import LayerVisit, aggregate_J_per_token, query_energy_J  # noqa: E402
 from energy.layer_energy import LayerEnergyTable  # noqa: E402
 
 # Trace tier -> representative (model, precision) used ONLY for the
@@ -64,7 +64,7 @@ def smoke_test_energy_for_hop(energy_table: LayerEnergyTable, tier: str, tokens_
     # every prompt token were a decode step on the mapped layer's model. This
     # is an admitted approximation solely to exercise the cost formula.
     visit = LayerVisit(layer=tier, tokens_prompt=tokens_prompt, tokens_gen=tokens_prompt, E_dec_J_per_token=e_dec)
-    return visit.E_dec_J_per_token * visit.tokens_gen
+    return query_energy_J(visit)
 
 
 def main() -> None:
