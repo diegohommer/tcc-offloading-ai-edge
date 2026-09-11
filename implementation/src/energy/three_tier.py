@@ -67,6 +67,12 @@ def olt_runs() -> tuple[dict, dict]:
             json.load(open(RESULTS / "gpu_energy_qwen2.5-7b-instruct_l4x1_run2.json")))
 
 
+def _slope(xs: list[float], ys: list[float]) -> float:
+    """Least-squares slope of ys on xs."""
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs)
+
+
 class OltCurve:
     """The OLT's measured rates as a function of batch size, log-log interpolated.
 
@@ -79,6 +85,24 @@ class OltCurve:
         self.pf = [r["prefill_J_per_input_token"] * factor for r in rows]
         self.dec = [r["decode_J_per_output_token"] * factor for r in rows]
         self.tps = [r["tokens_per_s"] for r in rows]
+        self.pf1_net = rows[0]["prefill_J_per_input_token_net"] * factor
+        self.dec1_net = rows[0]["decode_J_per_output_token_net"] * factor
+        self.pf_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.pf)])
+        self.dec_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.dec)])
+
+    def marginal_rates(self, batch: float) -> tuple[float, float]:
+        """Energy one more query adds, per token, when it makes the batch this size.
+
+        An OLT with nothing in service idles anyway, so the first query adds only
+        the energy above idle: the net rates at batch 1. A later query joins steps
+        that run anyway; the card sits at its power limit, so it adds only the
+        step time it causes. That is the slope of the batch's total energy per
+        step, b x rate(b), against b, fitted by least squares over the measured
+        batches (energy_tests.md §8.3).
+        """
+        if batch <= 1:
+            return self.pf1_net, self.dec1_net
+        return self.pf_slope, self.dec_slope
 
     def _at(self, ys: list[float], batch: float) -> float:
         b = min(max(batch, self.b[0]), self.b[-1])

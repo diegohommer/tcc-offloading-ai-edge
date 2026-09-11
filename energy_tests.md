@@ -12,9 +12,13 @@ optional, if a board becomes available.
 **Headline.** Counted as whole systems, the OLT answers a query more cheaply than
 the ONU once it batches about 5 queries (≈ 3.6 at a best-case PUE). It never
 undercuts the user device within batch 64. In simulation (§8), piggybacked
-energy reports route as well as an oracle, but with the ONU as published they
-save nothing over simply dropping the ONU. They pay (5–16%) only with an ONU
-below about 60 J per query, at a busy OLT.
+energy reports let the cascade switch between three tiers, two, or straight to
+the OLT, hour by hour, without configuration. Against the fixed chains they save
+5–17% with an ONU below about 60 J per query, and nothing with the ONU as
+published, where dropping the ONU is as good. Against a time-of-day schedule, the
+harder baseline, they gain only when the load departs from the typical day: up
+to 5% when each query is charged its share of the OLT's energy, up to 12% when it
+is charged the energy it adds (§8.3), with the OLT reporting its own recent mean.
 
 This document records the tests behind the three-tier case study: what was
 measured, every methodological decision with the reference it follows, and the
@@ -397,6 +401,14 @@ one), picking the lowest expected cost to completion. The question: **does a
 live report of the OLT's energy let the lower tiers route more cheaply than a
 fixed chain, at the same accuracy?**
 
+**What is new and what is not.** Carrying server state back on responses is an
+established technique: C3 [22] piggybacks each replica's queue length and
+service time on its responses so that clients can pick replicas without
+probing. What this case study adds is the quantity and the setting: energy
+rates, which *fall* with load because of batching, reported across an LLM
+cascade over a PON, where they decide how far a query travels rather than which
+replica serves it.
+
 ### 8.1 Methodology
 
 | Decision | Choice | Following |
@@ -410,8 +422,11 @@ fixed chain, at the same accuracy?**
 | Load and arrivals | Arrival rate = load / service time, with ~9 s per 251-token answer: peak load 8 ≈ 3,200 arrivals an hour | Little's law [20] |
 | Query stream | 6,006 queries at the user tier over 3 days, hour shares from BurstGPT, questions drawn at random | |
 | Comparison | Each policy's accuracy–energy frontier over β (Pareto points only), J/query read off at equal accuracy (0.70 and 0.80) | Iso-accuracy comparison: skipping to a more accurate tier changes accuracy too |
-| Controls | Three-tier RecServe; a fixed two-tier chain with the ONU dropped; a static configuration holding the OLT's day-average rate, calibrated on the true load, and stale versions calibrated at ¼ and 4× the load; an oracle that knows the current expected rate | The last four share piggyback's routing rule and differ only in which OLT rate they see |
-| Noise | Common random numbers (every policy meets the same batches); the main run and the 0.2× ONU run repeated with two more seeds | |
+| Controls | Three-tier RecServe; a fixed two-tier chain with the ONU dropped; a static configuration holding the OLT's day-average rate, calibrated on the true load, and stale versions calibrated at ¼ and 4× the load; a **time-of-day schedule**, the OLT's mean rate in each hour of the day, calibrated on the true load; an oracle that knows the current expected rate | The last five share piggyback's routing rule and differ only in which OLT rate they see |
+| Load drift | The OLT's load is BurstGPT's average day times a multiplier: exp of an Ornstein–Uhlenbeck process, mean 1, correlation time 12 h, log-sd σ = 0 (the average day exactly), 0.25 or 0.5, over 14 days. It stands for busier and quieter days and surges that a schedule set in advance cannot follow | Without drift the schedule *is* the oracle at hourly resolution, so a live signal cannot be told apart from a well-kept schedule; σ is swept, not measured |
+| Accounting | **Average** (primary): a query pays its share of the OLT batch's energy, the measured J per token at that batch. **Marginal**: it pays what it adds to the network (§8.3). User and ONU are priced the same under both | Average follows Google's per-prompt attribution [18]; marginal answers "how much does the network's total energy change" |
+| Frontier | J per query to reach *at least* the target accuracy: interpolated between Pareto points, and a policy whose least accurate point is above the target is charged that point | A policy that is cheaper and more accurate dominates; it is not "out of range" |
+| Noise | Common random numbers (every policy meets the same batches); the 306 J, 61 J and 15 J ONU runs, and every drift and marginal run, repeated over three seeds | |
 
 ### 8.2 Results
 
@@ -475,13 +490,135 @@ stand in for a more efficient accelerator:
   approaches the user device's 15.7 J. At the whole-system boundary that gain
   disappears.
 
-**What this means for the case study.** The mechanism works: it learns the OLT's
-cost from the answers already flowing back and routes as well as an oracle. What
-it is worth depends on the middle tier. With the Orin Nano Super as published,
-the better design is a two-tier chain, and no live signal is needed to find
-that. For routing on live energy to matter, the ONU has to cost less than about
-60 J per query (≈ 0.25 J per generated token), for example an NPU-class
-accelerator, or the AGX Orin's 54 J from §5.
+**On the average day, a time-of-day schedule does as well.** When the OLT's load
+follows BurstGPT's average day exactly, the schedule, a table of the OLT's
+mean rate for each hour, matches piggyback within ±1% at every load and both ONU
+costs (three seeds, 0.80 accuracy; at the 61 J ONU, load 16: 128.6 J schedule,
+128.7 J piggyback, 127.7 J oracle). This follows from the setup: with no drift,
+the schedule is the oracle at hourly resolution. The results above therefore
+show that the cheapest topology changes with the hour, not yet that it takes a
+live signal to follow it. That needs a load that departs from the average day.
+
+**When the load drifts off the average day, the live signal edges ahead, by a
+few percent.** Over 14 days with the load multiplied by a drifting factor
+(log-sd σ, 12 h correlation), J per query at 0.80 accuracy, mean of three seeds:
+
+| ONU | Drift | Load 4 | 8 | 16 | 32 |
+|---|---|---|---|---|---|
+| 306 J | σ 0.25 | ≈ 0 | ≈ 0 | +0.3% | +1.4% |
+| 306 J | σ 0.5 | ≈ 0 | +0.2% | +1.1% | +3.3% |
+| 61 J | σ 0.25 | +0.9% | +0.2% | +0.5% | +1.0% |
+| 61 J | σ 0.5 | +2.0% | +2.3% | +2.5% | +3.7% |
+
+Piggyback's saving over the time-of-day schedule. At the 61 J ONU with σ 0.5 it
+is positive in every seed at loads 4–32 (range +0.1% to +4.6%).
+
+- **The ceiling is low.** Perfect live information, the oracle, beats the
+  schedule by at most 5% here (61 J ONU, σ 0.5, load 32: 86.3 J against
+  90.4 J), and piggyback recovers most of it (87.0 J). Under average
+  accounting the OLT's cost per query changes smoothly with load, so a schedule
+  that knows the typical day is already close.
+- **Against the fixed chains the drift changes little.** Piggyback still
+  saves 6–9% over the better fixed chain at the 61 J ONU and loads 8–32, as on
+  the average day.
+- **The largest figure, 16% at a 15 J ONU and load 32, holds across three seeds**
+  (16.3%, 17.3%, 16.7%) against the fixed chains, but is ≈ 0 against the
+  schedule (+0.7%, −0.2%, −0.3%).
+
+What these results mean for the case study is drawn together in §8.4, after
+the second way of counting the OLT's energy.
+
+### 8.3 Marginal accounting
+
+§8.2 charges an OLT query its **share** of the batch's energy, as Google's
+per-prompt accounting does [18]. That answers "what does this query cost", not
+"how much does the network's total energy change if it goes there". The OLT is
+on and serving other PONs whether or not the query arrives, and its card sits
+at its power limit from batch 1 (§3.2). So a query sent to a busy OLT adds only
+the extra step time it causes.
+
+**The marginal cost.** A query that makes the batch size b adds:
+
+- if the OLT was idle (b = 1): the energy above idle, i.e. the net-of-idle
+  rates at batch 1, 0.020 J per prompt token and 1.46 J per generated token at
+  the card;
+- otherwise: the slope of the batch's energy per step, b × rate(b), against b,
+  fitted over batches 1–64: 0.0138 J per prompt token and 0.0096 J per
+  generated token at the card.
+
+That is 4.1 J per query at the card on a busy OLT, matching the 3.6–4.5 J
+measured between adjacent batches (§3.3), or 10 J at the whole-system
+boundary. The first query on an idle OLT costs about 900 J. The same × 2.47
+boundary factor is applied, although the idle-capacity share in it is
+arguably sunk, which would make the marginal figure lower still. User and ONU
+are priced as before; the ONU's figure includes its idle draw, so for an
+always-on ONU it is an upper bound on its marginal cost, a case the ONU-cost
+sweep already covers.
+
+**Choosing the topology is worth far more.** A busy OLT now answers more cheaply
+than the phone itself, so at busy hours the cost-aware policies skip both lower
+tiers. At 0.80 accuracy, three seeds, piggyback saves 40–54% over the better
+fixed chain at loads 8–32, for both ONU costs, and up to 95% over three-tier
+RecServe.
+
+**But a single answer's report is the wrong signal.** Under this accounting a
+report is heavy-tailed: a query that found the OLT idle reports ~900 J, the
+next one ~10 J. One such report moves the lower tier's running average (weight
+0.05) far off for dozens of answers. With per-query reports piggyback loses to
+the time-of-day schedule by up to 26% on the average day (61 J ONU, load 8:
+21.4 J against 16.9 J) and up to 18% with drift.
+
+**The improved report.** The OLT serves every PON, so it can report its own
+mean rate over the last 5 minutes of traffic instead of one query's rate: in
+the simulation, the mean over Poisson(arrival rate × 5 min) arrivals, each
+meeting its own batch. The lower tiers then weight the reported rate 0.3
+(`--report window --rate-alpha 0.3`); answer lengths and escalation rates keep
+0.05. Piggyback's saving over the time-of-day schedule, 0.80 accuracy, mean of
+three seeds:
+
+| ONU | Load | 2 | 4 | 8 | 16 | 32 |
+|---|---|---|---|---|---|---|
+| 306 J | average day | +0.1% | −2.9% | −2.2% | +0.9% | −0.6% |
+| 306 J | drift σ 0.5 | +1.4% | +9.1% | +8.8% | +3.1% | +2.0% |
+| 61 J | average day | +0.4% | −3.0% | −6.9% | −4.3% | −0.7% |
+| 61 J | drift σ 0.5 | +3.7% | +12.0% | +11.9% | −0.9% | +1.6% |
+
+- **With drift it beats the schedule by up to 12%**, positive in every seed at
+  loads 4–8 for both ONUs (61 J: +11.1% to +13.1% at load 4).
+- **On the average day the schedule still wins, by up to 7%** (61 J, load 8,
+  seeds −11% to −1%). The lower tiers hear the OLT only through their own
+  cascade's answers, about 40 an hour, so their estimate trails the morning
+  drop in cost. A schedule has no lag.
+- **Under share accounting the improved report helps a little too**: +2–5% over
+  the schedule with drift at the 61 J ONU, loads 4–32 (per-query reports:
+  +2–4%), and ≈ 0 on the average day.
+
+### 8.4 What this means for the case study
+
+The mechanism works. Piggyback keeps RecServe's three tiers and RecServe's
+escalation rule, and uses the answers already flowing back to decide, hour by
+hour, whether the ONU is worth using or should be skipped. It never needs to be
+told which topology is right: it matches the better fixed chain wherever one
+topology wins all day, and beats both where the answer changes with the hour.
+The ONU-dropped chain is a control, not a proposal. It works only if someone
+already knows the ONU is not worth using.
+
+What a live signal is worth depends on the baseline:
+
+- **Against fixed chains**, 5–17% with an ONU below about 60 J per query, under
+  share accounting, and 40–54% under marginal accounting, where a busy OLT
+  undercuts even the phone. With the Orin Nano Super as published and share
+  accounting, nothing: the ONU is not worth using at any hour.
+- **Against a time-of-day schedule**, which knows the typical day, only what the
+  day's departures from it are worth: ≈ 0 on the average day, up to 5% with a
+  ±50% drift under share accounting, up to 12% under marginal accounting. And
+  only with the improved report; per-query reports lose to the schedule under
+  marginal accounting.
+
+So the claim the thesis can make is conditional. Energy piggyback replaces a
+per-deployment configuration, and beats a well-kept schedule when the load is
+not predictable, most clearly when energy is counted as what each query adds.
+The packet should carry the OLT's recent mean, not one query's rate.
 
 ## 9. Limitations
 
@@ -504,7 +641,14 @@ accelerator, or the AGX Orin's 54 J from §5.
 
 - **The piggyback results are simulated.** OLT load is set, not measured; the
   cascade's own queries do not add to it; transport energy and latency are left
-  out; the grid in §8.2 is one seed per cell (three for two rows).
+  out; the grid in §8.2 is one seed per cell (three for the 306 J, 61 J and
+  15 J rows). The load drift is a swept assumption (σ, 12 h correlation), not
+  fitted to a trace.
+- **No herding, no capacity limit.** Every ONU reads the same report, so in a
+  real network they would all skip to the OLT together. For energy that is
+  benign, since a fuller batch is cheaper per query, but it raises the OLT's
+  latency and nothing in the rule caps its load. A deployment needs a latency
+  or occupancy limit in the routing rule.
 
 ## 10. Reproducing
 
@@ -516,6 +660,9 @@ cd implementation
 .venv/bin/python src/scripts/sim_piggyback.py                # piggyback simulation (§8), ~30 s
 .venv/bin/python src/scripts/sim_piggyback.py --boundary gpu
 for s in 0.05 0.1 0.2 0.5; do .venv/bin/python src/scripts/sim_piggyback.py --onu-scale $s; done
+# load drifting off the average day, 14 days (§8.2), and marginal accounting (§8.3); add --seed 8 / 9
+.venv/bin/python src/scripts/sim_piggyback.py --load-sigma 0.5 --days 14 [--onu-scale 0.2]
+.venv/bin/python src/scripts/sim_piggyback.py --accounting marginal [--load-sigma 0.5 --days 14]
 .venv/bin/python src/scripts/make_energy_artifact.py         # results page, from the files above
 ```
 
@@ -548,3 +695,4 @@ cleaned copy of each (`*.txt`) sits beside it.
 19. Uptime Institute. *Global Data Center Survey 2025* (average annual PUE 1.54). https://uptimeinstitute.com/
 20. Little. *A Proof for the Queuing Formula: L = λW.* Operations Research 9(3), 1961.
 21. Wolff. *Poisson Arrivals See Time Averages.* Operations Research 30(2), 1982.
+22. Suresh, Canini, Schmid and Feldmann. *C3: Cutting Tail Latency in Cloud Data Stores via Adaptive Replica Selection.* NSDI 2015.

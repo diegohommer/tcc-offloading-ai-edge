@@ -106,9 +106,14 @@ FRONTIER_LOAD = 8.0                        # OLT peak load shown on the frontier
 DAY = {"scale": 0.2, "load": 16.0, "beta": 0.6}
 ACC = "0.80"                               # accuracy at which policies are compared
 NOISE = 0.03                               # gains below this are inside the seed-to-seed spread
+LIVE_SCALES = (1.0, 0.2)                   # ONU costs run with load drift and marginal accounting
+SIGMAS = (0.0, 0.25, 0.5)                  # how far the OLT's load drifts off the average day
+MARG_SIGMAS = (0.0, 0.5)
+NONLIVE = ("stepwise", "skip_onu", "static", "schedule")   # every policy without a live signal
 POLICY_NAME = {"stepwise": "RecServe, three tiers", "skip_onu": "RecServe, ONU dropped",
                "static": "static configuration", "stale_low": "static, set at ¼ the load",
-               "stale_high": "static, set at 4× the load", "piggyback": "piggyback", "oracle": "oracle"}
+               "stale_high": "static, set at 4× the load", "schedule": "time-of-day schedule",
+               "piggyback": "piggyback", "oracle": "oracle"}
 
 
 def load_sim():
@@ -121,9 +126,19 @@ def load_sim():
         runs[s] = run
         names.append(name)
     seeds = {s: [latest(f"sim_piggyback_system_{'' if s == 1 else f'onu{s:g}_'}seed{n}.json")[0] for n in (8, 9)]
-             for s in (1.0, 0.2)}
+             for s in (1.0, 0.2, 0.05)}
     gpu, gname = latest("sim_piggyback_gpu_2*.json")
-    return {"runs": runs, "seeds": seeds, "gpu": gpu, "files": names + [gname]}
+    onu = lambda s: "" if s == 1 else f"_onu{s:g}"
+    trio = lambda tag: [latest(f"sim_piggyback_system{tag}_seed{n}.json")[0] for n in (7, 8, 9)]
+    drift = {(s, 0.0): [runs[s]] + seeds[s] for s in LIVE_SCALES}
+    drift.update({(s, sg): trio(f"{onu(s)}_sigma{sg:g}") for s in LIVE_SCALES for sg in SIGMAS if sg})
+    marg = {(s, sg): trio(f"{onu(s)}{f'_sigma{sg:g}' if sg else ''}_marginal") for s in LIVE_SCALES for sg in MARG_SIGMAS}
+    # the improved report: the OLT's own 5-minute mean, weighted 0.3 (energy_tests.md §8.3)
+    win = {acc: {(s, sg): trio(f"{onu(s)}{f'_sigma{sg:g}' if sg else ''}{'_marginal' if acc == 'marginal' else ''}"
+                               f"_window_ra0.3") for s in LIVE_SCALES for sg in MARG_SIGMAS}
+           for acc in ("average", "marginal")}
+    return {"runs": runs, "seeds": seeds, "gpu": gpu, "drift": drift, "marg": marg, "win": win,
+            "files": names + [gname, "…_sigma<σ>_seed<n>.json", "…_marginal_seed<n>.json"]}
 
 
 def fj(run, load, policy, acc=ACC):
@@ -137,6 +152,18 @@ def gain(run, load, against=("stepwise", "skip_onu"), acc=ACC):
     pg = fj(run, load, "piggyback", acc)
     ref = [x for x in (fj(run, load, p, acc) for p in against) if x is not None]
     return 1 - pg / min(ref) if pg is not None and ref else None
+
+
+def seed_gain(runs, load, against=NONLIVE, acc=ACC):
+    """Piggyback's saving against the cheapest of `against`, over seeds: (mean, min, max), or None."""
+    vals = [x for x in (gain(r, load, against, acc) for r in runs if r) if x is not None]
+    return (st.mean(vals), min(vals), max(vals)) if vals else None
+
+
+def seed_j(runs, load, policy, acc=ACC):
+    """A policy's J/query at the given accuracy, averaged over seeds (None if any is out of range)."""
+    js = [fj(r, load, policy, acc) for r in runs if r]
+    return None if not js or None in js else st.mean(js)
 
 
 def derive_sim(sim):
@@ -537,48 +564,97 @@ def chart_frontier(sim):
         table(["Policy", "β", "Accuracy", "J/query", "Answered at user / ONU / OLT"], trows)
 
 
-def chart_regime(sim, vs):
-    """Grid: piggyback's saving over the better fixed chain, by ONU cost (rows) and OLT load (columns)."""
-    runs, loads = sim["runs"], vs["loads"]
+def grid(rows, loads, per_h, value, tip, ylabel, aria):
+    """Cells coloured by piggyback's saving: one row per scenario, one column per OLT peak load.
+
+    rows: (key, label, sub-label); value(key, load) -> saving or None; tip(key, load) -> text.
+    """
     W, left, top, rh = 680, 132, 50, 40
     cw = (W - left - 4) / len(loads)
-    H = top + rh * len(SCALES) + 6
-    parts = [f'<text class="axlabel" x="0" y="11">ONU, PER QUERY</text>',
+    H = top + rh * len(rows) + 6
+    parts = [f'<text class="axlabel" x="0" y="11">{ylabel}</text>',
              f'<text class="axlabel" x="{left + 2}" y="11">OLT PEAK LOAD, QUERIES IN SERVICE · ARRIVALS/HOUR AT PEAK</text>']
     for k, l in enumerate(loads):
         x = left + cw * (k + 0.5)
         parts.append(f'<text class="gtick" x="{x:.1f}" y="30" text-anchor="middle">{l:g}</text>')
-        parts.append(f'<text class="tick" x="{x:.1f}" y="43" text-anchor="middle">{vs["per_h"][l]:,.0f}</text>')
-    trows = []
-    fmt = lambda j: "—" if j is None else f"{j:.0f} J"
-    for i, s in enumerate(SCALES):
-        run, y = runs[s], top + rh * i
-        onu = vs["onu_J"][s]
-        parts.append(f'<text class="gtick" x="0" y="{y + rh / 2 - 1:.1f}">{onu:.0f} J</text>')
-        parts.append(f'<text class="tick" x="0" y="{y + rh / 2 + 12:.1f}">{"as published" if s == 1 else f"× {s:g} published"}</text>')
+        parts.append(f'<text class="tick" x="{x:.1f}" y="43" text-anchor="middle">{per_h[l]:,.0f}</text>')
+    for i, (key, label, sub) in enumerate(rows):
+        y = top + rh * i
+        parts.append(f'<text class="gtick" x="0" y="{y + rh / 2 - 1:.1f}">{esc(label)}</text>')
+        parts.append(f'<text class="tick" x="0" y="{y + rh / 2 + 12:.1f}">{esc(sub)}</text>')
         for k, l in enumerate(loads):
-            g = vs["gain"][(s, l)]
+            g = value(key, l)
             x = left + cw * k
-            J = {p: fj(run, l, p) for p in ("stepwise", "skip_onu", "static", "piggyback")}
             real = g is not None and abs(g) >= NOISE
-            op = 0.2 + 0.7 * min(max(g, 0) / 0.15, 1) if real and g > 0 else 0
+            op = 0.2 + 0.7 * min(g / 0.15, 1) if real and g > 0 else 0
             text = "—" if g is None else (f"{g:+.0%}" if real else "≈ 0")
-            tip = (f"ONU {onu:.0f} J per query, OLT peak load {l:g} (~{vs['per_h'][l]:,.0f} arrivals/h at peak). "
-                   f"At accuracy {ACC}: piggyback {fmt(J['piggyback'])}; RecServe three tiers {fmt(J['stepwise'])}; "
-                   f"ONU dropped {fmt(J['skip_onu'])}; static configuration {fmt(J['static'])}.")
             parts.append(f'<rect class="cell{"" if op else " zero"}" x="{x + 1.5:.1f}" y="{y + 1.5:.1f}" '
                          f'width="{cw - 3:.1f}" height="{rh - 3:.1f}" rx="3"{f' style="fill-opacity:{op:.2f}"' if op else ""}/>')
             parts.append(f'<text class="ctext{" on" if op > 0.5 else ""}" x="{x + cw / 2:.1f}" y="{y + rh / 2 + 4:.1f}" '
                          f'text-anchor="middle">{text}</text>')
             parts.append(f'<rect class="hit" x="{x + 1.5:.1f}" y="{y + 1.5:.1f}" width="{cw - 3:.1f}" height="{rh - 3:.1f}" '
-                         f'tabindex="0" data-tip="{esc(tip)}"/>')
-            trows.append((f"{onu:.0f}", f"{l:g}", fmt(J["stepwise"]), fmt(J["skip_onu"]), fmt(J["static"]),
-                          fmt(J["piggyback"]), "—" if g is None else f"{g:+.1%}"))
+                         f'tabindex="0" data-tip="{esc(tip(key, l))}"/>')
+    return (f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{esc(aria)}">' + "".join(parts) + "</svg>")
+
+
+def chart_regime(sim, vs):
+    """Grid: piggyback's saving over the better fixed chain, by ONU cost (rows) and OLT load (columns)."""
+    runs, loads = sim["runs"], vs["loads"]
+    fmt = lambda j: "—" if j is None else f"{j:.0f} J"
+    J = lambda s, l: {p: fj(runs[s], l, p) for p in ("stepwise", "skip_onu", "static", "schedule", "piggyback")}
+    rows = [(s, f"{vs['onu_J'][s]:.0f} J", "as published" if s == 1 else f"× {s:g} published") for s in SCALES]
+    def tip(s, l):
+        j = J(s, l)
+        return (f"ONU {vs['onu_J'][s]:.0f} J per query, OLT peak load {l:g} (~{vs['per_h'][l]:,.0f} arrivals/h at peak). "
+                f"At accuracy {ACC}: piggyback {fmt(j['piggyback'])}; RecServe three tiers {fmt(j['stepwise'])}; "
+                f"ONU dropped {fmt(j['skip_onu'])}; static configuration {fmt(j['static'])}; "
+                f"time-of-day schedule {fmt(j['schedule'])}.")
+    trows = []
+    for s in SCALES:
+        for l in loads:
+            j, g = J(s, l), vs["gain"][(s, l)]
+            trows.append((f"{vs['onu_J'][s]:.0f}", f"{l:g}", fmt(j["stepwise"]), fmt(j["skip_onu"]), fmt(j["static"]),
+                          fmt(j["schedule"]), fmt(j["piggyback"]), "—" if g is None else f"{g:+.1%}"))
     b = vs["best"]
-    svg = (f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{esc(f"Piggyback saves nothing over the better fixed chain at the published ONU cost; its saving grows as the ONU gets cheaper and the OLT busier, up to {b[0]:.0%}.")}">'
-           + "".join(parts) + "</svg>")
-    return svg, table(["ONU J/query", "OLT peak load", "RecServe, three tiers", "ONU dropped", "Static",
+    svg = grid(rows, loads, vs["per_h"], lambda s, l: vs["gain"][(s, l)], tip, "ONU, PER QUERY",
+               f"Piggyback saves nothing over the better fixed chain at the published ONU cost; its saving grows as "
+               f"the ONU gets cheaper and the OLT busier, up to {b[0]:.0%}.")
+    return svg, table(["ONU J/query", "OLT peak load", "RecServe, three tiers", "ONU dropped", "Static", "Schedule",
                        "Piggyback", "Piggyback vs better fixed chain"], trows)
+
+
+def chart_live(groups, vs, sigmas, aria):
+    """Grid: piggyback's saving over the best policy without a live signal, mean of three seeds,
+    by ONU cost and load drift (rows) and OLT load (columns)."""
+    loads = vs["loads"]
+    fmt = lambda j: "—" if j is None else f"{j:.0f} J"
+    drift = lambda sg: "average day" if sg == 0 else f"load drift σ {sg:g}"
+    rows = [((s, sg), f"{vs['onu_J'][s]:.0f} J ONU", drift(sg)) for s in LIVE_SCALES for sg in sigmas]
+    def value(key, l):
+        g = seed_gain(groups[key], l)
+        return None if g is None else g[0]
+    def best(key, l):
+        js = [x for x in (seed_j(groups[key], l, p) for p in NONLIVE) if x is not None]
+        return min(js) if js else None
+    def tip(key, l):
+        g = seed_gain(groups[key], l)
+        rng = "" if g is None else f" (seeds: {g[1]:+.1%} to {g[2]:+.1%})"
+        return (f"ONU {vs['onu_J'][key[0]]:.0f} J per query, {drift(key[1])}, OLT peak load {l:g}. At accuracy {ACC}, "
+                f"mean of three seeds: piggyback {fmt(seed_j(groups[key], l, 'piggyback'))}; time-of-day schedule "
+                f"{fmt(seed_j(groups[key], l, 'schedule'))}; best without a live signal {fmt(best(key, l))}; "
+                f"oracle {fmt(seed_j(groups[key], l, 'oracle'))}{rng}.")
+    trows = []
+    for key in (r[0] for r in rows):
+        for l in loads:
+            g = seed_gain(groups[key], l)
+            trows.append((f"{vs['onu_J'][key[0]]:.0f}", drift(key[1]), f"{l:g}",
+                          *(fmt(seed_j(groups[key], l, p)) for p in ("stepwise", "skip_onu", "schedule")),
+                          fmt(best(key, l)), fmt(seed_j(groups[key], l, "piggyback")),
+                          fmt(seed_j(groups[key], l, "oracle")),
+                          "—" if g is None else f"{g[0]:+.1%} ({g[1]:+.1%} to {g[2]:+.1%})"))
+    svg = grid(rows, loads, vs["per_h"], value, tip, "ONU · OLT LOAD", aria)
+    return svg, table(["ONU J/query", "OLT load", "OLT peak load", "RecServe, three tiers", "ONU dropped", "Schedule",
+                       "Best without live signal", "Piggyback", "Oracle", "Piggyback vs best without (seed range)"], trows)
 
 
 def chart_day(sim):
@@ -767,6 +843,29 @@ def build():
     fr_svg, fr_tbl = chart_frontier(sim)
     rg_svg, rg_tbl = chart_regime(sim, vs)
     day_a, day_b, day_tbl = chart_day(sim)
+    dr = sim["drift"]
+    dr_gain = {(k, l): seed_gain(dr[k], l, ("schedule",)) for k in dr for l in vs["loads"]}
+    flat = max(abs(g[0]) for (k, l), g in dr_gain.items() if g and k[1] == 0)
+    top = max((g[0], k, l) for (k, l), g in dr_gain.items() if g and k[1] > 0)
+    ceil = max(1 - seed_j(dr[k], l, "oracle") / seed_j(dr[k], l, "schedule")
+               for k in dr for l in vs["loads"] if k[1] > 0 and seed_j(dr[k], l, "schedule"))
+    wa, wm, pm = sim["win"]["average"], sim["win"]["marginal"], sim["marg"]
+    live = lambda groups: {(k, l): g for k in groups for l in vs["loads"]
+                           if (g := seed_gain(groups[k], l)) is not None}
+    wa_top = max(g[0] for (k, l), g in live(wa).items() if k[1] > 0)
+    wm_g, pm_g = live(wm), live(pm)
+    wm_best, wm_worst = max((g[0], k, l) for (k, l), g in wm_g.items()), min((g[0], k, l) for (k, l), g in wm_g.items())
+    pm_worst = min((g[0], k, l) for (k, l), g in pm_g.items())
+    wm_fixed = max(g[0] for k in wm for l in vs["loads"] if (g := seed_gain(wm[k], l, ("stepwise", "skip_onu"))))
+    mc = OltCurve(run2["batch_curve"], v["k_mid"])
+    m_busy = mc.pf_slope * tok["olt"][0] + mc.dec_slope * tok["olt"][1]
+    m_idle = mc.pf1_net * tok["olt"][0] + mc.dec1_net * tok["olt"][1]
+    mm_svg, mm_tbl = chart_live(wm, vs, MARG_SIGMAS,
+                                f"If a query pays only the energy it adds, piggyback with the improved report ranges from "
+                                f"{wm_worst[0]:+.0%} to {wm_best[0]:+.0%} against the best policy without a live signal.")
+    dr_svg, dr_tbl = chart_live(dr, vs, SIGMAS,
+                                f"On the average day piggyback and the time-of-day schedule are within {flat:.0%}; "
+                                f"with the load drifting, piggyback gains up to {top[0]:.0%}.")
 
     main = sim["runs"][1.0]
     pf8, dec8 = OltCurve(run2["batch_curve"], v["k_mid"]).rates(FRONTIER_LOAD)
@@ -799,7 +898,7 @@ def build():
 <div class="tiles">
   <div class="tile"><span class="big">{v['swing']:.0f}×</span><span class="what">drop in OLT decode energy per token from batch 1 to 64, at constant 72 W</span></div>
   <div class="tile"><span class="big">{bx(v['x_onu_sys'])}</span><span class="what">batch size from which a query costs less at the OLT than at the ONU, both counted as whole systems</span></div>
-  <div class="tile"><span class="big">0 → {best_g:.0%}</span><span class="what">energy piggyback saves over the best fixed chain: nothing at the ONU's published cost, up to {best_g:.0%} with a {vs['onu_J'][best_s]:.0f} J ONU</span></div>
+  <div class="tile"><span class="big">≈ 0 → {wm_best[0]:.0%}</span><span class="what">energy piggyback saves over a time-of-day schedule: nothing on the average day, up to {wm_best[0]:.0%} with the load drifting and each query charged the energy it adds</span></div>
   <div class="tile"><span class="big">{s['user']['acc']:.2f} → {s['onu']['acc']:.2f} → {s['olt']['acc']:.2f}</span><span class="what">accuracy of user, ONU and OLT: every step up is more accurate</span></div>
 </div>
 
@@ -875,7 +974,7 @@ def build():
 </section>
 
 <section>
-  <h2>Piggyback routing pays only when the ONU is cheap</h2>
+  <h2>What piggyback routing is worth</h2>
   <p>RecServe decides whether a query escalates. The piggyback mechanism adds where it goes. Every answer travelling back down carries the energy rates each tier just ran at, so the tiers below learn the OLT's current cost without a single extra message, and use it to choose: answer here, pass to the next tier, or skip straight to the OLT. The report one OLT answer carries back, at a peak load of {FRONTIER_LOAD:g} and whole-system boundary:</p>
   <pre class="packet"><span class="c">// rides on the answer: OLT → ONU → user</span>
 {{"olt": {{"J_per_prompt_token": {pf8:.3f}, "J_per_token": {dec8:.3f}, "tokens": {round(tok['olt'][1])}}}}}</pre>
@@ -901,6 +1000,20 @@ def build():
     {day_b}
     <figcaption>ONU at {day_onu:.0f} J per query, OLT peak load {DAY['load']:g}, β {DAY['beta']}, averaged over {vs['days']} days. Piggyback keeps queries on the ONU through the night, while the OLT is expensive, and sends them past it from late morning, matching the oracle within a few points hour by hour. A static configuration set to the day's average rate skips the ONU almost around the clock. A static configuration that has gone stale does worse still: set at a quarter or four times the real load, it costs up to {ws[0]:.0%} more than piggyback (ONU {vs['onu_J'][ws[1]]:.0f} J, load {ws[2]:g}, accuracy {ws[3]}).</figcaption>
     {day_tbl}
+  </figure>
+  <h3>A time-of-day schedule does almost as well</h3>
+  <p>The OLT's load above follows BurstGPT's average day, so a table of the OLT's cost for each hour, set once, knows exactly what piggyback learns. To separate them the load has to leave the average day: here it is multiplied by a factor that drifts over hours (log-sd σ, 12-hour correlation), for busier and quieter days, over 14 days.</p>
+  <figure>
+    {dr_svg}
+    <figcaption>Energy piggyback saves over the best policy without a live signal (three-tier RecServe, ONU dropped, static configuration or time-of-day schedule), at {ACC} accuracy, mean of three seeds. On the average day it is within {flat:.1%} of the schedule everywhere. With the load drifting it edges ahead, by up to {top[0]:.1%} ({vs['onu_J'][top[1][0]]:.0f} J ONU, σ {top[1][1]:g}, load {top[2]:g}); perfect live information, the oracle, is itself worth at most {ceil:.1%} over the schedule here. Under this accounting the OLT's cost changes smoothly with load, so a schedule that knows the typical day is already close.</figcaption>
+    {dr_tbl}
+  </figure>
+  <h3>If a query pays only the energy it adds</h3>
+  <p>Everything above charges an OLT query its share of the batch's energy. The OLT is on, and serving other PONs, whether or not a query arrives, so the energy the network actually adds is smaller: about {m_busy:.0f} J for a query joining a busy OLT, less than the {cost['user']:.0f} J the phone spends, and about {m_idle:.0f} J for the first query on an idle one. That swing crosses both lower tiers, so choosing the topology by the hour is worth far more. It also makes a single answer's report treacherous: one that happened to find the OLT idle reports a rate about a hundred times too high. So in the improved report the OLT's packet carries its own mean over the last 5 minutes of traffic from every PON, and the lower tiers weight it 0.3 rather than 0.05.</p>
+  <figure>
+    {mm_svg}
+    <figcaption>Energy piggyback with the improved report saves over the best policy without a live signal, at {ACC} accuracy, mean of three seeds, with each OLT query charged the energy it adds. Against the fixed chains alone it saves up to {wm_fixed:.0%}, since at busy hours even the phone is skipped. Against the best policy without a live signal it ranges from {wm_worst[0]:+.1%} ({vs['onu_J'][wm_worst[1][0]]:.0f} J ONU, {'average day' if wm_worst[1][1] == 0 else f'σ {wm_worst[1][1]:g}'}, load {wm_worst[2]:g}) to {wm_best[0]:+.1%} ({vs['onu_J'][wm_best[1][0]]:.0f} J ONU, {'average day' if wm_best[1][1] == 0 else f'σ {wm_best[1][1]:g}'}, load {wm_best[2]:g}). With each packet carrying only its own query's rate, it lost by up to {-pm_worst[0]:.0%}. Under the share accounting above, the improved report gains up to {wa_top:.1%} with the load drifting.</figcaption>
+    {mm_tbl}
   </figure>
 </section>
 

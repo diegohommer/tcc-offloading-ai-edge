@@ -20,6 +20,11 @@ Everything produced by the three-tier energy tests, kept verbatim. See
 | `sim_piggyback_system_seed8.*`, `_seed9.*`, `sim_piggyback_system_onu0.2_seed8.*`, `_seed9.*` | the reference run and the 0.2× ONU run repeated with two more random seeds, to measure noise |
 | `sim_piggyback_gpu_<UTC>.*` | the same with the OLT at the GPU card only, for comparison |
 | `sim_piggyback_system_onu<scale>_<UTC>.*` | the same with the ONU's energy scaled by 0.05, 0.1, 0.2 or 0.5: where a live signal starts to pay |
+| `sim_piggyback_system_onu0.05_seed8.*`, `_seed9.*` | the 0.05× ONU run (piggyback's largest saving) over two more seeds |
+| `sim_piggyback_system[_onu0.2]_sigma<σ>_seed<n>.*` | OLT load drifting off the average day (log-sd σ = 0.25 or 0.5, 12 h correlation), 14 days, seeds 7–9: the only setting where a live signal can beat a time-of-day schedule (energy_tests.md §8.2) |
+| `sim_piggyback_system[_onu0.2][_sigma0.5]_marginal_seed<n>.*` | the same scenarios with marginal accounting: each OLT query pays the energy it adds, not its share of the batch (§8.3) |
+| `sim_piggyback_system[_onu0.2][_sigma0.5][_marginal]_window_ra0.3_seed<n>.*` | the improved report: the OLT's packet carries its own 5-minute mean rate (`--report window`) and the lower tiers weight it 0.3 (`--rate-alpha 0.3`), under both accountings (§8.3) |
+| *(note)* | the `_sigma`, `_marginal` and `_window` JSONs keep rows, frontiers and configs but not the per-hour detail (`"hourly_dropped"`), which was 75% of each file and is not charted; rerun the command to regenerate it |
 | `sim_piggyback_cpu_prefill.csv`, `_npu_prefill.csv`, `_delta0.1.csv` | an earlier version of the simulator over the older 5-shot trace (Gemma-2-9B OLT, estimated batch curve). Superseded; kept as a record. |
 
 Each log exists twice. The `.log` is the raw terminal output, colour codes and
