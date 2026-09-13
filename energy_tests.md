@@ -1,6 +1,6 @@
 # Energy measurements — three-tier case study
 
-**Status (2026-09-11).** OLT energy sweep: done, run twice, replicated.
+**Status (2026-09-13).** OLT energy sweep: done, run twice, replicated.
 Answer collection for all three tiers: done, 1,319 questions each, every
 confidence check passing. ONU and user tiers: priced
 from published measurements, assessed in §5 and §6. The ONU is a Jetson
@@ -19,6 +19,17 @@ published, where dropping the ONU is as good. Against a time-of-day schedule, th
 harder baseline, they gain only when the load departs from the typical day: up
 to 5% when each query is charged its share of the OLT's energy, up to 12% when it
 is charged the energy it adds (§8.3), with the OLT reporting its own recent mean.
+On real load (§8.5: BurstGPT replayed, households learning on their own, no tier
+charged for being on), routing by energy still beats RecServe's fixed chain,
+by up to 59%. But the live signal beats a weekday-aware schedule only on bursty
+traffic (by up to 27%). On human chat traffic the schedule is within 11% of
+perfect information, and the present piggyback trails it.
+The case study (§8.6) compares three policies on predictable and on
+unpredictable traffic (the same, with unforeseen surges and dips). Energy-aware
+routing, with a timetable or live, saves 31–93% over RecServe. On predictable
+traffic the timetable is enough. On unpredictable traffic the OLT's cost,
+broadcast to every ONU on the PON, adds up to 13–29% over the timetable, within
+about three points of perfect information.
 
 This document records the tests behind the three-tier case study: what was
 measured, every methodological decision with the reference it follows, and the
@@ -620,6 +631,236 @@ per-deployment configuration, and beats a well-kept schedule when the load is
 not predictable, most clearly when energy is counted as what each query adds.
 The packet should carry the OLT's recent mean, not one query's rate.
 
+§8.5 reruns the comparison on real load, with realistic households and
+consistent marginal accounting, and narrows this further.
+
+### 8.5 The baseline on real load
+
+§8.2–8.4 ran on an average day, with a drift whose size was assumed, one ONU
+carrying all the cascade's traffic, and marginal accounting that charged the
+ONU for its idle draw but not the OLT. All three were checked against data
+and replaced:
+
+| What | Before | Now |
+|---|---|---|
+| OLT load | BurstGPT's average day, all traffic (89% API), optionally × a synthetic drift, σ 0.25 / 0.5, 12 h | BurstGPT's own hourly counts replayed [12]: the static configuration and the schedule are calibrated on its first 30 days, and every policy runs on the 31 after. The schedule knows the hour of day and weekday/weekend |
+| Households | one ONU with 2,000 queries a day, hearing a report on almost every answer | the same traffic split over 1, 10, 40 or 100 households (2,000 down to 20 queries a day each), each learning the OLT's cost from its own answers only |
+| Marginal accounting | OLT net of idle × 2.47; ONU gross, idle included | no tier pays for being on: OLT × 2.20 (the idle-machines share left out), ONU 1.11 − 4.7 W ÷ 9.37 tok/s = 0.61 J per token (168 J a query) [23], phone unchanged |
+
+RecServe's confidence thresholds stay one per tier, shared by all households.
+Everything else is §8.1.
+
+**What real load looks like** (`implementation/data/load_traces/drift_fit.json`):
+
+| Trace | Requests an hour | Peak / trough | Drift around the schedule: σ | τ |
+|---|---|---|---|---|
+| BurstGPT, conversation log | 105 | 46× | 0.61 | ~1–2 h |
+| BurstGPT, all traffic | 977 | 12× | 1.91 | ~3 h |
+| Azure 2024, conversation service [24] | 171,753 | 1.8× | 0.24 | 14 h |
+
+σ is the log-sd of load over schedule, net of counting noise; BurstGPT's is
+out of sample (schedule from the first 30 days), Azure's in sample over its six
+whole days with an hour-of-day schedule, too short for more.
+
+- **People chatting follow office hours and drift fast.** BurstGPT's
+  conversation traffic swings 46× over the day, with a lunch dip, and wanders
+  around a weekday-aware schedule by σ ≈ 0.6 with a correlation time of 1–2
+  hours, not the 12 h assumed before. Its API traffic is batch jobs, bursting
+  to 8.6× the calibrated peak.
+- **A large, global service is smooth.** Azure's conversation service, 1,600
+  times BurstGPT's volume across time zones, is nearly flat over the day and
+  drifts slowly. An OLT, one city's households, sits between the two. The
+  synthetic drift of §8.2 (σ 0.25, 12 h) is close to Azure's.
+
+**Results.** Piggyback's saving over the schedule, and in brackets the oracle's
+(the most any live signal could save), marginal accounting, 0.80 accuracy, mean
+of three seeds (`implementation/results/energy_tests/trace/SUMMARY.md`):
+
+| Traffic | Households × queries a day | Load 2 | 4 | 8 | 16 | 32 |
+|---|---|---|---|---|---|---|
+| conversation | 1 × 2,000 | −0.3% (+0.1%) | −5.5% (−3.2%) | −3.9% (+3.7%) | +1.5% (+10.7%) | −2.8% (+3.1%) |
+| conversation | 10 × 200 | −0.6% (−0.2%) | −6.2% (−2.8%) | −21.0% (+3.8%) | −7.7% (+7.1%) | −5.2% (+4.0%) |
+| conversation | 40 × 50 | −1.0% (−0.2%) | −9.5% (−2.1%) | −15.9% (+4.9%) | −11.7% (+3.7%) | −1.9% (+1.0%) |
+| conversation | 100 × 20 | −1.1% (−0.2%) | −9.5% (−1.2%) | −10.5% (+6.0%) | −3.6% (+2.4%) | −0.5% (+0.3%) |
+| all | 40 × 50 | +10.0% (+19.4%) | +18.4% (+37.7%) | +12.7% (+29.4%) | +4.0% (+15.8%) | −0.1% (+3.4%) |
+
+ONU at 168 J. At a 34 J ONU the pattern is the same and stronger: on
+conversation traffic piggyback trails the schedule by up to 38% (40 × 50,
+load 16) against an oracle ceiling of at most +11%; on all traffic it beats it
+by up to 27% (load 4), against a ceiling of 53%. Under average accounting the
+conversation traffic leaves nothing to gain (oracle within ±1% of the
+schedule; piggyback −7% to +1%), and all traffic up to 9% at the 61 J ONU
+(ceiling 17.5%).
+
+- **Routing by energy still beats RecServe's fixed chain.** With the schedule
+  as its cost source, it saves 18–59% over the better fixed chain at loads 4–32
+  under marginal accounting (conversation, 1 × 2,000), and 5–11% at loads 8–32
+  under average accounting at the 61 J ONU. The cascade should decide where a query goes,
+  not only whether.
+- **On human traffic, a weekday-aware schedule is close to perfect
+  information.** The oracle beats it by at most 11% (marginal) and about 0
+  (average). That is the ceiling for any live signal on this traffic.
+- **The present piggyback does not reach that ceiling.** It trails the schedule
+  in almost every conversation scenario, more as households get sparser and the
+  ONU cheaper. Its only input is its own household's answers: at 50 queries a
+  day, a few OLT reports an hour, each weighted 0.3 however old it is.
+- **Where load is unpredictable, the live signal pays.** On all traffic, whose
+  API bursts no schedule anticipates, piggyback beats the schedule by 10–27% at
+  loads 2–8, where the replayed load mostly stays within the measured batch
+  range (§9).
+- **Sparse households cost every cost-aware policy, the oracle included.** From
+  one household of 2,000 queries a day to 100 of 20, the oracle's cost at 0.80
+  rises from 92.7 J to 110.5 J (average accounting, 306 J ONU, load 32), 13% above
+  simply dropping the ONU (98.0 J). The OLT signal is not the cause. Each
+  household learns escalation rates and answer lengths from its own few answers,
+  and runs as plain RecServe until 20 OLT reports have arrived. Those statistics
+  describe the questions, not the household, so they could be shared; that is
+  untested.
+- **"Oracle" means perfect OLT cost, not perfect routing.** It sometimes trails
+  the schedule by up to 3% (conversation, load 4), because the rest of its
+  decision is as noisy as the others'.
+
+**What this means for the case study.** Two claims now separate. *Energy-aware
+routing* beats RecServe's one-tier-up rule, on real load and under both
+accountings. *Learning the cost live from piggybacked reports* beats a
+weekday-aware schedule only when the load is bursty. On human chat traffic the
+schedule is within 11% of perfect information, and the present piggyback trails
+it. The policy still to be designed has to do three things: share the question
+statistics instead of learning them per household; weight a report by its age,
+not its count; and be judged against the schedule on both kinds of traffic.
+
+### 8.6 The case study: three policies, two kinds of traffic
+
+§8.1–8.5 consolidated into the one comparison the thesis makes. Every setting
+is in `implementation/config/study.yaml`, with the reason for its value; the
+runs come from `src/scripts/run_study.sh` and the tables from
+`src/scripts/summarize_study.py` (`implementation/results/energy_tests/study/SUMMARY.md`).
+
+**Policies.** Three, a reference and two controls:
+
+| Policy | Where the OLT's cost comes from | Role |
+|---|---|---|
+| RecServe | nowhere: one tier up, always | the baseline [1] |
+| Timetable | the OLT's mean cost for each hour, weekday and weekend, from the first 30 days | energy-aware routing on the best information available in advance |
+| Dynamic | the OLT's own 5-minute mean, broadcast to every ONU on the PON every 10 s | energy-aware routing on live information |
+| Oracle | the true expected cost at that moment | the most any live signal could achieve |
+| RecServe without the ONU | nowhere | control: is the saving only from dropping the ONU? |
+| Piggyback | the OLT's 5-minute mean, on the household's own answers only | ablation: why broadcast |
+
+The energy-aware policies share one routing rule (expected cost to completion,
+§8.1) and the question statistics it needs, answer lengths and escalation rates,
+pooled across households: they describe the questions, not the household, and an
+operator can aggregate them. A household knows its own devices' costs. So the
+energy-aware policies differ only in where the OLT's cost comes from.
+
+**Why broadcast.** A PON's downstream is a broadcast: every frame reaches every
+ONU, which keeps only its own GEM ports [25]. An answer is encrypted for its
+household, so a report riding on it serves that household alone, and a household
+of 20–200 queries a day misjudged the OLT's cost by 80–290% (§8.5). The PON's
+downstream multicast channel, the one IPTV uses, reaches every ONU, asked or not.
+A few dozen bytes every 10 s is negligible on a 1.25–10 Gb/s link and adds no
+message per ONU. It needs OLT and ONU software that does not exist today, as does
+an ONU with an LLM accelerator.
+
+**Traffic.** *Predictable*: BurstGPT's conversation log as recorded (§8.5).
+*Unpredictable*: the same, plus events no timetable or calendar knows about, such
+as a news surge, a big game running long, a neighbouring OLT's traffic moved here,
+or an outage elsewhere. They arrive about once a day (Poisson), last 3 hours, and
+multiply the OLT's load by a factor or divide it by that factor with equal
+probability, affecting about 12% of the time; the factor is swept from 1.5 to 5.
+Events fall on the training days too, so the timetable learns an average that
+includes them. The cascade's own queries are unchanged: the events are other
+traffic at the OLT. Holidays are not used: they are on the calendar, and a fair
+timetable would include them.
+
+**Settings.** Marginal accounting, ONU 168 J, 40 households of 50 queries a day,
+0.80 accuracy, three seeds (§8.5). Each sensitivity run changes one setting, at
+factors 1 and 3. The OLT's report is modelled over its window, each arrival at the
+load of its own moment, so it lags by up to 5 minutes (§8.5's runs took the load at
+the moment of the report).
+
+**Saving over RecServe**, timetable / dynamic, at equal accuracy:
+
+| Traffic | Load 2 | 4 | 8 | 16 | 32 |
+|---|---|---|---|---|---|
+| predictable | 31% / 31% | 60% / 58% | 85% / 85% | 91% / 92% | 93% / 93% |
+| surprises × 1.5 | 31% / 31% | 59% / 58% | 85% / 85% | 91% / 92% | 93% / 93% |
+| surprises × 2 | 31% / 32% | 58% / 58% | 84% / 84% | 91% / 92% | 92% / 93% † |
+| surprises × 3 | 31% / 32% | 57% / 57% | 82% / 84% | 90% / 92% | 92% / 93% † |
+| surprises × 5 | 31% / 32% | 54% / 57% | 77% / 84% | 88% / 92% † | 91% / 93% † |
+
+**Saving over the timetable**: dynamic (oracle, the ceiling) · piggyback:
+
+| Traffic | Load 2 | 4 | 8 | 16 | 32 |
+|---|---|---|---|---|---|
+| predictable | −0.4% (0.0%) · −1% | −6.0% (−3.3%) · −15% | −0.4% (+3.2%) · −47% | +8.7% (+9.6%) · −45% | +3.6% (+3.9%) · −34% |
+| surprises × 1.5 | −0.1% (+0.4%) · −1% | −3.9% (−1.1%) · −13% | −0.7% (+3.2%) · −49% | +8.1% (+9.7%) · −46% | +2.7% (+3.3%) · −36% |
+| surprises × 2 | +0.7% (+1.0%) · 0% | −1.6% (+0.9%) · −11% | +3.2% (+6.5%) · −43% | +8.2% (+9.9%) · −49% | +4.5% (+4.7%) · −33% † |
+| surprises × 3 | +1.6% (+2.1%) · 0% | +1.7% (+4.1%) · −8% | +13.0% (+16.1%) · −31% | +13.1% (+15.0%) · −44% | +6.6% (+7.0%) · −34% † |
+| surprises × 5 | +2.1% (+2.8%) · 0% | +5.8% (+8.4%) · −5% | +28.8% (+32.0%) · −12% | +26.7% (+27.4%) · −32% † | +13.2% (+14.3%) · −32% † |
+
+Mean of three seeds; † the OLT's load exceeded the measured batch range (64 in
+service) for over 1% of arrivals, indicative only.
+
+- **Energy-aware routing is the main saving.** The timetable and the dynamic
+  policy use 31–93% less energy than RecServe at the same accuracy, more the
+  busier the OLT. It is not only dropping the ONU: at loads 8–32 they use about
+  half what RecServe without the ONU does (predictable traffic, load 8: 25.5 J
+  against 51.2 J), because a busy OLT answers more cheaply than the phone itself.
+- **On predictable traffic a timetable is enough.** The dynamic policy is within
+  −6% to +9% of it, and even perfect information would add at most 10%.
+- **On unpredictable traffic the live signal pays, and more the bigger the
+  surprise.** Over the timetable, dynamic saves up to 13% with surprises of × 3
+  and up to 29% with × 5, largest at loads 8–16. On BurstGPT's real API-inclusive
+  traffic it saves 22–56% at loads 2–8 (`alltraffic`).
+- **Broadcast captures nearly all of it.** The dynamic policy stays within about
+  three points of the oracle everywhere. Its OLT cost is off by a median 26% at
+  load 8, piggyback's by 210–340%.
+- **Piggyback on answers alone does not.** It trails the timetable by up to 49%.
+  With one household of 2,000 queries a day (misjudging the OLT's cost by only 18%)
+  it recovers much of the gain (+8% against dynamic's +13%, surprises of × 3,
+  load 8). The difference is how often a household hears the OLT, and that is what
+  broadcast fixes.
+- **Household size no longer matters.** With surprises of × 3, dynamic's saving
+  over the timetable is +1.1–13.7% for 1 × 2,000, 10 × 200, 40 × 50 and 100 × 20
+  households alike.
+- **Pooling the question statistics is part of the design.** Learned per
+  household instead, every energy-aware policy loses ground: at load 8 the saving
+  over RecServe falls from 85% to 78%, and dynamic's lead over the timetable with
+  surprises of × 3 from up to 13% to up to 9%.
+- **A cheaper ONU makes live information worth more.** At 34 J a query and
+  surprises of × 3, dynamic saves up to 16% over the timetable (ceiling 20%).
+- **Under average accounting there is nothing to follow.** A query's share of the
+  batch changes smoothly with load, so the timetable already knows it: dynamic is
+  within −0.4% to +1.9% of it even with surprises of × 3. Energy-aware routing still
+  saves 16–70% over RecServe.
+- **The rule is not optimal.** On predictable traffic at load 4 even the oracle
+  trails the timetable by 3%. Its cost to completion assumes the tiers above step
+  up one at a time, and it uses pooled averages, so perfect OLT cost is not a
+  perfect route.
+- **RecServe's thresholds keep their meaning.** Skipping changes how many queries
+  a tier sees, not which kind: the skip depends on the hour and the OLT's cost, not
+  on the question. The phone still escalates β of what it answers (20%, 49–50%
+  and 79–81% at β 0.2, 0.5 and 0.8), and the ONU sees the same confidences as under
+  RecServe (mean 0.884, 0.892 and 0.897 either way). But the ONU now answers
+  0.1–2% of queries instead of 20–80%, so its window fills slowly and its
+  escalation rate strays from β, by up to 14 points at β 0.8 (66–71%). The totals
+  include this (`src/scripts/check_beta_windows.py`; surprises of × 3, loads 8
+  and 32).
+
+**What the thesis can claim.**
+
+1. *Energy-aware routing*, deciding where a query goes by energy and not only
+   whether it escalates, cuts RecServe's energy by 31–93% at the same accuracy on
+   real household traffic when each query pays what it adds, and by 16–70% when it
+   pays its share of the batch.
+2. *On predictable traffic* a timetable carries that saving; live information adds
+   nothing.
+3. *On unpredictable traffic* the OLT's cost, broadcast on the PON, adds up to 13%
+   (surprises of × 3) to 29% (× 5) over the timetable, within about three points
+   of perfect information, for any household size. Piggyback on answers alone
+   cannot, because a household hears the OLT too rarely.
+
 ## 9. Limitations
 
 - **The OLT's whole-system figure is converted, not measured.** Host, idle and
@@ -649,6 +890,33 @@ The packet should carry the OLT's recent mean, not one query's rate.
   benign, since a fuller batch is cheaper per query, but it raises the OLT's
   latency and nothing in the rule caps its load. A deployment needs a latency
   or occupancy limit in the routing rule.
+- **The replayed API bursts exceed the measured batch range.** On BurstGPT's
+  all traffic, load reaches 8.6× the calibrated peak: at peak loads 16–32 that
+  is 138–276 queries in service, where one L4 could not hold them and the curve
+  is measured only to 64 (the simulation charges batch-64 rates). Those rows
+  are indicative only; conversation traffic stays within 1.4× (46 in service).
+- **The replay keeps the trace's counting noise.** BurstGPT's conversation log
+  has ~105 requests an hour, so part of its hour-to-hour variation is Poisson
+  noise, scaled up with the load (σ 0.66 raw against 0.61 net). It slightly
+  handicaps the schedule.
+- **The surprises are assumed.** How often unforeseen events come (one a day),
+  how long they last (3 h) and how large they are (× 1.5 to × 5, swept) are not
+  fitted to data; the results are read as a function of their size. At × 2 and
+  above they push the OLT beyond its measured batch range at the highest loads
+  (the † rows of §8.6).
+- **The broadcast is not standardized.** A PON's downstream multicast channel
+  exists [25], but an OLT that reports its energy on it, and an ONU agent that
+  reads it, would be new software.
+- **One confidence window per tier, shared by all households.** A real ONU keeps
+  its own. Skipped most of the day, it would see a few queries a day and take
+  months to fill a 1,000-answer window, so its threshold would be noisy; the
+  operator would have to calibrate it from the population, which the shared
+  window stands for, or pool it like the question statistics. The question mix
+  does not vary by hour here; if it did, a tier used only at some hours would
+  calibrate on those hours' questions. With more than three tiers, a middle tier
+  that receives queries forwarded past the tiers below would see easier questions
+  than the ones escalated to it, which shifts its β-quantile; windows would then
+  have to be kept per arrival path.
 
 ## 10. Reproducing
 
@@ -657,12 +925,22 @@ cd implementation
 .venv/bin/modal run src/modal_apps/measure_gpu_energy.py     # OLT sweep, ~15 min on one L4
 .venv/bin/modal run src/modal_apps/collect_answers.py        # all tiers' answers, 1,319 queries
 .venv/bin/python src/scripts/check_confidence.py results/energy_tests/<answers>.raw.jsonl
+# every simulation default, with what it means and where its value comes from:
+# config/sim_piggyback.yaml (flags override it for one run)
 .venv/bin/python src/scripts/sim_piggyback.py                # piggyback simulation (§8), ~30 s
 .venv/bin/python src/scripts/sim_piggyback.py --boundary gpu
 for s in 0.05 0.1 0.2 0.5; do .venv/bin/python src/scripts/sim_piggyback.py --onu-scale $s; done
 # load drifting off the average day, 14 days (§8.2), and marginal accounting (§8.3); add --seed 8 / 9
 .venv/bin/python src/scripts/sim_piggyback.py --load-sigma 0.5 --days 14 [--onu-scale 0.2]
 .venv/bin/python src/scripts/sim_piggyback.py --accounting marginal [--load-sigma 0.5 --days 14]
+# the trace-driven baseline (§8.5): hourly load from BurstGPT (and Azure 2024 for the drift check),
+# then 60 runs (~30 min at 10 in parallel) and their tables
+.venv/bin/python src/scripts/prepare_load_traces.py --azure  # writes data/load_traces/
+bash src/scripts/run_trace_baseline.sh 10
+.venv/bin/python src/scripts/summarize_trace_runs.py         # results/energy_tests/trace/SUMMARY.md
+# the case study (§8.6): config/study.yaml, 54 runs (~1 h at 10 in parallel; keep the lid open)
+bash src/scripts/run_study.sh 10
+.venv/bin/python src/scripts/summarize_study.py              # results/energy_tests/study/SUMMARY.md
 .venv/bin/python src/scripts/make_energy_artifact.py         # results page, from the files above
 ```
 
@@ -696,3 +974,6 @@ cleaned copy of each (`*.txt`) sits beside it.
 20. Little. *A Proof for the Queuing Formula: L = λW.* Operations Research 9(3), 1961.
 21. Wolff. *Poisson Arrivals See Time Averages.* Operations Research 30(2), 1982.
 22. Suresh, Canini, Schmid and Feldmann. *C3: Cutting Tail Latency in Cloud Data Stores via Adaptive Replica Selection.* NSDI 2015.
+23. NVIDIA Developer Forums. *Reducing idle power on Orin Nano Super Dev Kit* (2026-01-23): 4.7 W idle, tegrastats VDD_IN, 7 W mode. https://forums.developer.nvidia.com/t/reducing-idle-power-on-orin-nano-super-dev-kit/358482
+24. Stojkovic et al. *DynamoLLM: Designing LLM Inference Clusters for Performance and Energy Efficiency.* HPCA 2025. Azure LLM Inference Dataset 2024, https://github.com/Azure/AzurePublicDataset/blob/master/AzureLLMInferenceDataset2024.md
+25. Cisco. *Understand GPON Technology* (downstream broadcast, GEM port filtering, AES per ONU, downstream multicast GEM ports); ITU-T G.984.3 (GPON) and G.9807.1 (XGS-PON). https://www.cisco.com/c/en/us/support/docs/switches/catalyst-pon-series/216230-understand-gpon-technology.html

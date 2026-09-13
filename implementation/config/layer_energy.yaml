@@ -71,6 +71,14 @@ layers:
         qwen2.5_1.5b:
           J_per_generated_token_all_in: {q4_k_m: 1.11}
           throughput_tok_s: {q4_k_m: 9.37}
+      idle_W: 4.7
+      idle_source: >
+        NVIDIA Developer Forums, 'Reducing idle power on Orin Nano Super Dev Kit'
+        (2026-01-23): 4.7 W idle on the Orin Nano Super developer kit, tegrastats
+        VDD_IN, default 7 W mode, SSD/display/audio/PCIe on (2.5 W after disabling
+        them). Used only under marginal accounting, where a query pays what it adds:
+        the all-in figure minus idle_W x seconds per token (1.11 - 4.7/9.37 = 0.61 J).
+        The active figure's power mode is not stated, so the subtraction is approximate.
       notes: >
         The ONU tier's hardware from 2026-09-11. The AGX Orin 64GB above is a
         ~$2,000, 15-60 W developer module, not something an ISP would put in a
@@ -350,6 +358,14 @@ boundary_consolidation:
     user: "Cai et al.: whole SoC (in CPU-only inference it equals the CPU rail); off-chip DRAM, display and radio excluded -> a lower bound"
     onu: "Cloud to Edge: whole board at its power input, idle included -> already at the system boundary"
     olt: "this work: GPU card (NVML) x (accelerators + host + idle) / accelerators x pue"
+  marginal: >
+    Under marginal accounting (a query pays what it adds, energy_tests.md §8.3)
+    no tier is charged for being on: the OLT's card figure is net of idle at
+    batch 1 and the batch-energy slope above it, and its conversion drops the
+    idle-machines share ((accelerators + host) / accelerators x pue); the ONU's
+    all-in figure has the board's idle_W taken out; the user's SoC figure is
+    kept (screen off, airplane mode: the SoC's idle draw is small next to CPU
+    inference, and the figure is already a lower bound on the phone).
   caveat: >
     Google's shares come from large multi-accelerator hosts. A central-office
     server holding a single 72 W L4 likely spends a LARGER share on its host,

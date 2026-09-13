@@ -23,18 +23,25 @@ def _table() -> dict:
     return yaml.safe_load(open(ROOT / "config" / "layer_energy.yaml"))
 
 
-def published_rates() -> dict:
+def published_rates(accounting: str = "average") -> dict:
     """J per prompt token (pf) and per generated token (dec) for the tiers not measured here.
 
     User: Cai et al., Snapdragon CPU, prefill and decode priced separately.
     ONU: Cloud to Edge, Jetson Orin Nano Super -- one ALL-IN figure per generated
     token (whole board at its plug, idle and its short prompt's prefill
-    included), so its prefill rate is 0.
+    included), so its prefill rate is 0. Under 'marginal' accounting the board
+    is on whether or not a query arrives, so its idle draw comes off:
+    idle_W x seconds per token. The user's SoC figure is kept under both
+    (layer_energy.yaml, boundary_consolidation.marginal).
     """
-    nano = _table()["layers"]["onu"]["orin_nano_super"]["models"]["qwen2.5_1.5b"]
+    nano = _table()["layers"]["onu"]["orin_nano_super"]
+    m = nano["models"]["qwen2.5_1.5b"]
+    dec = float(m["J_per_generated_token_all_in"]["q4_k_m"])
+    if accounting == "marginal":
+        dec -= float(nano["idle_W"]) / float(m["throughput_tok_s"]["q4_k_m"])
     return {
         "user": {"pf": 0.016, "dec": 0.074},
-        "onu": {"pf": 0.0, "dec": float(nano["J_per_generated_token_all_in"]["q4_k_m"])},
+        "onu": {"pf": 0.0, "dec": dec},
     }
 
 
@@ -51,14 +58,20 @@ def boundary() -> dict:
     it_over_accel = (sh["active_accelerators"] + sh["host_cpu_and_dram"]
                      + sh["idle_machines"]) / sh["active_accelerators"]
     return {"it_over_accel": it_over_accel,
+            "it_over_accel_marginal": (sh["active_accelerators"] + sh["host_cpu_and_dram"])
+                                      / sh["active_accelerators"],
             "pue_isp": float(y["pue"]["isp_site"]), "pue_low": float(y["pue"]["lower_bound"])}
 
 
-def olt_factor(which: str = "system") -> float:
-    """Multiplier on the GPU-card figure: 'system' (PUE 1.54), 'system-low' (1.09) or 'gpu' (1)."""
+def olt_factor(which: str = "system", accounting: str = "average") -> float:
+    """Multiplier on the GPU-card figure: 'system' (PUE 1.54), 'system-low' (1.09) or 'gpu' (1).
+
+    Under 'marginal' accounting the idle machines held for load spikes are not
+    something a query adds, so their share is left out (x 2.20 instead of x 2.47).
+    """
     b = boundary()
-    return {"system": b["it_over_accel"] * b["pue_isp"],
-            "system-low": b["it_over_accel"] * b["pue_low"], "gpu": 1.0}[which]
+    it = b["it_over_accel_marginal"] if accounting == "marginal" else b["it_over_accel"]
+    return {"system": it * b["pue_isp"], "system-low": it * b["pue_low"], "gpu": 1.0}[which]
 
 
 def olt_runs() -> tuple[dict, dict]:

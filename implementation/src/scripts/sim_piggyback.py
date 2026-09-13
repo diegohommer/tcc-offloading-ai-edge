@@ -22,8 +22,8 @@ where p_j is how often a query that reached j went further. The skip margin
 delta keeps the default (run here / next tier up) unless the alternative is at
 least delta cheaper, as a fraction of the default's cost.
 
-Eight policies. The last six share that rule and differ ONLY in which OLT
-rate they see, so the comparison isolates what the packets are worth:
+Nine policies. The last seven share that rule and differ ONLY in which OLT
+rate they see, so the comparison isolates what the OLT's information is worth:
 
     stepwise    plain RecServe, the baseline
     skip_onu    plain RecServe on a two-tier chain, user -> OLT: the ONU is never
@@ -34,12 +34,41 @@ rate they see, so the comparison isolates what the packets are worth:
     stale_high  ... or --stale-factor times higher: a config that has gone stale
     schedule    a time-of-day table: the OLT's mean rate in each hour of the day,
                 calibrated on the load it then meets. Knows the typical day, not today
-    piggyback   learned from the packets (EWMA of the rates reported)
+    piggyback   learned from the packets on the household's own answers (EWMA of the
+                rates reported)
+    broadcast   the OLT's own mean rate over its last --report-window minutes, sent to
+                every ONU on the PON every --broadcast-interval-s seconds on the
+                downstream multicast channel: every household knows it, asked or not
     oracle      the true expected rate at this moment -- the upper bound on live information
+
+--shared-stats pools the answer lengths and escalation rates every policy's rule
+also needs across households (they describe the questions, not the household), so
+a household decides from its first query; its own devices' rates it knows, and
+only the OLT's has to reach it.
 
 With --load-sigma 0 the load IS the typical day, so the schedule is the oracle
 at hourly resolution; only a load that drifts from it (--load-sigma > 0) can
 separate a live signal from a well-kept schedule.
+
+REAL LOAD AND MANY HOUSEHOLDS (--load-trace, --households)
+  --load-trace replays a public trace's hourly request counts as the OLT's load
+  (data/load_traces/, written by prepare_load_traces.py): 'conversation' is
+  BurstGPT's people-chatting traffic, the case study's load; 'all' adds its API
+  traffic, a burstier stress case. The static configurations and the schedule
+  are calibrated on the first --train-days only, and every policy runs on the
+  days after them, which nobody knew in advance. The schedule then knows the
+  hour of day and weekday/weekend. The cascade's own arrivals follow the trace too.
+  --households splits those arrivals over that many households, each with its own
+  user device and ONU, so each learns the OLT's cost from its own answers alone;
+  --per-day is then per household. RecServe's confidence thresholds stay one per
+  tier, shared by all households (a threshold calibrated on the tier's population).
+  --surge-factor adds unforeseen events to the replayed load, surges and dips no
+  timetable or calendar knows about (class Surges): the unpredictable traffic.
+
+MARGINAL ACCOUNTING charges no tier for being on: the OLT's card figure net of
+idle (and, at the whole-system boundary, without the idle-machines share: x 2.20),
+the ONU's all-in figure minus its board's idle draw (0.61 instead of 1.11 J per
+token), the user's SoC figure as is (energy_tests.md §8.3, §8.5).
 
 WHAT THE NUMBERS REST ON (energy_tests.md §3-§8)
   - Answers: the 1,319-question zero-shot GSM8K collection, every tier.
@@ -56,12 +85,16 @@ WHAT THE NUMBERS REST ON (energy_tests.md §3-§8)
     changes accuracy too, so J/query is read off the stepwise frontier at the
     same accuracy.
 
+SETTINGS: every default is in config/sim_piggyback.yaml, which says what each
+setting does and where its value comes from; a flag overrides one for one run.
+
 Usage:
-    python src/scripts/sim_piggyback.py                      # defaults below
+    python src/scripts/sim_piggyback.py                      # config/sim_piggyback.yaml as is
     python src/scripts/sim_piggyback.py --boundary gpu       # GPU-card OLT, for comparison
     python src/scripts/sim_piggyback.py --onu-scale 0.2      # a 5x more efficient ONU
     python src/scripts/sim_piggyback.py --load-sigma 0.5 --days 14    # load drifting off the average day
-    python src/scripts/sim_piggyback.py --accounting marginal         # OLT queries pay what they add
+    python src/scripts/sim_piggyback.py --accounting marginal         # every tier pays what a query adds
+    python src/scripts/sim_piggyback.py --load-trace conversation --households 40 --per-day 50
 Writes results/energy_tests/sim_piggyback_<tag>_<UTC>.csv (one row per load, beta,
 policy) and .json (the same plus per-hour detail and the inputs used).
 """
@@ -80,14 +113,18 @@ import time
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))       # implementation/src
 from energy.three_tier import (RESULTS, TIERS, OltCurve, load_answers,  # noqa: E402
                                olt_factor, olt_runs, published_rates)
 
 TOP = len(TIERS) - 1
-POLICIES = ("stepwise", "skip_onu", "static", "stale_low", "stale_high", "schedule", "piggyback", "oracle")
-ACC_TARGETS = (0.60, 0.65, 0.70, 0.75, 0.80, 0.85)   # where the policies' frontiers are compared
+TRACES = Path(__file__).resolve().parents[2] / "data" / "load_traces"
+POLICIES = ("stepwise", "skip_onu", "static", "stale_low", "stale_high", "schedule", "piggyback", "broadcast",
+            "oracle")
+FIXED = ("stepwise", "skip_onu")                  # fixed chains: no energy information at all
+CONFIG = Path(__file__).resolve().parents[2] / "config" / "sim_piggyback.yaml"
 STATIC = ("static", "stale_low", "stale_high")   # fixed OLT rate, shipped as configuration
 
 # BurstGPT arrivals per hour of day (61 days of regional Azure OpenAI traffic):
@@ -106,6 +143,15 @@ def load_shape(t_h: float) -> float:
     return ((1 - f) * BURSTGPT[h0] + f * BURSTGPT[(h0 + 1) % 24]) / peak
 
 
+def load_shape_vec(ts) -> np.ndarray:
+    """load_shape for an array of times."""
+    x = (np.asarray(ts, dtype=float) - 0.5) % 24
+    h0 = x.astype(int)
+    f = x - h0
+    b = np.array(BURSTGPT, dtype=float)
+    return ((1 - f) * b[h0] + f * b[(h0 + 1) % 24]) / b.max()
+
+
 def load_noise(stream, sigma: float, tau_h: float, seed: int) -> list[float]:
     """Multiplier on the OLT's load at each arrival, mean 1.
 
@@ -118,12 +164,156 @@ def load_noise(stream, sigma: float, tau_h: float, seed: int) -> list[float]:
         return [1.0] * len(stream)
     rng = np.random.default_rng([seed, 7919])      # one path, shared by every load and policy
     x, t0, out = rng.normal(0, sigma), stream[0][1], []
-    for _, t in stream:
+    for _, t, _ in stream:
         a = math.exp(-(t - t0) / tau_h)
         x = a * x + sigma * math.sqrt(1 - a * a) * rng.normal()
         t0 = t
         out.append(math.exp(x - sigma ** 2 / 2))
     return out
+
+
+class TraceLoad:
+    """The OLT's load replayed from a trace's hourly request counts (prepare_load_traces.py).
+
+    rel(t) is the load at t hours from the trace's start, relative to the busiest
+    hour of the training days' average day, linear between hour midpoints like
+    load_shape. The first train_days are what a schedule may be calibrated on;
+    the simulation runs on the days after.
+    """
+
+    def __init__(self, column: str, train_days: int, path: Path = TRACES / "burstgpt_hourly.csv"):
+        with open(path) as f:
+            self.c = np.array([float(r[column]) for r in csv.DictReader(f)]).reshape(-1, 24)
+        self.column, self.train_days, self.days = column, train_days, len(self.c)
+        if not 0 < train_days < self.days:
+            raise ValueError(f"--train-days must be within 1..{self.days - 1}")
+        train = self.c[:train_days]
+        by_dow = [train[d::7].mean() for d in range(7)]
+        self.weekend = set(int(d) for d in np.argsort(by_dow)[:2])   # the two quietest days of the week
+        self.shape = train.mean(axis=0)                               # training days' average day
+        self.flat = self.c.ravel() / self.shape.max()
+
+    def rel(self, t_h: float) -> float:
+        x = t_h - 0.5
+        i0 = min(max(int(math.floor(x)), 0), len(self.flat) - 1)
+        i1 = min(i0 + 1, len(self.flat) - 1)
+        f = min(max(x - i0, 0.0), 1.0)
+        return (1 - f) * self.flat[i0] + f * self.flat[i1]
+
+    def rel_vec(self, ts) -> np.ndarray:
+        """rel for an array of times."""
+        return np.interp(np.asarray(ts, dtype=float), np.arange(len(self.flat)) + 0.5, self.flat)
+
+    def daytype(self, t_h: float) -> int:
+        return int(int(t_h // 24) % 7 in self.weekend)
+
+
+def calibrate(trace: TraceLoad, peak: float, E: "Energy", stale_factor: float, mult=None) -> dict:
+    """Static configurations and the schedule, from the training days alone.
+
+    Each is the OLT's expected rate averaged over its period, weighted by
+    arrivals (which follow the trace), every 5 minutes: the whole training period
+    for the static ones, each (weekday/weekend, hour) cell for the schedule.
+    mult is the surges' multiplier on the load: events on training days are
+    part of the average the schedule learns.
+    """
+    ts = np.arange(0, 24 * trace.train_days, 1 / 12) + 1 / 24
+    w = np.array([trace.rel(t) for t in ts])
+    load = peak * w * (mult(ts) if mult is not None else 1.0)
+    cells = collections.defaultdict(list)
+    for n, t in enumerate(ts):
+        cells[(trace.daytype(t), int(t) % 24)].append(n)
+
+    def avg(idx, scale=1.0):
+        idx = np.asarray(idx)
+        r = np.array([E.expected_olt(load[n] * scale) for n in idx])
+        ww = w[idx] if w[idx].sum() > 0 else np.ones(len(idx))
+        return float((r[:, 0] * ww).sum() / ww.sum()), float((r[:, 1] * ww).sum() / ww.sum())
+
+    every = range(len(ts))
+    return {"static": avg(every), "stale_low": avg(every, 1 / stale_factor),
+            "stale_high": avg(every, stale_factor),
+            "schedule": {k: avg(v) for k, v in cells.items()}}
+
+
+class Surges:
+    """Unforeseen events on the OLT's load, on top of the replayed trace.
+
+    What no timetable or calendar knows about: a news surge, a big game running
+    long, a neighbouring OLT's traffic moved here, an outage elsewhere. Events
+    arrive as a Poisson process, per_day a day on average, each lasting `hours`;
+    each multiplies the load by `factor` (a surge) or divides it by `factor` (a
+    dip), with equal probability, and overlapping events compound. factor 1 =
+    none. The events depend on the seed alone, so every factor, load and policy
+    meets the same ones. They fall on training days too, so the schedule learns
+    an average that includes them. The cascade's own arrivals are unchanged: the
+    events are other traffic at the OLT.
+    """
+
+    def __init__(self, factor: float, per_day: float, hours: float, span_h: float, seed: int):
+        rng = np.random.default_rng([seed, 4242])
+        n = int(rng.poisson(per_day * span_h / 24))
+        self.start = rng.uniform(0, span_h, n)
+        self.sign = rng.choice([-1, 1], n)
+        self.end = self.start + hours
+        self.factor = factor
+        # piecewise constant: the multiplier between consecutive event boundaries
+        self.bounds = np.unique(np.concatenate([[-np.inf], self.start, self.end]))
+        active = (self.start[None, :] <= self.bounds[:, None]) & (self.bounds[:, None] < self.end[None, :])
+        self.level = float(factor) ** (active * self.sign[None, :]).sum(axis=1)
+
+    def mult(self, ts) -> np.ndarray:
+        ts = np.asarray(ts, dtype=float)
+        if self.factor == 1:
+            return np.ones_like(ts)
+        return self.level[np.searchsorted(self.bounds, ts, side="right") - 1]
+
+    def events(self) -> list:
+        return [[round(float(s), 3), round(float(e), 3), int(g)] for s, e, g in zip(self.start, self.end, self.sign)]
+
+
+class OltReporter:
+    """The OLT's own mean energy rate over the last `minutes` of its traffic, at any moment t.
+
+    The OLT serves every PON, so over that window it sees n ~ Poisson(arrivals in
+    it) queries (Little's law), each meeting its own batch, 1 + Poisson(load at its
+    time). The report is the mean of their rates: cheap for the OLT to keep, far
+    less noisy than one query's rate (which under marginal accounting is ~100x
+    higher when the query found the OLT idle), and at most `minutes` old. It rides
+    on an answer (report: window, piggyback) or goes out in the OLT's broadcast.
+    """
+
+    def __init__(self, load_at, E: "Energy", curve: OltCurve, olt_tokens: float, minutes: float,
+                 max_load: float, rng):
+        self.load_at, self.curve, self.tok, self.minutes, self.rng = load_at, curve, olt_tokens, minutes, rng
+        self.kmax = max(int(max_load + 8 * math.sqrt(max_load) + 10), 80)   # rates hold at batch 64 beyond
+        self.table = np.array([E.olt(1 + k) for k in range(self.kmax + 1)])
+        self.log_b, self.log_tps = np.log(curve.b), np.log(curve.tps)
+
+    def _arrivals_per_s(self, L: np.ndarray) -> np.ndarray:
+        """Little's law, vectorized OltCurve.service_s at batch 1 + L."""
+        b = np.clip(1 + L, self.curve.b[0], self.curve.b[-1])
+        tps = np.exp(np.interp(np.log(b), self.log_b, self.log_tps))
+        return L / (self.tok / (tps / b))
+
+    def means_at(self, ts, chunk: int = 2000) -> list:
+        """The report at each of the times ts."""
+        ts, w, out = np.asarray(ts, dtype=float), self.minutes / 60, []
+        for c in range(0, len(ts), chunk):
+            t = ts[c:c + chunk]
+            n = np.maximum(1, self.rng.poisson(self._arrivals_per_s(self.load_at(t - w / 2)) * self.minutes * 60))
+            when = np.repeat(t, n) - w * self.rng.random(int(n.sum()))     # each arrival in the window
+            k = np.minimum(self.rng.poisson(self.load_at(when)), self.kmax)  # the batch it met
+            sums = np.add.reduceat(self.table[k], np.concatenate([[0], np.cumsum(n)[:-1]]), axis=0)
+            out += [(float(pf), float(dec)) for pf, dec in sums / n[:, None]]
+        return out
+
+    def broadcasts(self, times, interval_s: float) -> list:
+        """What a household knows at each arrival: the OLT's last broadcast before it."""
+        dt = interval_s / 3600
+        slots, which = np.unique(np.floor(np.asarray(times) / dt), return_inverse=True)
+        sent = self.means_at(slots * dt)
+        return [sent[j] for j in which]
 
 
 class Energy:
@@ -188,13 +378,16 @@ class Window:
 class Learned:
     """What one tier knows about itself and the tiers above it -- from packets only."""
 
-    def __init__(self, alpha: float, warmup: int, rate_alpha: float | None = None):
+    def __init__(self, alpha: float, warmup: int, rate_alpha: float | None = None, pool: "Learned | None" = None):
         self.alpha, self.warmup = alpha, warmup
         self.rate_alpha = alpha if rate_alpha is None else rate_alpha   # weight on reported energy rates
-        self.rates: dict[str, tuple[float, float]] = {}   # EWMA of reported (pf, dec)
-        self.tokens: dict[str, float] = {}                 # EWMA tokens generated there
-        self.p_on: dict[str, float] = {}                   # EWMA P(query went beyond it)
-        self.n: collections.Counter = collections.Counter()
+        self.rates: dict[str, tuple[float, float]] = {}   # EWMA of reported (pf, dec): always this household's
+        if pool is None:
+            self.tokens: dict[str, float] = {}             # EWMA tokens generated there
+            self.p_on: dict[str, float] = {}               # EWMA P(query went beyond it)
+            self.n: collections.Counter = collections.Counter()
+        else:                                              # question statistics shared by every household
+            self.tokens, self.p_on, self.n = pool.tokens, pool.p_on, pool.n
 
     def absorb(self, packet: dict, final: str) -> None:
         for tier, (jpf, jdec, gen) in packet.items():
@@ -244,36 +437,21 @@ def on_escalation(i: int, prompt: float, rates: dict, L: Learned, delta: float) 
     return best if costs[i + 1] - costs[best] > delta * costs[i + 1] else i + 1
 
 
-def window_reports(loads, E, curve, olt_tokens, minutes, rng):
-    """What the OLT would report if it averaged its own recent traffic instead of one query's batch.
-
-    The OLT serves every PON, so over the last `minutes` it sees n ~ Poisson(arrival
-    rate x window) arrivals (Little's law), each meeting a 1 + Poisson(load) batch.
-    The report is the mean of their rates: cheap for the OLT to keep, and far less
-    noisy than one query's rate, which under marginal accounting is ~100x higher
-    when the query happened to find the OLT idle.
-    """
-    kmax = int(max(loads) + 8 * math.sqrt(max(loads)) + 10)
-    table = np.array([E.olt(1 + k) for k in range(kmax + 1)])
-    out = []
-    for L in loads:
-        lam = L / curve.service_s(1 + L, olt_tokens)            # arrivals per second
-        n = max(1, int(rng.poisson(lam * minutes * 60)))
-        k = np.minimum(rng.poisson(L, n), kmax)
-        pf, dec = table[k].mean(axis=0)
-        out.append((float(pf), float(dec)))
-    return out
-
-
-def run(rec, stream, batches, loads, beta, policy, args, E, static_rates, reports=None):
-    history = {t: Window(args.window) for t in TIERS}
-    learners = {t: Learned(args.alpha, args.warmup, args.rate_alpha) for t in TIERS[:TOP]}  # only tiers that can decide
+def run(rec, stream, batches, loads, beta, policy, args, E, static_rates, reports=None, sched_key=None, bcast=None):
+    history = {t: Window(args.window) for t in TIERS}   # RecServe's thresholds: one per tier, shared by every household
+    homes: dict[int, dict[str, Learned]] = {}           # per household, its tiers that can decide
+    pool = ({t: Learned(args.alpha, args.warmup, args.rate_alpha) for t in TIERS[:TOP]}
+            if args.shared_stats else None)             # question statistics pooled across households
     energy = correct = forwarded = skipped = 0.0
     rate_err = []
     final_at = collections.Counter()
     hourly = [[0.0, 0, 0, 0, 0] for _ in range(24)]      # joules, queries, final at user/onu/olt
 
-    for n_q, ((qi, t_h), b, load) in enumerate(zip(stream, batches, loads)):   # load: the OLT's true offered load now
+    for n_q, ((qi, t_h, hh), b, load) in enumerate(zip(stream, batches, loads)):   # load: the OLT's true offered load now
+        learners = homes.get(hh)
+        if learners is None:
+            learners = homes[hh] = {t: Learned(args.alpha, args.warmup, args.rate_alpha, pool[t] if pool else None)
+                                    for t in TIERS[:TOP]}
         prompt = rec[qi]["user"]["tp"]
         packet: dict[str, tuple[float, float, int]] = {}
         spent = 0.0
@@ -282,18 +460,26 @@ def run(rec, stream, batches, loads, beta, policy, args, E, static_rates, report
         while True:
             t = TIERS[i]
             L = learners.get(t)
-            decide = policy not in ("stepwise", "skip_onu") and L is not None and L.ready(TIERS[i:])
+            decide = policy not in FIXED and L is not None and L.ready(TIERS[i:])
             if decide:
-                rates = {u: L.rates[u] for u in TIERS[i:]}
+                if pool:    # a household knows its own devices' rates; only the OLT's has to reach it
+                    rates = {u: E.rates(u, 1) for u in TIERS[i:TOP]}
+                    rates["olt"] = L.rates.get("olt")
+                else:
+                    rates = {u: L.rates[u] for u in TIERS[i:]}
                 if policy in STATIC:
                     rates["olt"] = static_rates[policy]
                 elif policy == "schedule":
-                    rates["olt"] = static_rates["schedule"][int(t_h) % 24]
+                    rates["olt"] = static_rates["schedule"][sched_key(t_h)]
                 elif policy == "oracle":
                     rates["olt"] = E.expected_olt(load)
-                else:
+                elif policy == "broadcast":
+                    rates["olt"] = bcast[n_q]
+                if policy in ("piggyback", "broadcast") and rates["olt"] is not None:
                     true_dec = E.expected_olt(load)[1]
                     rate_err.append(abs(rates["olt"][1] - true_dec) / true_dec)
+                decide = rates["olt"] is not None       # piggyback: this household has not heard the OLT yet
+            if decide:
                 j = on_arrival(i, prompt, rates, L, args.delta)
                 if j != i:
                     forwarded += 1
@@ -345,16 +531,35 @@ def run(rec, stream, batches, loads, beta, policy, args, E, static_rates, report
         for h, hr in enumerate(hourly)]
 
 
-def build_stream(indices, days, per_day, seed):
-    """Time-ordered arrivals at the user tier, hour h getting a share proportional to BurstGPT."""
+def build_stream(indices, days, per_day, seed, households=1, trace=None):
+    """Time-ordered arrivals at the user tier: (question, hour, household).
+
+    Without a trace every day is BurstGPT's average day: hour h gets a share of
+    per_day x households proportional to BURSTGPT. With one, arrivals follow the
+    trace over its days after training: a Poisson number per hour, proportional
+    to that hour's requests, per_day x households a day on average. Each arrival
+    belongs to a household drawn at random.
+    """
     rng = random.Random(seed)
-    total = sum(BURSTGPT)
+    home = (lambda: rng.randrange(households)) if households > 1 else (lambda: 0)
     out = []
-    for day in range(days):
-        times = []
-        for h in range(24):
-            times += [24 * day + h + rng.random() for _ in range(round(per_day * BURSTGPT[h] / total))]
-        out += [(rng.choice(indices), t) for t in sorted(times)]
+    if trace is None:
+        total = sum(BURSTGPT)
+        for day in range(days):
+            times = []
+            for h in range(24):
+                times += [24 * day + h + rng.random()
+                          for _ in range(round(per_day * households * BURSTGPT[h] / total))]
+            out += [(rng.choice(indices), t, home()) for t in sorted(times)]
+        return out
+    nprng = np.random.default_rng([seed, 31])
+    test = trace.c[trace.train_days:]
+    per_count = per_day * households * len(test) / test.sum()
+    for d, day in enumerate(test):
+        for h, n in enumerate(day):
+            t0 = 24 * (trace.train_days + d) + h
+            for t in sorted(t0 + nprng.random(nprng.poisson(per_count * n))):
+                out.append((rng.choice(indices), float(t), home()))
     return out
 
 
@@ -373,7 +578,7 @@ def iso_accuracy(rows: list[dict]) -> None:
             r["saving_same_accuracy"] = float("nan")
 
 
-def frontier(rows: list[dict]) -> dict:
+def frontier(rows: list[dict], targets: list[float]) -> dict:
     """One policy's J/query at each target accuracy, along its beta sweep.
 
     Only Pareto points are kept (no other beta is both more accurate and
@@ -390,45 +595,78 @@ def frontier(rows: list[dict]) -> dict:
     pareto.sort()
     xs, ys = [a for a, _ in pareto], [j for _, j in pareto]
     return {f"{t:.2f}": (None if t > xs[-1] else ys[0] if t < xs[0] else float(np.interp(t, xs, ys)))
-            for t in ACC_TARGETS}
+            for t in targets}
+
+
+def load_config(path: Path) -> dict:
+    """The settings file's values, flattened into argparse defaults (lists become comma strings).
+
+    A file may say `extends: <file>`: that file's values first, this one's on top.
+    """
+    with open(path) as f:
+        groups = yaml.safe_load(f)
+    base = groups.pop("extends", None)
+    flat = load_config(path.parent / base) if base else {}
+    for items in groups.values():
+        for k, v in items.items():
+            flat[k] = ",".join(str(x) for x in v) if isinstance(v, list) else v
+    return flat
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--betas", default="0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9")
-    ap.add_argument("--peak-loads", default="0.5,1,2,4,8,16,32",
-                    help="OLT offered load at the busiest hour: mean queries in service")
-    ap.add_argument("--boundary", choices=("system", "system-low", "gpu"), default="system",
-                    help="OLT energy boundary (energy_tests.md §7): whole system at PUE 1.54 (default), at 1.09, or GPU card")
-    ap.add_argument("--confidence", choices=("mean", "min"), default="mean",
-                    help="exp(mean logprob), RecServe's definition; or exp(min logprob)")
-    ap.add_argument("--onu-scale", type=float, default=1.0,
-                    help="multiply the ONU's J per generated token (1.11, whole board, idle included): "
-                         "a sensitivity for a more efficient ONU accelerator")
-    ap.add_argument("--accounting", choices=("average", "marginal"), default="average",
-                    help="OLT energy per query: its share of the batch (average) or what it adds to the network (marginal)")
-    ap.add_argument("--load-sigma", type=float, default=0.0,
-                    help="sd of the log multiplier by which the OLT's load drifts off the average day (0 = none)")
-    ap.add_argument("--load-tau", type=float, default=12.0, help="correlation time of that drift, hours")
-    ap.add_argument("--report", choices=("query", "window"), default="query",
-                    help="what the OLT's packet carries: the rates this query's batch ran at, or the OLT's "
-                         "mean over its own recent traffic (--report-window minutes)")
-    ap.add_argument("--report-window", type=float, default=5.0, help="minutes the OLT averages over (--report window)")
-    ap.add_argument("--stale-factor", type=float, default=4.0,
-                    help="how far off the stale configs' assumed load is (x and 1/x)")
-    ap.add_argument("--delta", type=float, default=0.0, help="relative skip margin")
-    ap.add_argument("--window", type=int, default=1000,
-                    help="confidence history per tier (RecServe paper recommends 300-1000)")
-    ap.add_argument("--alpha", type=float, default=0.05, help="EWMA weight for learned stats")
-    ap.add_argument("--rate-alpha", type=float, default=None,
-                    help="EWMA weight for the reported energy rates alone (default: --alpha); with --report "
-                         "window the OLT has already averaged, so 1 = trust the latest report")
-    ap.add_argument("--warmup", type=int, default=20, help="reports per tier before deciding")
-    ap.add_argument("--days", type=int, default=3)
-    ap.add_argument("--per-day", type=int, default=2000, help="queries per day at the user tier")
-    ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument("--out", type=Path, help="CSV path (default results/energy_tests/sim_piggyback_<UTC>.csv)")
+    # Every default comes from config/sim_piggyback.yaml (what each setting means and
+    # where its value comes from is written there); a flag overrides it for one run.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config", type=Path, default=CONFIG, help="settings file (default config/sim_piggyback.yaml)")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 parents=[pre])
+    ap.add_argument("--betas", help="comma-separated RecServe beta values")
+    ap.add_argument("--peak-loads", help="comma-separated OLT loads at the busiest hour, in queries in service")
+    ap.add_argument("--boundary", choices=("system", "system-low", "gpu"), help="where the OLT's energy is counted (§7)")
+    ap.add_argument("--confidence", choices=("mean", "min"), help="exp(mean logprob), RecServe's, or exp(min logprob)")
+    ap.add_argument("--onu-scale", type=float, help="multiply the ONU's J per generated token")
+    ap.add_argument("--accounting", choices=("average", "marginal"), help="share of the batch, or what a query adds")
+    ap.add_argument("--load-sigma", type=float, help="log-sd of the synthetic load's drift (0 = none)")
+    ap.add_argument("--load-tau", type=float, help="correlation time of that drift, hours")
+    ap.add_argument("--report", choices=("query", "window"), help="the OLT packet's rate: this batch's, or its recent mean")
+    ap.add_argument("--report-window", type=float, help="minutes the OLT averages over (--report window)")
+    ap.add_argument("--stale-factor", type=float, help="how far off the stale configs' assumed load is (x and 1/x)")
+    ap.add_argument("--delta", type=float, help="relative skip margin")
+    ap.add_argument("--window", type=int, help="RecServe's confidence history per tier")
+    ap.add_argument("--alpha", type=float, help="EWMA weight for learned answer lengths and escalation rates")
+    ap.add_argument("--rate-alpha", type=float, help="EWMA weight for reported energy rates (unset: --alpha)")
+    ap.add_argument("--warmup", type=int, help="reports per tier before a household decides")
+    ap.add_argument("--days", type=int, help="days simulated on the synthetic average day")
+    ap.add_argument("--per-day", type=int, help="queries per day at the user tier, per household")
+    ap.add_argument("--households", type=int, help="households sharing the OLT, each learning on its own")
+    ap.add_argument("--load-trace", choices=("conversation", "api", "all"),
+                    help="replay BurstGPT's hourly requests as the OLT's load (data/load_traces/)")
+    ap.add_argument("--train-days", type=int, help="trace days the configs and the schedule are calibrated on")
+    ap.add_argument("--surge-factor", type=float, help="load multiplier of an unforeseen event (1 = none)")
+    ap.add_argument("--surge-per-day", type=float, help="expected unforeseen events a day")
+    ap.add_argument("--surge-hours", type=float, help="length of an unforeseen event, hours")
+    ap.add_argument("--broadcast-interval-s", type=float, help="seconds between the OLT's broadcasts")
+    ap.add_argument("--shared-stats", action=argparse.BooleanOptionalAction,
+                    help="pool answer lengths and escalation rates across households")
+    ap.add_argument("--policies", help="comma-separated subset; must include stepwise")
+    ap.add_argument("--acc-targets", help="comma-separated accuracies the frontiers are read at")
+    ap.add_argument("--no-hourly", action="store_true", help="leave the per-hour detail out of the JSON")
+    ap.add_argument("--seed", type=int)
+    ap.add_argument("--out", type=Path, help="CSV path (default results/energy_tests/sim_piggyback_<tag>_<UTC>.csv)")
+    config = pre.parse_known_args()[0].config
+    defaults = load_config(config)
+    dests = {a.dest for a in ap._actions} - {"help", "config", "out"}
+    if set(defaults) != dests:
+        print(f"{config}: missing {sorted(dests - set(defaults))}, unknown {sorted(set(defaults) - dests)}",
+              file=sys.stderr)
+        return 1
+    ap.set_defaults(**defaults)
     args = ap.parse_args()
+    for a in ap._actions:                       # argparse does not check defaults against choices
+        v = getattr(args, a.dest, None)
+        if a.choices and v is not None and v not in a.choices:
+            print(f"{config}: {a.dest} = {v!r}, expected one of {a.choices}", file=sys.stderr)
+            return 1
 
     recs, models, sources = load_answers()
     key = "cmean" if args.confidence == "mean" else "cmin"
@@ -442,22 +680,48 @@ def main() -> int:
         print(f"ladder is not accuracy-monotonic: {acc} -- skips are unsafe here", file=sys.stderr)
         return 1
 
-    pub = published_rates()
+    policies = args.policies.split(",")
+    if "stepwise" not in policies or not set(policies) <= set(POLICIES):
+        print(f"--policies must include stepwise and come from {POLICIES}", file=sys.stderr)
+        return 1
+    if args.load_trace and args.load_sigma:
+        print("--load-trace replays a real load; --load-sigma drifts the synthetic average day", file=sys.stderr)
+        return 1
+    pub = published_rates(args.accounting)
     pub["onu"]["dec"] *= args.onu_scale
-    factor = olt_factor(args.boundary)
+    factor = olt_factor(args.boundary, args.accounting)
     curve = OltCurve(olt_runs()[1]["batch_curve"], factor)
     E = Energy(curve, pub, args.accounting)
-    stream = build_stream(sorted(rec), args.days, args.per_day, args.seed)
-    drift = load_noise(stream, args.load_sigma, args.load_tau, args.seed)
+    trace = TraceLoad(args.load_trace, args.train_days) if args.load_trace else None
+    if args.surge_factor != 1 and not trace:
+        print("--surge-factor adds events to a replayed trace: use it with --load-trace", file=sys.stderr)
+        return 1
+    surges = Surges(args.surge_factor, args.surge_per_day, args.surge_hours, 24 * trace.days, args.seed) if trace else None
+    stream = build_stream(sorted(rec), args.days, args.per_day, args.seed, args.households, trace)
+    times = np.array([t for _, t, _ in stream])
+    drift = list(surges.mult(times)) if trace else load_noise(stream, args.load_sigma, args.load_tau, args.seed)
+    rel = trace.rel if trace else load_shape
+
+    def load_at(ts, peak):
+        """The OLT's true load at any times, for its own reports and broadcasts."""
+        if trace:
+            return peak * trace.rel_vec(ts) * surges.mult(ts)
+        return peak * load_shape_vec(ts) * np.interp(ts, times, drift)
+    shape24 = [float(x) for x in trace.shape / trace.shape.max()] if trace else [load_shape(h + 0.5) for h in range(24)]
+    sched_key = (lambda t: (trace.daytype(t), int(t) % 24)) if trace else (lambda t: (0, int(t) % 24))
     betas = [float(b) for b in args.betas.split(",")]
+    targets = [float(t) for t in args.acc_targets.split(",")]
     peaks = [float(p) for p in args.peak_loads.split(",")]
     mean_tok = {t: (st.mean(rec[i][t]["tp"] for i in rec), st.mean(rec[i][t]["tg"] for i in rec)) for t in TIERS}
     fixed = {t: pub[t]["pf"] * mean_tok[t][0] + pub[t]["dec"] * mean_tok[t][1] for t in ("user", "onu")}
 
     print(f"answers: {', '.join(sources)}")
-    print(f"n={len(rec)} queries, {len(stream)} arrivals over {args.days} days; confidence exp({args.confidence}); "
-          f"OLT boundary {args.boundary} (x{factor:.2f}), {args.accounting} accounting; "
-          f"load drift sigma {args.load_sigma:g} (tau {args.load_tau:g} h); OLT reports "
+    span = (f"{trace.days - trace.train_days} days of BurstGPT '{args.load_trace}' after {trace.train_days} "
+            f"calibration days, surges x{args.surge_factor:g} ({len(surges.start)} events)"
+            if trace else f"{args.days} days, load drift sigma {args.load_sigma:g} (tau {args.load_tau:g} h)")
+    print(f"n={len(rec)} queries, {len(stream)} arrivals over {span}; {args.households} household(s) x "
+          f"{args.per_day}/day; confidence exp({args.confidence}); "
+          f"OLT boundary {args.boundary} (x{factor:.2f}), {args.accounting} accounting; OLT reports "
           f"{'its ' + format(args.report_window, 'g') + '-min mean' if args.report == 'window' else 'per query'}; "
           f"delta={args.delta}, window={args.window}")
     print("standalone accuracy: " + "  ".join(f"{t} {acc[t]:.3f}" for t in TIERS))
@@ -466,36 +730,44 @@ def main() -> int:
     rows, hourly, configs, frontiers = [], [], [], []
     for peak in peaks:
         rng = np.random.default_rng([args.seed, int(peak * 1000)])   # same batches for every beta and policy
-        loads = [peak * load_shape(t) * m for (_, t), m in zip(stream, drift)]
+        loads = [peak * rel(t) * m for (_, t, _), m in zip(stream, drift)]
         batches = [1 + int(k) for k in rng.poisson(loads)]
-        def day_average(scale):
-            rs = [E.expected_olt(L * scale) for L in loads]
-            return st.mean(r[0] for r in rs), st.mean(r[1] for r in rs)
-        static_rates = {"static": day_average(1.0), "stale_low": day_average(1 / args.stale_factor),
-                        "stale_high": day_average(args.stale_factor)}
-        by_hour = collections.defaultdict(list)
-        for (_, t), L in zip(stream, loads):
-            by_hour[int(t) % 24].append(E.expected_olt(L))
-        static_rates["schedule"] = [(st.mean(r[0] for r in by_hour[h]), st.mean(r[1] for r in by_hour[h]))
-                                    for h in range(24)]
-        reports = (window_reports(loads, E, curve, mean_tok["olt"][1], args.report_window,
-                                  np.random.default_rng([args.seed, int(peak * 1000), 2]))
-                   if args.report == "window" else None)
+        if trace:
+            static_rates = calibrate(trace, peak, E, args.stale_factor, surges.mult)
+        else:
+            def day_average(scale):
+                rs = [E.expected_olt(L * scale) for L in loads]
+                return st.mean(r[0] for r in rs), st.mean(r[1] for r in rs)
+            static_rates = {"static": day_average(1.0), "stale_low": day_average(1 / args.stale_factor),
+                            "stale_high": day_average(args.stale_factor)}
+            by_hour = collections.defaultdict(list)
+            for (_, t, _), L in zip(stream, loads):
+                by_hour[int(t) % 24].append(E.expected_olt(L))
+            static_rates["schedule"] = {(0, h): (st.mean(r[0] for r in by_hour[h]), st.mean(r[1] for r in by_hour[h]))
+                                        for h in range(24)}
+        def reporter(stream_id):
+            return OltReporter(lambda ts: load_at(ts, peak), E, curve, mean_tok["olt"][1], args.report_window,
+                               max(loads), np.random.default_rng([args.seed, int(peak * 1000), stream_id]))
+        reports = (reporter(2).means_at(times)
+                   if args.report == "window" and "piggyback" in policies else None)
+        bcast = reporter(3).broadcasts(times, args.broadcast_interval_s) if "broadcast" in policies else None
         olt_q = [E.rates("olt", b)[0] * rec[qi]["olt"]["tp"] + E.rates("olt", b)[1] * rec[qi]["olt"]["tg"]
-                 for (qi, _), b in zip(stream, batches)]
+                 for (qi, _, _), b in zip(stream, batches)]
         # Little's law: load = arrival rate x service time, service at the peak's batch.
         svc = curve.service_s(1 + peak, mean_tok["olt"][1])
         cfg = {
             "peak_load": peak,
             "peak_arrivals_per_h": peak / svc * 3600,
-            "trough_load": peak * min(BURSTGPT) / max(BURSTGPT),
+            "trough_load": peak * min(shape24),
+            "max_load_in_service": max(loads),                     # the curve is measured to batch 64
+            "share_arrivals_over_64": float(np.mean(np.array(loads) > 63)),
             "olt_service_s_at_peak": svc,
             "olt_J_per_query_mean": st.mean(olt_q),
             "olt_J_per_query_peak_hour": E.expected_olt(peak)[0] * mean_tok["olt"][0] + E.expected_olt(peak)[1] * mean_tok["olt"][1],
             "olt_J_per_query_trough_hour": (lambda r: r[0] * mean_tok["olt"][0] + r[1] * mean_tok["olt"][1])(
-                E.expected_olt(peak * min(BURSTGPT) / max(BURSTGPT))),
+                E.expected_olt(peak * min(shape24))),
             "olt_hourly_J_per_query": [(lambda r: r[0] * mean_tok["olt"][0] + r[1] * mean_tok["olt"][1])(
-                E.expected_olt(peak * load_shape(h + 0.5))) for h in range(24)],
+                E.expected_olt(peak * shape24[h])) for h in range(24)],
         }
         configs.append(cfg)
         print(f"peak load {peak:g}: ~{cfg['peak_arrivals_per_h']:,.0f} OLT queries/h at peak; OLT J/query "
@@ -504,15 +776,16 @@ def main() -> int:
 
         block = []
         for beta in betas:
-            for policy in POLICIES:
-                m, hr = run(rec, stream, batches, loads, beta, policy, args, E, static_rates, reports)
+            for policy in policies:
+                m, hr = run(rec, stream, batches, loads, beta, policy, args, E, static_rates, reports, sched_key, bcast)
                 block.append({"peak_load": peak, "beta": beta, "policy": policy, **m})
-                hourly.append({"peak_load": peak, "beta": beta, "policy": policy, "hours": hr})
+                if not args.no_hourly:
+                    hourly.append({"peak_load": peak, "beta": beta, "policy": policy, "hours": hr})
         iso_accuracy(block)
         rows += block
-        for p in POLICIES:
+        for p in policies:
             frontiers.append({"peak_load": peak, "policy": p,
-                              "J_at_accuracy": frontier([r for r in block if r["policy"] == p])})
+                              "J_at_accuracy": frontier([r for r in block if r["policy"] == p], targets)})
 
     print(f"\n{'load':>5} {'beta':>5} {'policy':>10} {'acc':>7} {'J/query':>8} {'saving':>7} {'fwd':>6} {'skip':>6} "
           f"{'rate err':>8} | " + " ".join(f"{t:>6}" for t in TIERS))
@@ -527,19 +800,23 @@ def main() -> int:
     for peak in peaks:
         med = {p: np.nanmedian([r["saving_same_accuracy"] for r in rows
                                 if r["peak_load"] == peak and r["policy"] == p] or [float("nan")])
-               for p in POLICIES[1:]}
+               for p in policies if p != "stepwise"}
         print(f"  peak load {peak:5g}: " + "  ".join(f"{p} {v:6.1%}" for p, v in med.items()))
 
     print("\nJ/query at equal accuracy, each policy's own frontier (- = accuracy out of its range):")
-    print(f"{'load':>5} {'acc':>5} " + " ".join(f"{p:>10}" for p in POLICIES))
+    print(f"{'load':>5} {'acc':>5} " + " ".join(f"{p:>10}" for p in policies))
     for peak in peaks:
-        for a in ("0.70", "0.80"):
+        for a in [f"{t:.2f}" for t in targets if round(t, 2) in (0.70, 0.80)]:
             vals = {f["policy"]: f["J_at_accuracy"][a] for f in frontiers if f["peak_load"] == peak}
             print(f"{peak:5g} {a:>5} " + " ".join(f"{vals[p]:10.1f}" if vals[p] is not None else f"{'-':>10}"
-                                                  for p in POLICIES))
+                                                  for p in policies))
 
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     tag = (args.boundary + (f"_onu{args.onu_scale:g}" if args.onu_scale != 1 else "")
+           + (f"_trace-{args.load_trace}" if trace else "")
+           + (f"_surge{args.surge_factor:g}" if trace and args.surge_factor != 1 else "")
+           + ("_shared" if args.shared_stats else "")
+           + (f"_hh{args.households}x{args.per_day}" if args.households > 1 else "")
            + (f"_sigma{args.load_sigma:g}" if args.load_sigma else "")
            + ("_marginal" if args.accounting == "marginal" else "")
            + ("_window" if args.report == "window" else "")
@@ -554,6 +831,11 @@ def main() -> int:
         json.dump({"args": {k: str(v) for k, v in vars(args).items()}, "answers": sources,
                    "models": models, "olt_factor": factor, "accuracy": acc,
                    "fixed_J_per_query": fixed, "mean_tokens": mean_tok, "burstgpt": BURSTGPT,
+                   "load_trace": ({"column": trace.column, "train_days": trace.train_days, "days": trace.days,
+                                   "weekend_days_mod7": sorted(trace.weekend), "average_day": shape24}
+                                  if trace else None),
+                   "surges": ({"factor": args.surge_factor, "per_day": args.surge_per_day, "hours": args.surge_hours,
+                               "events_start_end_sign": surges.events()} if trace else None),
                    "configs": configs, "rows": rows, "frontiers": frontiers, "hourly": hourly}, f, indent=1)
     print(f"wrote {out} and {out.with_suffix('.json').name}")
     return 0

@@ -1,0 +1,51 @@
+# The case study's settings (energy_tests.md §8.6): RecServe, the timetable and
+# the dynamic policy (the OLT's cost broadcast on the PON), on predictable and on
+# unpredictable traffic. Everything not listed here is config/sim_piggyback.yaml's
+# default; each value below says why the study uses it. run_study.sh varies only
+# the seed and the few settings its sensitivity runs name.
+extends: sim_piggyback.yaml
+
+load:
+  # People chatting: the traffic households send. [data: BurstGPT conversation log,
+  # replayed; the timetable learns the first 30 days, every policy runs on the 31 after]
+  load_trace: conversation
+  # OLT load at the busiest hour, in queries in service: unknown for a real OLT. [swept]
+  peak_loads: [2, 4, 8, 16, 32]
+
+surges:
+  # Predictable traffic = 1 (the trace as recorded). Unpredictable = the same with
+  # unforeseen surges and dips; run_study.sh sweeps 1.5, 2, 3 and 5. [swept]
+  surge_factor: 1.0
+
+cascade:
+  # 40 households of 50 queries a day: the same total traffic as the earlier runs,
+  # split so each household is sparse. [choice; 1x2000 to 100x20 in the sensitivity runs]
+  households: 40
+  per_day: 50
+
+energy:
+  # Only what a query adds: the energy a routing decision actually changes.
+  # [choice; average accounting in the sensitivity runs]
+  accounting: marginal
+
+policy:
+  # RecServe; RecServe without the ONU (control); the timetable; the dynamic policy
+  # (broadcast); the dynamic policy fed only by the household's own answers
+  # (piggyback: ablation); the oracle (upper bound on any live signal).
+  policies: [stepwise, skip_onu, schedule, broadcast, piggyback, oracle]
+
+learning:
+  # Question statistics pooled across households, for every energy-aware policy
+  # alike, so they differ only in where the OLT's cost comes from. [choice; per
+  # household in the ablation]
+  shared_stats: true
+  # Weight on each OLT rate a household hears on its own answers (piggyback). [choice, §8.3]
+  rate_alpha: 0.3
+
+report:
+  # The OLT reports its own 5-minute mean, on answers (piggyback) and in its
+  # broadcast alike. [choice, §8.3]
+  report: window
+
+output:
+  no_hourly: true
