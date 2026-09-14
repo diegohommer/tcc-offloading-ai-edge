@@ -1,39 +1,56 @@
-# TCC, LaTeX (rascunho parcial)
+# TCC, LaTeX
 
-Baseado no template infufrgs (https://github.com/schnorr/infufrgs), opcoes
-[cic,dipl] (Ciencia da Computacao, Trabalho de Conclusao).
+Built on the INF/UFRGS class `infufrgs` (https://github.com/schnorr/infufrgs)
+with options `[cic,dipl,english]`: Computer Science, undergraduate thesis
+(Trabalho de Conclusão), written in English.
 
-## Conteudo deste pacote
+## Files
 
-- `tcc.tex` — documento principal. Capitulos 1 (Introducao) e 2 (Revisao
-  Bibliografica) escritos. Metodologia, resultados e conclusao ainda faltam.
-- `tcc.bib` — referencias usadas nos capitulos escritos, com metadados
-  conferidos (titulo, autores, veiculo, DOI/arXiv) contra as paginas
-  originais.
-- `infufrgs.cls` — classe LaTeX do INF/UFRGS (Lucas Schnorr).
-- `abntex2cite.sty`, `abntex2-alf.bst`, `abntex2-options.bib` — pacote de
-  citacao ABNT (projeto abntex2), incluidos aqui porque o ambiente onde
-  este pacote foi montado nao tinha o abntex2 completo disponivel via
-  gerenciador de pacotes do sistema. Se sua instalacao TeX Live/MiKTeX ja
-  tiver abntex2 instalado (a maioria tem, e o padrao do Overleaf tambem
-  tem), pode ignorar esses tres arquivos e usar os do seu sistema.
+- `tcc.tex` — the thesis. At present a skeleton: metadata, the English
+  Abstract and the Portuguese Resumo (both empty), contents and lists, the
+  chapter and section headings, and the references.
+- `tcc.bib` — the references cited so far, their metadata checked against the
+  original pages (title, authors, venue, DOI/arXiv).
+- `infufrgs.cls` — the INF/UFRGS class (UFRGS TeX Users Group), unmodified.
+- `abntex2cite.sty`, `abntex2-alf.bst`, `abntex2-options.bib` — the abnTeX2
+  ABNT citation package, bundled because the system this was set up on lacked
+  a complete abnTeX2. An installation that already has abnTeX2 (most TeX Live
+  and MiKTeX installs, and Overleaf) can use its own.
+- `abntex2-alf-en.bst` — a copy of `abntex2-alf.bst` whose Portuguese labels
+  are translated ("Available at", "Accessed", "and", "chap.", "Tech. Rep.",
+  English month abbreviations …). The ABNT author-date layout is unchanged.
+  `tcc.tex` uses this one.
+- `watch.sh` — recompiles `tcc.pdf` whenever a source file changes (polling;
+  `latexmk -pvc` hangs in this environment).
 
-## Como compilar
+## What stays in Portuguese, by design
+
+- The title page's institutional lines (Universidade Federal do Rio Grande do
+  Sul, Instituto de Informática, Curso de Ciência da Computação), the
+  "Trabalho de Conclusão" label and the page listing university officials:
+  the class prints them as the university's names.
+- The Resumo (`translatedabstract`) with its title (`\translatedtitle`) and
+  keywords (`\translatedkeyword`), which UFRGS requires beside the Abstract.
+- The class's `agradecimentos` environment has a fixed Portuguese heading:
+  for acknowledgments, use `\chapter*{Acknowledgments}` instead.
+
+## Building
 
 ```sh
-pdflatex tcc
-bibtex   tcc
-pdflatex tcc
-pdflatex tcc
+latexmk -pdf tcc.tex
 ```
 
-Testado nesta sessao com TeX Live 2023 (pdfTeX), compila sem erros e sem
-citacoes ou referencias indefinidas. 16 paginas no estado atual (capa,
-resumo, sumario, listas, introducao, revisao bibliografica, referencias).
+or by hand: `pdflatex tcc`, `bibtex tcc`, `pdflatex tcc`, `pdflatex tcc`.
+Builds without errors with TeX Live 2023 (pdfTeX).
 
-## Pendencias antes de avancar
+## Citing
 
-- Orientador (Prof. Nazar) ainda nao confirmado oficialmente; nome
-  completo e titulacao a atualizar em `\advisor` no preambulo de `tcc.tex`.
-- Metodologia, resultados e conclusao dependem do experimento descrito
-  nas secoes 12 e 13 do documento mestre do projeto (ainda nao executado).
+The ABNT author-date style: `\cite{key}` gives (WU et al., 2025),
+`\citeonline{key}` gives Wu et al. (2025).
+
+## Open items
+
+- The advisor's full name and title in `\advisor` (preamble of `tcc.tex`).
+- The title and the chapter plan still describe the project's earlier
+  framing; the case study (`../../energy_tests.md` §8.6) is the one to write up.
+- `tcc.bib` has 11 of the sources `energy_tests.md` cites.

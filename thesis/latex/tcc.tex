@@ -1,46 +1,60 @@
 %==============================================================================
-% tcc.tex --- Avaliacao do custo energetico de politicas de offloading
-% baseadas em confianca em cascatas hierarquicas de inferencia de LLMs
-% sobre redes opticas passivas
+% tcc.tex --- Evaluating the energy cost of confidence-based offloading
+% policies in hierarchical LLM inference cascades over passive optical
+% networks
 %
-% Canvas vazio: mantem apenas metadados, resumo (sem texto), sumario/listas,
-% esqueleto de capitulos/secoes e referencias. Todo o texto corrido foi
-% removido para reescrita.
+% Empty canvas: keeps only the metadata, the abstracts (no text yet), the
+% table of contents and lists, the chapter/section skeleton and the
+% references. All running text was removed to be rewritten.
 %
-% Compilar com:
+% Written in English (class option `english'); UFRGS also requires an
+% abstract in Portuguese, the `translatedabstract' environment below.
+%
+% Build with:
 %   pdflatex tcc
 %   bibtex   tcc
 %   pdflatex tcc
 %   pdflatex tcc
 %==============================================================================
 
-\documentclass[cic,dipl]{infufrgs}
+\documentclass[cic,dipl,english]{infufrgs}
 
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage{amsmath}
 
 %------------------------------------------------------------------------------
-% Metadados do documento
+% Document metadata
 %------------------------------------------------------------------------------
-\title{Avalia\c{c}\~ao do custo energ\'etico de pol\'iticas de offloading
-  baseadas em confian\c{c}a em cascatas hier\'arquicas de infer\^encia de
-  LLMs sobre redes \'opticas passivas}
+\title{Evaluating the energy cost of confidence-based offloading policies in
+  hierarchical LLM inference cascades over passive optical networks}
+
+% Title of the Portuguese abstract (Resumo)
+\translatedtitle{Avalia\c{c}\~ao do custo energ\'etico de pol\'iticas de
+  offloading baseadas em confian\c{c}a em cascatas hier\'arquicas de
+  infer\^encia de LLMs sobre redes \'opticas passivas}
 
 \author{Amorim}{Diego Hommerding}
 
-% Orientador ainda pendente de confirmacao formal (ver documento mestre,
-% secao 10 e 11, item 1). Nome completo e titulacao a confirmar.
+% Advisor not yet formally confirmed (see the master document, sections 10
+% and 11, item 1). Full name and title to be confirmed.
 \advisor[Prof.]{Nazar}{}
 
 %------------------------------------------------------------------------------
-% Palavras-chave
+% Keywords
 %------------------------------------------------------------------------------
-\keyword{Infer\^encia distribu\'ida de LLMs}
-\keyword{Redes \'opticas passivas}
-\keyword{Efici\^encia energ\'etica}
-\keyword{Offloading baseado em confian\c{c}a}
-\keyword{Computa\c{c}\~ao em n\'evoa}
+\keyword{Distributed LLM inference}
+\keyword{Passive optical networks}
+\keyword{Energy efficiency}
+\keyword{Confidence-based offloading}
+\keyword{Fog computing}
+
+% Keywords of the Portuguese abstract (Resumo)
+\translatedkeyword{Infer\^encia distribu\'ida de LLMs}
+\translatedkeyword{Redes \'opticas passivas}
+\translatedkeyword{Efici\^encia energ\'etica}
+\translatedkeyword{Offloading baseado em confian\c{c}a}
+\translatedkeyword{Computa\c{c}\~ao em n\'evoa}
 
 %==============================================================================
 \begin{document}
@@ -50,10 +64,15 @@
 
 %------------------------------------------------------------------------------
 \begin{abstract}
-\mbox{} % A classe encerra o resumo com um \\ (para as palavras-chave), que
-        % exige uma linha ja aberta; este \mbox{} vazio evita erro de
-        % compilacao ate o texto do resumo ser escrito.
+\mbox{} % The class ends the abstract with a \\ (before the keywords), which
+        % needs a line already open; this empty \mbox{} avoids a build
+        % error until the abstract is written.
 \end{abstract}
+
+%------------------------------------------------------------------------------
+\begin{translatedabstract}
+\mbox{} % Portuguese abstract (Resumo); same placeholder as above.
+\end{translatedabstract}
 
 \tableofcontents
 
@@ -62,65 +81,66 @@
 \listoftables
 
 %==============================================================================
-\chapter{Introdu\c{c}\~ao}
-\label{cap:introducao}
+\chapter{Introduction}
+\label{chap:introduction}
 %==============================================================================
 
-\section{Contextualiza\c{c}\~ao}
+\section{Context}
 
-\section{Problema e lacuna}
+\section{Problem and gap}
 
-\section{Objetivos}
+\section{Objectives}
 
-\section{Organiza\c{c}\~ao do texto}
+\section{Outline}
 
 %==============================================================================
-\chapter{Revis\~ao Bibliogr\'afica}
-\label{cap:revisao}
+\chapter{Literature Review}
+\label{chap:review}
 %==============================================================================
 
-\section{Offloading recursivo baseado em confian\c{c}a: RecServe}
+\section{Recursive confidence-based offloading: RecServe}
 \label{sec:recserve}
 
-\section{Infer\^encia hier\'arquica sobre TWDM-PON}
+\section{Hierarchical inference over TWDM-PON}
 \label{sec:pakpahan}
 
-\section{M\'etricas de energia para infer\^encia de LLMs}
-\label{sec:metricas}
+\section{Energy metrics for LLM inference}
+\label{sec:metrics}
 
-\section{Medi\c{c}\~ao de energia por classe de hardware}
-\label{sec:medicoes}
+\section{Energy measurement by hardware class}
+\label{sec:measurements}
 
-\subsection{Dispositivo de usu\'ario}
+\subsection{User device}
 
-\subsection{Borda}
+\subsection{Edge}
 
 \subsection{Fog}
 
-\subsection{Nuvem}
+\subsection{Cloud}
 
-\section{S\'intese}
-\label{sec:sintese}
-
-%==============================================================================
-\chapter{Metodologia}
-\label{cap:metodologia}
-%==============================================================================
+\section{Summary}
+\label{sec:summary}
 
 %==============================================================================
-\chapter{Resultados}
-\label{cap:resultados}
+\chapter{Methodology}
+\label{chap:methodology}
 %==============================================================================
 
 %==============================================================================
-\chapter{Conclus\~ao}
-\label{cap:conclusao}
+\chapter{Results}
+\label{chap:results}
 %==============================================================================
 
 %==============================================================================
-% Referencias
+\chapter{Conclusion}
+\label{chap:conclusion}
 %==============================================================================
-\bibliographystyle{abntex2-alf}
+
+%==============================================================================
+% References
+%==============================================================================
+% ABNT author-date style with English labels (see README.md)
+\bibliographystyle{abntex2-alf-en}
 \bibliography{tcc}
 
 \end{document}
