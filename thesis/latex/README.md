@@ -50,7 +50,6 @@ The ABNT author-date style: `\cite{key}` gives (WU et al., 2025),
 
 ## Open items
 
-- The advisor's full name and title in `\advisor` (preamble of `tcc.tex`).
 - The title and the chapter plan still describe the project's earlier
   framing; the case study (`../../energy_tests.md` §8.6) is the one to write up.
 - `tcc.bib` has 11 of the sources `energy_tests.md` cites.
