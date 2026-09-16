@@ -134,6 +134,34 @@ What it shows:
   differences of two noisy totals and should not be read individually.
 - **Replicated.** Run 1 (same configuration, before the prefill fix) agrees on
   decode within ±1.4% at every batch size.
+- **Internally consistent.** Energy per token should be power divided by
+  throughput, and it is: the implied power is 71.7 W at batch 1 and 66.3 W at
+  batch 64, against the card's 72 W limit. The 51× is throughput scaling at
+  nearly constant power, not a measurement artefact.
+
+**This matches the literature, with two caveats.** Delavande, Pierrard and
+Luccioni [7] report that "energy per output token decreases rapidly with batch
+size and follows a roughly logarithmic trend", because "the memory-bound decode
+phase benefits the most: matrix multiplications over cached keys and values
+dominate its cost, and batching enables better amortization of memory
+transfers". TokenPowerBench [5] finds the same on H100s across six model
+families, with "a two-to-three-fold spread between the smallest and largest
+batches" and power that "stays roughly constant while additional tokens add
+proportionally less work".
+
+- **How large the gain is depends on where the curve is read.** Ours is 1 → 64,
+  where it is steepest; TokenPowerBench's 25% is 32 → 256, already in the flat
+  region. Both are consistent with a logarithmic curve, so the figures are not
+  comparable head to head.
+- **Padding waste does not apply here.** [7] also finds energy per *effective
+  input* token is lowest at a batch of 2 and about 25% worse at 16, because
+  static batching pads every sequence to the longest one. This study's prompts
+  are nearly uniform (~122 tokens), prefill is measured separately and is a
+  small share of a query's energy, and production servers batch continuously,
+  without padding.
+- Samsi et al. [26] is not evidence either way: it varies model sharding and
+  generation length, not batch size at fixed hardware, and is cited here only
+  for measurement practice.
 
 ### 3.3 Where the OLT undercuts the lower tiers
 
@@ -956,7 +984,7 @@ cleaned copy of each (`*.txt`) sits beside it.
 2. Pakpahan and Hwang. *Enabling Software-Defined Tiered LLM Inference Continuum on Passive Optical Network.* IEEE Access, vol. 14, 2026. doi:10.1109/ACCESS.2026.3651558.
 3. Chung et al. *The ML.ENERGY Benchmark: Toward Automated Inference Energy Measurement and Optimization.* arXiv:2505.06371. https://arxiv.org/abs/2505.06371
 4. ML.ENERGY. *Measuring GPU Energy: Best Practices.* https://ml.energy/blog/energy/measurement/measuring-gpu-energy-best-practices/
-5. *TokenPowerBench: Benchmarking the Power Consumption of LLM Inference.* arXiv:2512.03024. https://arxiv.org/abs/2512.03024
+5. Niu, Zhang, Li, Zhao, Wang, Wang and Chen. *TokenPowerBench: Benchmarking the Power Consumption of LLM Inference.* AAAI 2026 (main track). arXiv:2512.03024. https://arxiv.org/abs/2512.03024
 6. Yang et al. *Part-time Power Measurements: nvidia-smi's Lack of Attention* (SC'24: *Accurate and Convenient Energy Measurements for GPUs*). arXiv:2312.02741. https://arxiv.org/abs/2312.02741
 7. Delavande, Pierrard and Luccioni. *Understanding Efficiency: Quantization, Batching, and Serving Strategies in LLM Energy Use.* arXiv:2601.22362. https://arxiv.org/abs/2601.22362
 8. Solovyeva and Castor. *Towards Green AI: Decoding the Energy of LLM Inference in Software Development.* (local: `thesis/papers/TowardsGreenLLM.pdf`)
@@ -977,3 +1005,4 @@ cleaned copy of each (`*.txt`) sits beside it.
 23. NVIDIA Developer Forums. *Reducing idle power on Orin Nano Super Dev Kit* (2026-01-23): 4.7 W idle, tegrastats VDD_IN, 7 W mode. https://forums.developer.nvidia.com/t/reducing-idle-power-on-orin-nano-super-dev-kit/358482
 24. Stojkovic et al. *DynamoLLM: Designing LLM Inference Clusters for Performance and Energy Efficiency.* HPCA 2025. Azure LLM Inference Dataset 2024, https://github.com/Azure/AzurePublicDataset/blob/master/AzureLLMInferenceDataset2024.md
 25. Cisco. *Understand GPON Technology* (downstream broadcast, GEM port filtering, AES per ONU, downstream multicast GEM ports); ITU-T G.984.3 (GPON) and G.9807.1 (XGS-PON). https://www.cisco.com/c/en/us/support/docs/switches/catalyst-pon-series/216230-understand-gpon-technology.html
+26. Samsi et al. *From Words to Watts: Benchmarking the Energy Costs of Large Language Model Inference.* arXiv:2310.03003. https://arxiv.org/abs/2310.03003
