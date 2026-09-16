@@ -442,7 +442,7 @@ def run(rec, stream, batches, loads, beta, policy, args, E, static_rates, report
     homes: dict[int, dict[str, Learned]] = {}           # per household, its tiers that can decide
     pool = ({t: Learned(args.alpha, args.warmup, args.rate_alpha) for t in TIERS[:TOP]}
             if args.shared_stats else None)             # question statistics pooled across households
-    energy = correct = forwarded = skipped = 0.0
+    energy = correct = forwarded = skipped = conf_delivered = comm_bytes = 0.0
     rate_err = []
     final_at = collections.Counter()
     hourly = [[0.0, 0, 0, 0, 0] for _ in range(24)]      # joules, queries, final at user/onu/olt
@@ -496,6 +496,11 @@ def run(rec, stream, batches, loads, beta, policy, args, E, static_rates, report
             hist.add(d["conf"])
             if not escalate:
                 correct += d["correct"]
+                conf_delivered += d["conf"]      # confidence of the answer the user actually gets
+                # RecServe's communication burden [1]: answered at tier i, the input is
+                # uploaded and the output downloaded once per hop, 2(i-1)(|x|+|y|). Skipping a
+                # tier does not save bytes -- the PON links are the same -- only inference.
+                comm_bytes += 2 * i * (rec[qi]["user"]["qb"] + d["ab"])
                 final_at[t] += 1
                 break
             nxt = on_escalation(i, prompt, rates, L, args.delta) if decide else i + 1
@@ -521,6 +526,8 @@ def run(rec, stream, batches, loads, beta, policy, args, E, static_rates, report
     n = len(stream)
     return {
         "accuracy": correct / n,
+        "mean_confidence": conf_delivered / n,      # of the answer returned, whichever tier produced it
+        "comm_MB_per_1k_queries": comm_bytes / n * 1000 / 1e6,   # RecServe's metric, on its terms
         "J_per_query": energy / n,
         "forwarded_on_arrival": forwarded / n,
         "skipped_on_escalation": skipped / n,

@@ -169,6 +169,8 @@ def load_answers() -> tuple[dict, dict, list[str]]:
                 "cmin": math.exp(min(lps)) if lps else 0.0,
                 "tp": r["tokens_prompt"],
                 "tg": r["tokens_gen"],
+                "qb": len(r["question"].encode()),      # bytes on the wire: RecServe's |x| and |y|
+                "ab": len(r["generated_text"].encode()),
                 "trunc": r.get("finish_reason") == "length",
             })
     for t in TIERS:
