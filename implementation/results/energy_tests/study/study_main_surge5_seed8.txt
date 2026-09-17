@@ -265,7 +265,7 @@ peak load 32: ~11,485 OLT queries/h at peak; OLT J/query 550 (trough) to 9 (peak
    32   0.6   schedule  0.9092     15.8    nan%  96.0%   2.2%     nan% |   1.6%   0.1%  98.3%
    32   0.6  broadcast  0.9086     15.1    nan%  95.3%   2.5%     5.3% |   1.9%   0.1%  98.0%
    32   0.6  piggyback  0.9021     17.3    nan%  90.8%   5.4%   133.8% |   3.7%   0.1%  96.3%
-   32   0.6     oracle  0.9084     14.9    nan%  95.3%   2.4%     nan% |   1.9%   0.2%  98.0%/home/diego-amorim/dev/personal/tcc-offloading-ai-edge/implementation/src/scripts/sim_piggyback.py:801: RuntimeWarning: All-NaN slice encountered
+   32   0.6     oracle  0.9084     14.9    nan%  95.3%   2.4%     nan% |   1.9%   0.2%  98.0%/home/diego-amorim/dev/personal/tcc-offloading-ai-edge/implementation/src/scripts/sim_piggyback.py:808: RuntimeWarning: All-NaN slice encountered
   med = {p: np.nanmedian([r["saving_same_accuracy"] for r in rows
 
    32   0.7   stepwise  0.7873    142.0    0.0%   0.0%   0.0%     nan% |  30.0%  21.1%  48.9%

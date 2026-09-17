@@ -25,6 +25,8 @@ import statistics as st
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))       # implementation/src
 from energy.three_tier import RESULTS  # noqa: E402
 
@@ -55,8 +57,41 @@ def joules(xs):
     return f"{st.mean(xs):.1f}" if xs else "-"
 
 
+def fmt3(xs):
+    """Mean over seeds, three decimals: for the confidence, which lives near 0.9."""
+    xs = [x for x in xs if x is not None]
+    return f"{st.mean(xs):.3f}" if xs else "-"
+
+
 def at(d, peak, acc):
     return {f["policy"]: f["J_at_accuracy"][acc] for f in d["frontiers"] if f["peak_load"] == peak}
+
+
+def at_column(d, peak, acc, column, minimize=True):
+    """Any per-run column read at the target accuracy, the way J is read off the frontier.
+
+    For a cost (minimize=True: energy, communication burden) only Pareto points over beta are
+    kept, as for J. For a quantity that is not a cost (the delivered confidence) every point is
+    kept and read at that accuracy. Then linear interpolation. These columns live per row rather
+    than per frontier, so they are interpolated here.
+    """
+    out = {}
+    for policy in {r["policy"] for r in d["rows"] if r["peak_load"] == peak}:
+        seen = sorted(((r["accuracy"], r[column]) for r in d["rows"]
+                       if r["peak_load"] == peak and r["policy"] == policy), reverse=True)
+        if minimize:
+            pts, best = [], float("inf")
+            for a, y in seen:
+                if y < best:
+                    pts.append((a, y))
+                    best = y
+        else:
+            pts = [(a, y) for a, y in seen]
+        pts.sort()
+        xs, ys = [a for a, _ in pts], [y for _, y in pts]
+        t = float(acc)
+        out[policy] = None if t > xs[-1] else ys[0] if t < xs[0] else float(np.interp(t, xs, ys))
+    return out
 
 
 def dagger(ds, peak):
@@ -130,6 +165,17 @@ def main() -> int:
                 L.append(f"| {p:g}{' †' if dagger(ds, p) else ''} | {acc} | "
                          + " | ".join(joules([j.get(q) for j in J]) for q in pols) + " | "
                          + " | ".join(pct([saving(j.get(a), j.get(b)) for j in J]) for a, b in COMPARE) + " |")
+        L += ["", "At 0.80 accuracy, per policy: J per query · MB per 1,000 queries (RecServe's "
+              "communication burden) · confidence of the delivered answer.", "",
+              "| load | " + " | ".join(NAMES[q] for q in pols) + " |",
+              "|---|" + "---|" * len(pols)]
+        for p in peaks:
+            J = [at(d, p, "0.80") for d in ds]
+            mb = [at_column(d, p, "0.80", "comm_MB_per_1k_queries") for d in ds]
+            cf = [at_column(d, p, "0.80", "mean_confidence", minimize=False) for d in ds]
+            cells = [f"{joules([x.get(q) for x in J])} · {joules([x.get(q) for x in mb])} · "
+                     f"{fmt3([x.get(q) for x in cf])}" for q in pols]
+            L.append(f"| {p:g}{' †' if dagger(ds, p) else ''} | " + " | ".join(cells) + " |")
         L.append("")
 
     out = DIR / "SUMMARY.md"
