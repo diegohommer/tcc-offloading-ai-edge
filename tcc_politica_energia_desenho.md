@@ -628,3 +628,231 @@ E o restante do trabalho continua de pé:
 
 A opção 2 é a que mais preserva a proposta original. A opção 1 é a de menor
 risco dado o prazo.
+
+## 15. Roteamento de escalada por custo: o plano (2026-09-09)
+
+**Enquadramento.** O objeto do trabalho é energia; acurácia entra como
+*restrição*, não como segundo objetivo. Isso ordena as contribuições: a primeira
+é **como precificar corretamente uma camada de cascata** (§15.5), que é um
+resultado de medição e vale independentemente de qualquer política funcionar. O
+mecanismo de roteamento (§15.2) é a *demonstração* de que essa precificação muda
+decisões reais — não o contrário. Se a política não ganhar, a caracterização
+continua de pé, como na lógica da §14.6 opção 1.
+
+Resposta à §14.6: nenhuma das três opções, e sim uma quarta. A §14 mostrou que
+ponderar **o limiar** por energia é redundante com o β. O plano abaixo não toca
+no limiar. Ele mantém a decisão de *escalar ou não* exatamente como o RecServe a
+faz — local, por confiança, sem termo de energia — e aplica energia apenas à
+decisão de *para onde* escalar, que hoje é implícita e fixa ("uma camada acima").
+
+### 15.1 A separação que sustenta o desenho
+
+O RecServe embute duas decisões numa só regra. Separá-las é a contribuição.
+
+| decisão | quem decide | sinal | muda? |
+|---|---|---|---|
+| **escalar ou não** | camada atual | confiança vs `T(β)` | **não** — RecServe intacto |
+| **para qual camada** | camada atual | custo esperado até o fim | **sim** — hoje é sempre `i+1` |
+
+Consequência imediata: a degenerescência da §14.2 não pode aparecer. Ela vinha de
+`k·T(β)` ser outro quantil. Aqui nenhum termo de energia multiplica `T(β)`; o
+limiar fica literalmente inalterado. A variável de decisão nova é **discreta**
+(qual camada), e não existe β que a expresse — nenhum quantil da distribuição de
+confiança faz uma consulta pular a fog.
+
+### 15.2 A regra
+
+Tendo a regra do RecServe decidido escalar a partir da camada `i`:
+
+```
+alvo  =  argmin_{j > i}  C(j)
+
+C(j)  =  c_j  +  p_j · C(j+1)          (C do topo = c_topo, sem continuação)
+c_j   =  Jtok_j(hora) · E[tokens_j | a consulta escalou até aqui]
+p_j   =  P(escalar | consulta chegou em j)
+```
+
+`C(j)` é **custo esperado até a conclusão**, não custo de uma visita. Os dois
+termos que a diferenciam de uma comparação ingênua:
+
+- `E[tokens | escalou]`, não `E[tokens]` da população — ver §15.5, é o que inverte
+  o sinal da decisão.
+- `p_j`, que precifica o **valor de opção de parar numa camada intermediária**.
+  Uma comparação por visita ignora que 71% de quem chega na fog para ali e nunca
+  paga a cloud.
+
+**Guarda de qualidade.** Só é permitido pular a camada `j` rumo a `k > j` se
+`acuracia_offline(k) >= acuracia_offline(j)`. Com escada monótona isso vale sempre
+subindo, e o pulo é seguro por dominância: não troca acurácia por energia. Se a
+escada for não-monótona para a tarefa (§13.1), a guarda é o que impede o
+mecanismo de rotear para uma camada pior — e o pulo passa a ter motivação
+adicional, mas o argumento de segurança muda e precisa ser reescrito.
+
+### 15.3 Por que cada número é local (o ponto central)
+
+A §2 rejeitou telemetria cross-tier ao vivo, e com razão. Nada aqui a exige.
+
+| número | origem | por que é local |
+|---|---|---|
+| `Jtok_j(hora)` | config estática entregue no registro da ONU (§5), com perfil por faixa horária (§6) | é configuração, não estado de runtime; atualizada pelo plano de gerência em escala de horas |
+| `acuracia_offline(j)` | caracterização offline da escada | idem — constante de implantação |
+| `E[tokens_j \| escalou]` | **observação do tráfego que a própria camada retransmite** | a resposta volta pelo caminho; contar tokens de uma resposta que a camada já está repassando é observar o próprio tráfego, não consultar o estado alheio |
+| `p_j` | fração das escaladas que a própria camada enviou e voltaram respondidas acima de `j` | idem |
+
+Essa é a distinção que o documento vinha misturando: o RecServe tem **dois**
+compromissos separáveis — *localidade* (não ler estado de runtime alheio) e
+*passo-a-passo* (subir exatamente uma camada). O plano preserva a localidade
+integralmente e abandona só o passo-a-passo. A citação do Pakpahan justifica o
+passo-a-passo por *"preserve locality and minimize network usage"*: a localidade
+continua de pé, e o uso de rede é de segunda ordem pelos números deste
+repositório (`link.per_hop_energy_J = 0.1` contra 10-46 J/consulta), além de que
+na PON os bytes percorrem o mesmo caminho físico de qualquer forma.
+
+**Custo honesto do desenho:** perde-se "λ=0 recupera o RecServe exato", e com
+isso a herança direta da Table 1 do Pakpahan. O trabalho passa a *envolver* o
+RecServe em vez de estendê-lo. É custo de posicionamento na escrita, não
+violação técnica, e deve ser declarado como tal.
+
+### 15.4 Padrão de rede para o perfil horário
+
+Para a §6 deixar de ser suposição solta e virar mecanismo citável:
+
+- **Busy hour** (ITU-T E.500) é o conceito clássico de engenharia de tráfego;
+  perfil por faixa horária é prática corrente de planejamento de capacidade.
+- Empurrar a config: **TR-069 / TR-369 (USP)** do Broadband Forum para ONU/CPE,
+  **NETCONF/YANG** (RFC 6241) para elementos de rede, ou a API northbound do ONOS
+  na topologia SDN do Pakpahan.
+- Escala de tempo: minutos a horas, plano de gerência. Nunca por consulta.
+
+### 15.5 Contabilidade energética: quatro bases, quatro respostas
+
+Simulação sobre `lb_full.raw.jsonl` (4000 chegadas amostradas das 200 consultas,
+perfil diurno com pico às 21h), política base reimplementada como em
+`traced_recursive_serve.py:170-182`.
+
+**A regra ingênua ("pule se a camada de cima for mais barata em média") falha, e
+o sinal depende do β:** +3.6% / +7.4% / +4.5% de energia em β = 0.1/0.2/0.3,
+−8.4% / −16.3% em β = 0.4/0.5.
+
+**A causa é efeito de seleção, e ela é o resultado de medição central deste
+plano.** Todo comparador da §7 (PerLLM, GreenServ, CR², EcoThink) precifica um
+modelo ou camada com um escalar. Numa **cascata** esse escalar está errado: as
+consultas que chegam à camada `j` foram *selecionadas* pelas camadas abaixo, e o
+perfil de tokens delas difere sistematicamente da população.
+
+Quem escalona não é amostra aleatória:
+
+| camada | tok médio população | tok médio das que escalonam |
+|---|---|---|
+| fog | 96.2 | **64.5** |
+| cloud | 87.6 | **103.3** |
+
+Os vieses vão em direções opostas — consulta difícil gera saída curta na fog e
+longa na cloud. A decisão inverte:
+
+Refinar a base de cálculo muda a resposta quatro vezes — e só a última é a
+correta para a decisão que está sendo tomada:
+
+| base do cálculo | fog | cloud | pular a fog? |
+|---|---|---|---|
+| J/token puro (o que `layer_energy.yaml` tabula) | 0.3785 | 0.3989 | NÃO |
+| J/consulta, tokens da população | 36.42 J | 34.95 J | **SIM** |
+| J/consulta, tokens da subpopulação que escalona | 24.41 J | 41.21 J | **NÃO** |
+| idem, **com PUE** (ISP 1.5, hiperescalador 1.1) | 36.62 J | 45.33 J | **NÃO** |
+
+Cada linha é uma correção de contabilidade, não de política:
+
+- **J/token → J/consulta**: camadas geram números diferentes de tokens (modelo
+  melhor é mais conciso — cloud 87.6 contra fog 96.2), e isso sozinho inverte a
+  ordem aparente das camadas.
+- **população → subpopulação**: o efeito de seleção acima; inverte de novo.
+- **PUE**: não inverte, mas estreita a margem de 1.69× para 1.24×, porque o DC da
+  ISP paga 1.5 contra 1.1 do hiperescalador. É exatamente a tensão ISP × terceiros:
+  a camada da ISP ganha em seleção de tráfego e perde em eficiência de instalação.
+
+Somado ao valor de opção (29% de quem chega na fog segue para a cloud), o custo
+esperado a partir da onu é 36.21 J via fog contra 41.21 J pulando: **o pulo
+ingênuo custa +14%**.
+
+**A regra da §15.2 corrige isso:** a penalidade em β baixo cai de +7.4% para
++1.0% — o mecanismo simplesmente deixa de disparar quando não deve.
+
+**E o perfil horário ganha da config congelada em todos os β testados** (4.48 vs
+4.58; 7.36 vs 7.50; 11.00 vs 11.02; 16.18 vs 16.55; 21.45 vs 25.78 J/consulta).
+É a parte da proposta original que sobrevive ao teste.
+
+### 15.6 O experimento decisivo
+
+Com energia como objeto e acurácia como restrição, a pergunta não é "que fronteira
+domina" e sim:
+
+> **Quanto de energia o roteamento economiza a acurácia igualada?**
+
+Operacionalmente ainda se varre β e se traçam as curvas (acurácia × J/consulta) —
+é a única forma de ler os dois pontos na mesma acurácia. Mas o número que vai para
+o resumo é **J/consulta a iso-acurácia**, não domínio de fronteira. Ponto a ponto
+não serve: nas rodadas da §15.5 a acurácia varia entre configurações (em β=0.5,
+0.5320 contra 0.4128), então comparar J isolado é desonesto.
+
+Formalmente é o enquadramento do EcoThink (§7): minimizar energia sujeito a um piso
+de qualidade — com a diferença de que aqui a energia é medida, não derivada de TDP.
+
+Se a economia a iso-acurácia for nula, é a conclusão da §14 numa quarta variável, e
+vira resultado negativo mais forte (quatro tentativas, não três). A §15.5 sobrevive
+de qualquer jeito.
+
+Políticas a comparar na mesma fronteira:
+
+1. RecServe passo-a-passo (linha de base, β varrido)
+2. Pulo com custo populacional (mostra o efeito de seleção)
+3. Pulo com custo até o fim, config estática
+4. Pulo com custo até o fim, perfil horário
+5. Pulo-oráculo (limite superior: −24.7% sobre o passo-a-passo-oráculo)
+
+### 15.7 Dados que faltam
+
+- **n=200 é pouco**: só 22 consultas distintas chegam a escalonar além da onu, e
+  as estatísticas de subpopulação da §15.5 saem daí. Ampliar a coleta (GSM8K test
+  tem 1319) usando a trilha Modal já existente (`fog_modal.jsonl`), não CPU local.
+- **A cloud não tem logprobs nas 200 consultas** — a API hospedada não os retornou.
+  Consequência de desenho: **a camada de topo tem que ser terminal**, ou trocar por
+  um provedor que devolva logprobs. Registrar como restrição, não como pendência.
+- **Segunda tarefa** para mostrar que o achado não é artefato do GSM8K.
+- **Confiança para a decisão de distância**: medido en passant, `exp(min logprob)`
+  (§13.2) é o *pior* sinal para distância de pulo (t=+0.71) enquanto a métrica
+  original do RecServe é a melhor (t=+2.40). Duas decisões querem definições
+  diferentes de confiança — vale como achado próprio.
+
+### 15.8 Ameaças à validade
+
+- O perfil diurno segue **não verificado** (§6, §9). Mitigação: análise de
+  sensibilidade sobre formatos de perfil, em vez de defender um.
+- O mapeamento hora→regime da cloud é interpolação entre dois pontos medidos
+  (0.3989 produção, 3.5 Samsi) usando a forma da curva de batch da RTX 4090 —
+  fronteiras de medição diferentes, o que o próprio yaml manda não misturar sem
+  ajuste (`batch_curve_caveats`).
+- **PUE**: as simulações da §15.5 foram rodadas sem PUE e depois reprecificadas;
+  o valor "médio 1.5" do yaml é genérico, não medido num DC de ISP real, e a
+  atribuição fog=ISP / cloud=hiperescalador é escolha de modelagem a declarar.
+- A política real opera em acurácia 0.13–0.53 onde o oráculo dá 0.945: a regra de
+  confiança para cedo demais no GSM8K (§13.3 na prática). Qualquer ganho medido
+  vale dentro desse regime degradado, e isso precisa ser dito.
+
+### 15.9 Fases, em ordem de valor
+
+1. **Núcleo mínimo defensável** — fronteira das políticas 1, 3 e 4 sobre os dados
+   que já existem. Fecha o TCC mesmo se tudo abaixo falhar, com o efeito de
+   seleção da §15.5 como achado próprio.
+2. **Ampliar a coleta** para 1319 consultas via Modal, refazer as fronteiras.
+3. **Segunda tarefa**, para generalidade.
+4. **Estimação online** de `E[tokens|escalou]` e `p_j` por observação do tráfego
+   retransmitido, medindo o custo de convergência (quantas consultas até a
+   estimativa estabilizar) — é o que fecha o argumento de localidade na prática, e
+   não só no desenho.
+
+### 15.10 Onde entra o código
+
+`src/scripts/sim_skip.py` (a simulação da §15.5, hoje em rascunho fora do repo) e
+uma opção de roteamento em `traced_recursive_serve.py` ao lado do laço de
+escalada. A calibração estática entra em `config/layer_energy.yaml` como um bloco
+novo por par de camadas, separado das tabelas de literatura.
