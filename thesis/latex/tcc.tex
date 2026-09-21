@@ -5,7 +5,7 @@
 %
 % Metadata, the abstracts (no text yet), the table of contents and lists, the
 % chapter/section skeleton and the references. Running text so far: the
-% Introduction's Context section; the rest is still to be written.
+% Introduction's opening paragraphs; the rest is still to be written.
 %
 % Written in English (class option `english'); UFRGS also requires an
 % abstract in Portuguese, the `translatedabstract' environment below.
@@ -79,37 +79,54 @@
 
 \listoftables
 
+% Alphabetical. The list does not replace spelling each term out at its first
+% use in the text; the argument sets the label width (the widest entry).
+\begin{listofabbrv}{TWDM-PON}
+  \item[HFC] Hybrid Fiber-Coaxial
+  \item[LLM] Large Language Model
+  \item[OLT] Optical Line Terminal
+  \item[ONU] Optical Network Unit
+  \item[PON] Passive Optical Network
+  \item[TWDM-PON] Time and Wavelength Division Multiplexed Passive Optical Network
+\end{listofabbrv}
+
 %==============================================================================
 \chapter{Introduction}
 \label{chap:introduction}
 %==============================================================================
 
-As the use of Large Language Models (LLMs) becomes widespread in several domains of modern
-society~\cite{liang2025adoption}, even if attitudes towards it still vary widely by age
+As the use of Large Language Models (LLMs) becomes widespread, both at work and at
+home~\cite{bick2026rapid}, even though attitudes toward it still vary widely by age
 and country~\cite{oecd2025technologies}, the challenge of adapting the network
 architecture to handle this rapidly evolving technology remains an active research
-topic~\cite{chen2026network}.
-Since evolution seldom happens in isolation, the network itself has also been undergoing
-changes, one of which is the adoption of Passive Optical Network (PON)
-technology~\cite{effenberger2007introduction}, driven by the demand for greater capacity,
-lower latency and reduced operating costs, alongside or in place of the hybrid
-fibre-coaxial plant that DOCSIS runs over~\cite{prodnik2025migration}. Quality of service, scalability, security, and energy
-cost are just some examples of the broad topics that need to be taken into account as
-both of these changes happen in parallel, energy cost being the focus of this thesis.
+topic~\cite{chen2026network}. Since evolution seldom happens in isolation, the network
+itself has also been undergoing changes, one of which is the adoption of Passive Optical
+Network (PON) technology in the access network~\cite{effenberger2007introduction}. Driven
+by the demand for greater capacity, lower latency, and reduced operating costs, PON is
+being deployed alongside or in place of the hybrid fiber-coaxial (HFC)
+plant~\cite{prodnik2025migration}. Quality of service, scalability, security, and energy
+cost are some of the broad topics that need to be taken into account as both of these
+changes happen in parallel.
 
 
-LLM inference is expensive, and one way of making it cheaper is the model cascade: a
-smaller model answers what it can, and the query is only passed to a larger one when its
-answer is not reliable enough~\cite{li2021cascadebert,chen2024frugalgpt}. The idea is
-older than the models it is applied to today, and what counts as expensive depends on the
-setting, from the layers a classifier runs to the price of an API call.
+On the models' side, LLM inference is expensive~\cite{chen2026network}, and one way of
+making it cheaper is the model cascade: a smaller model answers what it can, and the query
+is only passed to a larger one when its answer is not reliable
+enough~\cite{chen2024frugalgpt}. The idea predates today's LLMs, having been used to
+speed up BERT-sized classifiers~\cite{li2021cascadebert}. What counts as expensive depends on the
+setting: the layers a classifier runs, the price of an API call, or the energy spent
+answering each query.
 
-Where the models run is a separate question. With edge computing, inference has started to
-move out of the cloud and closer to the user, spread across end devices, edge nodes and
-cloud servers, each tier with more computing power than the one below it and further
-away~\cite{chen2026network}. RecServe puts the two ideas together, placing a cascade on
+Where the models run is a separate question. With edge computing, inference is no longer
+confined to the cloud, but spread across end devices, edge nodes, and cloud servers, each
+tier further from the user than the one below, and with more computing
+power~\cite{chen2026network}. RecServe puts the two ideas together, placing a cascade on
 the tiers of such a network and letting each tier decide, from the confidence scores it
 has seen recently, whether to answer the query or to pass it up~\cite{wu2025recserve}.
+Following RecServe's decision rule, \citeonline{pakpahan2026continuum} bring tiered LLM inference into the access network
+itself, equipping Optical Network Units (ONUs) and Optical Line Terminals (OLTs) to run
+part of the inference, so that a Time and Wavelength
+Division Multiplexed PON (TWDM-PON) provides the edge and fog tiers of such a hierarchy.
 
 \section{Use of Artificial Intelligence Tools}
 \label{sec:ai-tools}
