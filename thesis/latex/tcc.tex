@@ -3,9 +3,9 @@
 % policies in hierarchical LLM inference cascades over passive optical
 % networks
 %
-% Empty canvas: keeps only the metadata, the abstracts (no text yet), the
-% table of contents and lists, the chapter/section skeleton and the
-% references. All running text was removed to be rewritten.
+% Metadata, the abstracts (no text yet), the table of contents and lists, the
+% chapter/section skeleton and the references. Running text so far: the
+% Introduction's Context section; the rest is still to be written.
 %
 % Written in English (class option `english'); UFRGS also requires an
 % abstract in Portuguese, the `translatedabstract' environment below.
@@ -84,13 +84,40 @@
 \label{chap:introduction}
 %==============================================================================
 
-\section{Context}
+As the use of Large Language Models (LLMs) becomes widespread in several domains of modern
+society~\cite{liang2025adoption}, even if attitudes towards it still vary widely by age
+and country~\cite{oecd2025technologies}, the challenge of adapting the network
+architecture to handle this rapidly evolving technology remains an active research
+topic~\cite{chen2026network}.
+Since evolution seldom happens in isolation, the network itself has also been undergoing
+changes, one of which is the adoption of Passive Optical Network (PON)
+technology~\cite{effenberger2007introduction}, driven by the demand for greater capacity,
+lower latency and reduced operating costs, alongside or in place of the hybrid
+fibre-coaxial plant that DOCSIS runs over~\cite{prodnik2025migration}. Quality of service, scalability, security, and energy
+cost are just some examples of the broad topics that need to be taken into account as
+both of these changes happen in parallel, energy cost being the focus of this thesis.
 
-\section{Problem and gap}
 
-\section{Objectives}
+LLM inference is expensive, and one way of making it cheaper is the model cascade: a
+smaller model answers what it can, and the query is only passed to a larger one when its
+answer is not reliable enough~\cite{li2021cascadebert,chen2024frugalgpt}. The idea is
+older than the models it is applied to today, and what counts as expensive depends on the
+setting, from the layers a classifier runs to the price of an API call.
 
-\section{Outline}
+Where the models run is a separate question. With edge computing, inference has started to
+move out of the cloud and closer to the user, spread across end devices, edge nodes and
+cloud servers, each tier with more computing power than the one below it and further
+away~\cite{chen2026network}. RecServe puts the two ideas together, placing a cascade on
+the tiers of such a network and letting each tier decide, from the confidence scores it
+has seen recently, whether to answer the query or to pass it up~\cite{wu2025recserve}.
+
+\section{Use of Artificial Intelligence Tools}
+\label{sec:ai-tools}
+Generative Artificial Intelligence tools were used during the preparation of this work,
+both as a writing aid for parts of this text and as an assistant in its implementation.
+All AI-assisted content was critically reviewed, edited, and validated by the author, who
+assumes full responsibility for the content, analyses, and conclusions presented in this
+work.
 
 %==============================================================================
 \chapter{Literature Review}
@@ -117,8 +144,8 @@
 
 \subsection{Cloud}
 
-\section{Summary}
-\label{sec:summary}
+\section{Challenges Addressed in This Work}
+\label{sec:challenges}
 
 %==============================================================================
 \chapter{Methodology}
