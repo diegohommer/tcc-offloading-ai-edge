@@ -1,16 +1,20 @@
 # Energy measurements — three-tier case study
 
-**Status (2026-09-13).** OLT energy sweep: done, run twice, replicated.
-Answer collection for all three tiers: done, 1,319 questions each, every
-confidence check passing. ONU and user tiers: priced
-from published measurements, assessed in §5 and §6. The ONU is a Jetson
-Orin Nano Super, a realistic home device, priced from Cloud to Edge [17]; its
-answers were re-collected in the same 4-bit format. All three tiers are compared
+**Status (2026-09-19).** OLT energy sweep: done three times. Run 3 is the
+reference (5 repeats, 12 batch sizes); runs 1 and 2 agree with it on decode
+within 1.2% at every batch size all three measured. Answer collection for all three
+tiers: done, 1,319 questions each, every confidence check passing. ONU and user
+tiers: priced from published measurements, assessed in §5 and §6. The ONU is a
+Raspberry Pi 5 with a Hailo-10H NPU, standing in for an AI home gateway, priced
+from Cloud to Edge [17] and cross-checked against Tummalapalli et al. [33]; its
+answers are in the 4-bit format the source states. All three tiers are compared
 at one common, whole-system boundary (§7). A first-party ONU measurement is
-optional, if a board becomes available.
+optional, if a board becomes available. The results sections (§3.3, §8.6) still
+show the Jetson-priced ONU until the reruns are in; §8.2–8.5 keep it as the record
+of the exploration.
 
 **Headline.** Counted as whole systems, the OLT answers a query more cheaply than
-the ONU once it batches about 5 queries (≈ 3.6 at a best-case PUE). It never
+the ONU once it batches about 7 queries (≈ 4.6 at a best-case PUE). It never
 undercuts the user device within batch 64. In simulation (§8), piggybacked
 energy reports let the cascade switch between three tiers, two, or straight to
 the OLT, hour by hour, without configuration. Against the fixed chains they save
@@ -60,13 +64,16 @@ function of batch size.
 | Tier | Model | Precision | Hardware | Energy from | Answers from |
 |---|---|---|---|---|---|
 | User | Llama-3.2-1B-Instruct | GGUF Q4_K_M | Snapdragon 8 Elite Gen 5 | Cai et al. [10] (literature) | Modal, this work |
-| ONU | Qwen2.5-1.5B-Instruct | GGUF Q4_K_M | Jetson Orin Nano Super 8GB | Cloud to Edge [17] (literature, §5) | Modal, this work |
+| ONU | Qwen2.5-1.5B-Instruct | GGUF Q4_K_M | Raspberry Pi 5 + Hailo-10H NPU (AI HAT+ 2) | Cloud to Edge [17], cross-checked by [33] (literature, §5) | Modal, this work |
 | OLT | Qwen2.5-7B-Instruct | fp8 | NVIDIA L4 | **first-party (§3)** | Modal, this work |
 
 Choices that hold across tiers:
 
-- **Sizes sit inside Pakpahan's bands** [2]: a tiny model on the user device, 0.5–7B
-  at the ONU, 7–13B at the fog/OLT. The OLT is at the bottom of its band on
+- **Sizes follow Pakpahan and Hwang's tiers where they give one** [2]: "tiny-LLMs"
+  on user devices and 7–13B models in the fog tier, where the OLT sits. For the
+  ONU they give no size, only "hardware accelerators" for the "execution of
+  quantized models"; 1.5B is this work's choice, about the largest model an AI
+  home gateway runs comfortably (§5). The OLT is at the bottom of its band on
   purpose: a smaller model is the easiest for batching to make cheap, so this is
   the configuration most likely to show the effect, and it is stated as such.
 - **Each tier's answers and energy come from the same model at the same
@@ -76,9 +83,9 @@ Choices that hold across tiers:
   match approximately: each uses the same 4-bit format as its energy source
   ([10], [17]), but runs through vLLM rather than llama.cpp or Ollama, and the
   user tier's exact 4-bit scheme in [10] is not stated.
-- **Hardware is in each tier's declared class**: phone SoC, Jetson-class
-  accelerator, and an L4, which is inside the fog hardware class of the
-  project's energy table (T4 / L4 / A30 / A2 / A16 / L40S).
+- **Hardware is in each tier's class**: a phone SoC, an edge AI board for the ONU
+  (§5), and an L4, a data-centre inference GPU of the same class as the A30 and
+  T4 that [2] names for the fog tier.
 
 ## 3. OLT energy sweep
 
@@ -87,14 +94,14 @@ Choices that hold across tiers:
 | Decision | Choice | Following |
 |---|---|---|
 | Instrument | NVML cumulative energy counter, `nvmlDeviceGetTotalEnergyConsumption`, read before and after each pass | The ML.ENERGY Benchmark [3] and its measurement guide [4]. Power *sampling* is avoided: on recent GPUs the built-in sensor samples only part of the runtime [6]. |
-| Boundary | Measured at the GPU card, its own memory included. Converted to the whole system (host, idle capacity, building) for the comparison with other tiers, in §7 | Measured as ML.ENERGY [3] does, which justifies it by GPUs being 50–70% of provisioned server power. TokenPowerBench [5] also counts CPU and memory; Google's per-prompt method [18] counts everything, and is what §7 converts to. |
+| Boundary | Measured at the GPU card, its own memory included. Converted to the whole system (host, idle capacity, building) for the comparison with other tiers, in §7 | Measured as ML.ENERGY [3] does, which justifies it by GPUs being 50–70% of the total provisioned power in the datacenter. TokenPowerBench [5] also counts CPU and memory; Google's per-prompt method [18] counts everything, and is what §7 converts to. |
 | Serving engine | vLLM 0.21, offline `generate` | ML.ENERGY [3] measures on vLLM. |
 | Unit | Joules per input token for prefill, per output token for decode, reported separately | TokenPowerBench [5]; Solovyeva and Castor [8]; Delavande, Pierrard and Luccioni [7], who show the two phases respond to batching differently. |
 | Phase split | Each trial runs the same prompts twice: a 1-token pass (the prefill forward pass) and a full pass. Prefill = first pass; decode = difference, over the remaining output tokens. | Phase-level accounting as in [5]; [5] tags power samples by phase instead. With static batches prefill happens first, so the difference is a close approximation. |
-| Batch | Static batches of 1, 2, 4, 8, 16, 32, 64 prompts | Batch sweeps as in TokenPowerBench [5] and [7]. ML.ENERGY instead reports one saturated steady state [3]; the question here is how cost *varies* with batch, which one point cannot show. |
+| Batch | Static batches of 1, 2, 4, 8, 16, 32, 64 prompts (runs 1 and 2); 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64 in run 3, the reference | Batch sweeps as in TokenPowerBench [5] and [7]. ML.ENERGY instead reports one saturated steady state [3]; the question here is how cost *varies* with batch, which one point cannot show. |
 | Output length | Fixed at 300 tokens per sequence (`ignore_eos`) | Caravaca, Cuevas and Cuevas's 300-output-token profile [9]. Fixing it keeps J/token comparable across batches; per-query cost uses each tier's real answer lengths (§4). |
 | Prompts | GSM8K test questions in the cascade's zero-shot template, ~93 tokens | The workload the case study runs; prefill cost depends on prompt length. |
-| Warm-up and repeats | One discarded warm-up per batch size; 3 measured repeats; median reported, spread kept | Warm-up and repetition follow [6]. ML.ENERGY reports single runs without error bars [3]. |
+| Warm-up and repeats | One discarded warm-up per batch size; 3 measured repeats (5 in run 3); median reported, spread kept | Standard practice; [6] asks for repeated, long-enough measurements (see Short passes). ML.ENERGY reports single runs without error bars [3]. |
 | Short passes | The prefill pass is repeated back to back until the measured window spans ≥ 3 s, then averaged | [6] recommends minimum durations for short kernels. Found necessary here: see §3.4. |
 | Prefix caching | Disabled | vLLM enables it by default [13]; left on, the warm-up would cache every prompt and trials would skip prefill. See §3.4. |
 | Idle power | Measured for 10 s with the model loaded; every figure reported gross and net of idle | Neither [3] nor [5] subtracts idle. Both are kept so the comparison with other tiers can use whichever boundary they share. |
@@ -102,42 +109,50 @@ Choices that hold across tiers:
 
 ### 3.2 Results
 
-Run 2, with the prefill fix (idle 28.7 W). Decode spread is the min–max across
-the three repeats.
+Run 3, the reference sweep: 5 repeats per batch size, 12 batch sizes, idle 30.5 W.
+Decode spread is the min–max across the five repeats.
 
 | Batch | Prefill J/in-tok (net) | Decode J/out-tok [spread] | Tokens/s | Avg J/query | Marginal J/query |
 |---|---|---|---|---|---|
-| 1 | 0.0336 (0.0203) | 2.441 [2.441–2.442] | 29 | 733 | 733 |
-| 2 | 0.0380 (0.0226) | 1.228 [1.228–1.240] | 58 | 370 | 7.3 |
-| 4 | 0.0239 (0.0142) | 0.625 [0.619–0.625] | 115 | 189 | 7.1 |
-| 8 | 0.0173 (0.0104) | 0.313 [0.313–0.313] | 226 | 95 | 1.8 |
-| 16 | 0.0150 (0.0090) | 0.160 [0.159–0.160] | 437 | 49 | 3.6 |
-| 32 | 0.0149 (0.0089) | 0.085 [0.085–0.085] | 807 | 27 | 4.1 |
-| 64 | 0.0143 (0.0085) | 0.048 [0.047–0.048] | 1,387 | 16 | 4.5 |
+| 1 | 0.0339 (0.0196) | 2.465 [2.441–2.466] | 29 | 740 | 740 |
+| 2 | 0.0390 (0.0226) | 1.239 [1.228–1.240] | 58 | 374 | 6.9 |
+| 3 | 0.0295 (0.0169) | 0.825 [0.825–0.834] | 86 | 249 | 0.4 |
+| 4 | 0.0239 (0.0137) | 0.625 [0.619–0.625] | 115 | 189 | 7.1 |
+| 6 | 0.0201 (0.0116) | 0.419 [0.418–0.419] | 170 | 127 | 3.5 |
+| 8 | 0.0183 (0.0106) | 0.316 [0.313–0.316] | 225 | 96 | 3.5 |
+| 12 | 0.0169 (0.0098) | 0.213 [0.213–0.213] | 330 | 65 | 3.7 |
+| 16 | 0.0155 (0.0089) | 0.161 [0.160–0.162] | 433 | 50 | 3.6 |
+| 24 | 0.0163 (0.0095) | 0.111 [0.111–0.112] | 618 | 35 | 4.5 |
+| 32 | 0.0154 (0.0088) | 0.085 [0.085–0.085] | 801 | 27 | 3.5 |
+| 48 | 0.0151 (0.0086) | 0.061 [0.061–0.062] | 1,099 | 20 | 4.9 |
+| 64 | 0.0151 (0.0087) | 0.048 [0.048–0.048] | 1,367 | 16 | 4.1 |
 
-Per query here means 93 input and 300 output tokens. Marginal is the slope of
+Per query here means 96 input and 300 output tokens. Marginal is the slope of
 batch energy between adjacent batch sizes: the extra energy one more query adds.
+The table is written by `src/analyze/tier_energy.py`, with the rest of §3 and §4.
 
 What it shows:
 
 - **Decode energy fell 51× over the sweep at constant power.** The L4 draws its
   full 72 W from batch 1, so energy per token is 72 W divided by throughput, and
-  throughput doubled almost exactly with every batch doubling up to batch 16
-  (memory-bound decode: extra sequences ride along on weight loads already being
-  paid for). Beyond 16 it slows to ~1.7× per doubling; the curve bends but does
-  not flatten by batch 64.
-- **Prefill gets cheaper only up to batch ~16, then stays flat** at ~0.015
+  throughput doubles almost exactly with every batch doubling up to 16 (× 1.98,
+  1.98, 1.96, 1.93: memory-bound decode, where extra sequences ride along on
+  weight loads already being paid for). Beyond 16 it slows to × 1.85 to batch 32
+  and × 1.71 to 64; the curve bends but does not flatten.
+- **Prefill gets cheaper only up to batch ~12, then stays flat** at ~0.015
   J/in-token. Small batches amortise per-call overhead; beyond that prefill is
   compute-bound and scales linearly, consistent with [7].
-- **One more query costs ~4 J once the OLT is busy**, against an average of 16–95
-  J per query in the same range. Small-batch marginals (7.3, 7.1, 1.8) are
-  differences of two noisy totals and should not be read individually.
-- **Replicated.** Run 1 (same configuration, before the prefill fix) agrees on
-  decode within ±1.4% at every batch size.
+- **One more query costs ~4 J once the OLT is busy** (3.5 to 4.9 J at batches 16
+  and above), against an average of 16–50 J per query in the same range.
+  Small-batch marginals (6.9 at batch 2, 0.4 at 3, 7.1 at 4) are differences of
+  two noisy totals and should not be read individually.
+- **Replicated three times.** Runs 1 and 2 (7 batch sizes, 3 repeats; run 1
+  before the prefill fix) agree with run 3 on decode within 1.2% at every batch
+  size all three measured.
 - **Internally consistent.** Energy per token should be power divided by
-  throughput, and it is: the implied power is 71.7 W at batch 1 and 66.3 W at
-  batch 64, against the card's 72 W limit. The 51× is throughput scaling at
-  nearly constant power, not a measurement artefact.
+  throughput, and it is: the implied decode power is 71.9 W at batch 1, falling
+  to 65.7 W at batch 64, against the card's 72 W limit. The 51× is throughput
+  scaling at nearly constant power, not a measurement artefact.
 
 **This matches the literature, with two caveats.** Delavande, Pierrard and
 Luccioni [7] report that "energy per output token decreases rapidly with batch
@@ -159,9 +174,10 @@ proportionally less work".
   are nearly uniform (~122 tokens), prefill is measured separately and is a
   small share of a query's energy, and production servers batch continuously,
   without padding.
-- Samsi et al. [26] is not evidence either way: it varies model sharding and
-  generation length, not batch size at fixed hardware, and is cited here only
-  for measurement practice.
+- Samsi et al. [26] is not comparable: it does vary batch size (64 to 512, for
+  LLaMA 65B sharded over 8 to 32 V100 GPUs) and finds no consistent effect on
+  energy per token, but that regime (a 65B model across many GPUs, batches of 64
+  and up) is far from one GPU serving a 7B model from batch 1.
 
 ### 3.3 Where the OLT undercuts the lower tiers
 
@@ -174,36 +190,41 @@ OLT energy per query:
 
 | Batch | GPU card | GPU, net of idle | **Whole system, PUE 1.54** | Whole system, PUE 1.09 |
 |---|---|---|---|---|
-| 1 | 617.8 J | 370.6 J | **1,525.6 J** | 1,079.8 J |
-| 2 | 313.4 | 187.9 | **773.9** | 547.8 |
-| 4 | 160.0 | 96.5 | **395.0** | 279.6 |
-| 8 | 80.9 | 48.5 | **199.7** | 141.3 |
-| 16 | 42.1 | 25.3 | **104.0** | 73.6 |
-| 32 | 23.2 | 13.9 | **57.2** | 40.5 |
-| 64 | 13.8 | 8.3 | **34.0** | 24.1 |
+| 1 | 623.9 J | 359.9 J | **1,540.6 J** | 1,090.4 J |
+| 2 | 316.4 | 182.5 | **781.2** | 552.9 |
+| 3 | 211.1 | 121.4 | **521.3** | 369.0 |
+| 4 | 160.0 | 92.5 | **395.1** | 279.7 |
+| 6 | 107.7 | 62.0 | **265.9** | 188.2 |
+| 8 | 81.7 | 47.1 | **201.6** | 142.7 |
+| 12 | 55.6 | 32.0 | **137.4** | 97.2 |
+| 16 | 42.5 | 24.5 | **104.9** | 74.2 |
+| 24 | 30.0 | 17.2 | **74.0** | 52.4 |
+| 32 | 23.4 | 13.5 | **57.7** | 40.8 |
+| 48 | 17.2 | 9.9 | **42.4** | 30.0 |
+| 64 | 13.9 | 8.0 | **34.4** | 24.4 |
 
 Batch size from which the OLT is cheaper:
 
 | Lower tier | Its cost per query | **Whole system, PUE 1.54** | Whole system, PUE 1.09 | GPU card only | GPU, net of idle |
 |---|---|---|---|---|---|
-| ONU (1.11 J × 276 tokens) | 306.4 J | **≈ 5.2** | ≈ 3.6 | ≈ 2.0 | ≈ 1.2 |
-| User | 15.7 J | **not within 64** | not within 64 | ≈ 54 | ≈ 28 |
+| ONU (0.88 J × 276 tokens) | 242.9 J | **≈ 6.6** | ≈ 4.6 | ≈ 2.6 | ≈ 1.5 |
+| User | 15.7 J | **not within 64** | not within 64 | ≈ 54 | ≈ 27 |
 
 - **The ONU is undercut at modest load.** At the common boundary the OLT beats
-  it from a batch of about 5. Judging the OLT by its GPU card alone, as most
-  benchmarks do, would put the crossover at 2 and overstate the case for
+  it from a batch of about 7. Judging the OLT by its GPU card alone, as most
+  benchmarks do, would put the crossover at 2.6 and overstate the case for
   offloading by a factor of about 2.5.
 - **The user device is never undercut.** Its per-token cost is the lowest in the
   cascade and it answers most briefly (185 tokens). Even the GPU-only OLT needs
   batch ≈ 54, and at the whole-system boundary the OLT's 34 J at batch 64 is
-  still twice the phone's 15.7 J. Since the phone's figure is a lower bound (§6),
-  that conclusion holds.
-- **One more query on a busy OLT costs ~10 J** at the whole-system boundary
-  (~4 J at the GPU), against 306 J on the ONU.
+  still twice the device's 15.7 J. Since that figure is a lower bound (§6), the
+  conclusion holds.
+- **One more query on a busy OLT costs ~9 J** at the whole-system boundary
+  (~4 J at the GPU), against 243 J on the ONU.
 
 At the OLT, the inversion depends on load. Batch ≈ arrival rate × service time
-(Little's law). A sequence decodes at ~28 tokens/s up to batch 16, so an OLT
-answer takes ~9 s, and a batch of 5 needs about one query arriving every two
+(Little's law). A sequence decodes at ~27 tokens/s up to batch 16, so an OLT
+answer takes ~9 s, and a batch of 7 needs about one query arriving every 1.3
 seconds across the PON. Load varies by day: BurstGPT's regional traffic is 11×
 lower at night than at the afternoon peak [12]. So the cheapest tier for an ONU
 query changes with the hour. This is the regime in which a live cost signal is
@@ -236,7 +257,7 @@ escalation policy can be replayed offline without re-running a model.
 | Scale | n = 1,319 | The design doc flags n = 200 as thin. |
 | Stop condition | None: generation ends at the model's end-of-sequence token or 512 tokens | Every generated token then has a logprob, so confidence and energy count the same tokens. |
 
-**Checking the confidence before routing on it.** `src/scripts/check_confidence.py`
+**Checking the confidence before routing on it.** `src/analyze/check_confidence.py`
 verifies, per tier, that every generated token has exactly one logprob, all
 logprobs are ≤ 0, and the stored confidence equals exp(mean token logprob)
 recomputed from the raw values. It also reports how many answers hit the token
@@ -278,10 +299,10 @@ transfer; per-query costs use the collection's real token counts.
 | OLT | 0.917 | 0.937 | 122.0 | 251.4 | 7 (0.5%) | +7.84 | **+10.19** |
 | *ONU (AWQ, superseded)* | *0.644* | *0.880* | *122.0* | *245.4* | *23 (1.7%)* | *+7.90* | *+10.52* |
 
-The ONU was collected twice. The AWQ run matched the AGX Orin energy source;
-when the ONU became the Orin Nano Super (§5), its answers were re-collected in
-Q4_K_M, the format that board's energy was measured in, and those replace the
-AWQ rows. The Q4_K_M model is slightly more accurate and answers at greater
+The ONU was collected twice. The AWQ run matched an earlier energy source (the
+AGX Orin, §5); the answers were re-collected in Q4_K_M, the format the ONU's
+energy source states (first for the Jetson Orin Nano Super, now for the Hailo-10H,
+§5), and those replace the AWQ rows. The Q4_K_M model is slightly more accurate and answers at greater
 length (276 tokens against 245), and the per-query cost uses its length.
 
 - **Accuracy rises tier by tier**, so skipping a tier never lowers accuracy (safe
@@ -302,57 +323,102 @@ logprob included.
 
 ## 5. ONU hardware and energy
 
-**The ONU is a Jetson Orin Nano Super 8GB.** Earlier drafts priced the ONU on a
-Jetson AGX Orin 64GB, because that is what EdgeReasoning [11] measured. It is not
-a realistic ONU: a ~$2,000 developer module drawing 15–60 W, in a device class
-where an ONU draws ~4 W and costs tens of dollars. The reference architecture
-only asks for a "Jetson-class accelerator" [2]. The Orin Nano Super is the
-realistic reading: $249, 7–25 W, 67 TOPS, and it runs the ONU's 1.5B model in
-4-bit. No ISP ships LLM accelerators in ONUs today in any country; the tier is
-forward-looking, so the defensible choice is the cheapest board that runs it.
+**The ONU is a Raspberry Pi 5 with a Hailo-10H NPU** (the Raspberry Pi AI HAT+ 2:
+40 TOPS INT4, 8 GB on-module memory, under 5 W), running Qwen2.5-1.5B-Instruct in
+4-bit. The reference architecture only says that ONUs are "equipped with hardware
+accelerators and model caches", enabling the "execution of quantized models" [2].
+An M.2-class edge NPU is the kind of accelerator an AI home gateway would carry;
+the Pi 5 stands in for the gateway's own SoC.
 
-**Energy: Cloud to Edge [17], 1.11 J per generated token** for Qwen2.5-1.5B in
-Q4_K_M on the Orin Nano Super's GPU (9.37 tokens/s).
+**Is a 1.5B model realistic in an ONU?** Not in today's ONUs: deployed ones have
+32 to 315 MB of memory (Huawei HN8010Ts 32 MB, HG8010H 256 MiB, ZTE F6645P
+315 MB [30]), and a 4-bit 1.5B model needs about 1.1 GB for its weights alone.
+The first ONU chips with a neural engine are CNN-oriented: Broadcom's BCM68850
+50G-PON gateway chip "supporting convolutional neural networks for anomaly
+detection, voice recognition, and cybersecurity analysis", and its BCM55050 ONU
+chip with a dual-core 1 GHz CPU and a 32-bit LPDDR4 interface [29]. A 1.5B model
+fits the premium class operators have started to ship, AI home gateways: ZTE's
+AI home media center with a 4 TOPS NPU [27] and its AI FTTR main unit with a
+6 TOPS NPU [28]. A chip of that class, the RK3588 (6 TOPS), runs Qwen2.5-1.5B at
+about 9.5 tokens/s on its NPU (8-bit, 1.8 GB peak memory) and 22.6 tokens/s on
+its CPU (Q4_K_M), and a 3B model at 4.9 tokens/s on its NPU [31]: 1.5B is about
+the largest it runs comfortably. The ONU tier is therefore read as an AI home
+gateway, not today's ONU; no ISP ships LLM inference in the ONU yet.
+
+**Energy: Cloud to Edge [17], 0.88 J per generated token at 6.34 tokens/s**, Table 3's
+`qwen2.5:1.5b-instruct` row, Raspberry Pi 5 + HAT+ column.
 
 | Aspect | What the source did |
 |---|---|
-| Meter | Mecheer JK-PM07 at the board's power input |
-| Boundary | whole board; idle **not** subtracted |
-| Engine | Ollama (llama.cpp), Q4_K_M |
+| Meter | Mecheer JK-PM07 at the power input |
+| Boundary | whole system (Pi and HAT); idle **not** subtracted |
+| Engine | Hailo Ollama (Hailo's Ollama server for the NPU); the source states Q4_K_M |
 | Workload | one fixed ~12-token prompt, 100 generated tokens, 5 runs |
 | Metric | mean power × inference time ÷ generated tokens, so one all-in figure per generated token |
 | Power mode | not stated |
 
+**An independent measurement agrees.** Tummalapalli et al. [33] ran the same model
+on the same hardware (Q4_0, 20 runs, a 564-token answer to a 258-token prompt) and
+report 6.914 tokens/s and 270.5 mJ per generated token, read at 1 kHz by an INA219
+on the Pi's power-management rails. Their average draw, 1.870 W, is below the
+3.5 W idle they give for the same system, so those rails leave part of the system
+out and the figure is closest to the energy above idle. Cloud to Edge's all-in
+0.88 J minus 3.5 W of idle at 6.34 tokens/s gives 0.33 J: the two agree. Hailo's
+own figure for this model, 6.82 tokens/s (as cited in [33]), matches both speeds.
+The table's other Qwen 2.5 1.5B row on the same hardware (4.37 tokens/s, 1.30 J)
+matches neither, and is not used.
+
 Consequences for this case study:
 
-- **Answers at the same precision.** The ONU's answers were re-collected in the
-  same Q4_K_M format (§4), so energy and answers describe the same 4-bit
-  weights. They are loaded by vLLM's GGUF loader rather than Ollama, the same
-  approximation the user tier makes.
-- **Per-query cost = 1.11 J × generated tokens**, 306 J at the ONU's mean of
-  276 tokens. The figure already contains its own prompt processing, so no
-  separate prefill term is added. The case study's prompts (~122 tokens) are
-  longer than the source's (~12), so a few percent of prefill energy is not
-  captured.
-- **Already at the system boundary.** A meter at the plug counts the whole
-  board, idle included, which is the boundary §7 puts every tier on. It is a
-  home device, so no building overhead applies.
+- **Answers at the stated precision.** The ONU's answers were collected in Q4_K_M
+  (§4), the precision the source states. The NPU runs Hailo's own compiled 4-bit
+  build of the model, so the answers approximate the ONU's, the same kind of
+  approximation the phone tier makes (vLLM instead of llama.cpp).
+- **Per-query cost = 0.88 J × generated tokens**, 243 J at the ONU's mean of 276
+  tokens. The figure contains its own prompt processing, so no separate prefill
+  term is added; the case study's prompts (~122 tokens) are longer than the
+  source's (~12), so a few percent of prefill energy is not captured.
+- **Marginal accounting** takes the system's idle draw off: 0.88 − 3.5 / 6.34 =
+  0.33 J per token, 91 J per query.
+- **Already at the system boundary.** A meter at the plug counts the whole system,
+  idle included, which is the boundary §7 puts every tier on. It is a home device,
+  so no building overhead applies.
+- **Slow.** At 6.34 tokens/s a 276-token answer takes about 44 s, against about 3 s
+  on the phone and about 9 s on the OLT; the case study reports latency (§8.6).
 
-**What the earlier AGX Orin analysis found, kept as a result.** EdgeReasoning's
-released code [16] shows its decode energy integrates one rail, `VDD_GPU_SOC`
-(GPU plus SoC), from the Jetson's built-in INA3221 sensors. Those sensors
-under-read true board power by a nearly constant ~3.1 W plus 2% on the AGX Orin
-(true ≈ 1.02 × internal + 3,115 mW) [15]. So that figure was a lower bound at a
-narrower boundary than the OLT's. The two ONU pictures bracket the boundary
-question from opposite sides.
+**How the ONU got here.** Earlier drafts priced the ONU on a Jetson AGX Orin 64GB
+(EdgeReasoning [11]): a ~$2,000 developer module drawing 15–60 W, not an ONU. Then
+on a Jetson Orin Nano Super (Cloud to Edge [17], 1.11 J per token), which rested on
+one measurement whose speed, 9.37 tokens/s, is 2–7× below other figures for that
+board: NVIDIA gives 43 tokens/s for Llama 3.2 3B and 21.75 for Qwen2.5 7B (MLC,
+INT4, highest power mode) [32], against 6.31 tokens/s for Llama 3.2 3B in [17];
+and a 67 TOPS, 8 GB board is far above the gateway class. The Hailo-10H is in that
+class and rests on two measurements that agree.
 
-**First-party measurement, if a board becomes available.** Whole board with a
-USB-C power meter (the source's method), the same Q4_K_M file, and the protocol
-of §3: warm-up, repeats, and windows long enough for the meter. Chameleon Cloud's
-CHI@Edge testbed has three Orin Nanos but requires a faculty-led project.
-CloudJetson lists the Orin Nano as coming soon. The board itself costs $249.
+**What the AGX Orin analysis found, kept as a result.** EdgeReasoning's released
+code [16] shows its decode energy integrates one rail, `VDD_GPU_SOC` (GPU plus
+SoC), from the Jetson's built-in INA3221 sensors. Those sensors under-read true
+board power by a nearly constant ~3.1 W plus 2% on the AGX Orin (true ≈ 1.02 ×
+internal + 3,115 mW) [15]. So that figure was a lower bound at a narrower
+boundary than the OLT's.
+
+**First-party measurement, if a board becomes available.** A Raspberry Pi 5 with
+the AI HAT+ 2 (listed at $451.83 in [17]) or an RK3588 board, a USB-C power meter
+at the input (the source's method), the case study's own prompts, and the
+protocol of §3: warm-up, repeats, and windows long enough for the meter.
 
 ## 6. User tier — literature, and why
+
+**What the user tier stands for.** A light device running a ~1B model: a mid-range
+phone, a phone saving battery, a smart speaker, glasses or another home device,
+the "tiny-LLMs" of Pakpahan and Hwang's customer tier (smartphones, laptops, AR/VR
+headsets, IoT) [2]. It is priced as a phone because that is where careful
+measurements exist [10]. Flagship phones already ship larger models: Apple's
+on-device model has about 3B parameters [34] and Gemini Nano 1.8B or 3.25B [35].
+For such a phone the ONU tier adds nothing: Llama-3.2-3B scores 77.7 on GSM8K
+against the 1B's 44.4 (Meta's figures, 8-shot chain of thought [36]), above the
+ONU's 0.69 here, so a cascade phone → ONU would lose accuracy on escalation. The
+ONU tier is for devices weaker than the gateway, and the case study is read that way.
 
 Measured first-party would be better, but no rentable phone service reports
 energy. Qualcomm AI Hub runs models on real Snapdragon devices in the cloud but
@@ -387,8 +453,9 @@ the ONU crossover by a factor of about 2.5.
 **The standard.** Google's per-prompt methodology [18] is the most complete
 published accounting of a production LLM query. It separates four parts: the
 active accelerators, the host CPU and memory, idle machines held for load
-spikes, and data-centre overhead. It finds the accelerator-only view undercounts
-its median prompt by 2.4× (0.10 Wh against 0.24 Wh). The common boundary here is
+spikes, and data-centre overhead. For its median prompt it finds 0.24 Wh, 2.4×
+the 0.10 Wh of the narrower, benchmark-style view (accelerators only, on highly
+utilised machines). The common boundary here is
 the comprehensive one: **everything drawn to answer the query**.
 
 | Tier | Source | What it counts | Conversion to the common boundary |
@@ -403,14 +470,17 @@ host CPU and memory, 10% idle machines and 8% overhead at a fleet PUE of 1.09
 applied separately at the site's own PUE, because an OLT's central office is
 not a hyperscale data centre: the primary value is the industry average of
 1.54 [19], and Google's 1.09 is kept as the best case. Together, × 2.47
-(× 1.75 at the best case).
+(× 1.75 at the best case). Secondary sources report Uptime's 2025 regional
+figure for Latin America as about 1.65 (the primary regional report was not
+accessible); the case study's `olt1.07` sensitivity runs multiply the OLT's
+energy by 1.65 / 1.54 to cover it.
 
 **Why literature for two tiers and first-party for one.** The OLT's quantity is
 a batch curve; no paper publishes one for this model on this GPU with a phase
 split, so it had to be measured (§3). The user and ONU tiers run at batch 1 on
 fixed devices, where published, peer-measured figures exist, and better
 instruments than any available here: Qualcomm's power telemetry for the phone,
-a meter at the board's plug for the Jetson (§5, §6). Each source's boundary is
+a meter at the plug for the ONU's board (§5, §6). Each source's boundary is
 stated and converted once, in this section.
 
 **The conversion is conservative for the OLT.** Google's shares come from large
@@ -422,13 +492,24 @@ still low, and the ONU crossover errs early rather than late.
 
 - **User: keep.** Cai et al. is the right source and needs no conversion. It is a
   lower bound, and that cannot change the result.
-- **ONU: keep the switch to the Orin Nano Super.** Cloud to Edge measures it at
-  the boundary this study needs. Its weak points are a short fixed prompt, five
-  runs and an unstated power mode; a first-party measurement would fix those.
+- **ONU: the Raspberry Pi 5 with a Hailo-10H.** Cloud to Edge measures it at the
+  boundary this study needs, and an independent measurement agrees (§5). Its weak
+  points are a short fixed prompt, five runs and an unstated power mode; a
+  first-party measurement would fix those.
 - **OLT: keep first-party.** Convert it with the factors above; report the
   GPU-only curve beside it, since that is how most benchmarks report.
 
 ## 8. Piggyback simulation
+
+> **Names in the code** (`implementation/src/simulate/`, since 2026-09-19): RecServe
+> = `recserve`; RecServe without the ONU = `recserve_no_onu`; the static
+> configuration = `static_day`; the time-of-day schedule, or timetable =
+> `static_hour`; the dynamic policy = `broadcast`; the oracle and piggyback keep
+> their names. The run files of §8.2–8.5 were removed from the tree and are kept
+> in git at the tag `pre-cleanup`; §8.6's are in `implementation/results/study/`.
+> Every result in §8 so far priced the ONU on the Jetson Orin Nano Super (306 J a
+> query, 168 J marginal); the ONU is now the Raspberry Pi 5 with a Hailo-10H (243 J,
+> 91 J marginal, §5), and §8.6 is rerun on it.
 
 **What is tested.** RecServe decides whether a query escalates. The piggyback
 mechanism adds where it goes. Every answer travelling back down carries the
@@ -587,7 +668,10 @@ the extra step time it causes.
 
 That is 4.1 J per query at the card on a busy OLT, matching the 3.6–4.5 J
 measured between adjacent batches (§3.3), or 10 J at the whole-system
-boundary. The first query on an idle OLT costs about 900 J. The same × 2.47
+boundary. The first query on an idle OLT costs about 900 J. (Those figures come
+from run 2, the reference when §8 was run. On run 3 they are 0.0145 and 0.0097 J
+per token, 4.2 J a query at the card, 9.3 J at the whole-system boundary, and
+793 J on an idle OLT — §3.2, and what the rerun of §8.6 uses.) The same × 2.47
 boundary factor is applied, although the idle-capacity share in it is
 arguably sunk, which would make the marginal figure lower still. User and ONU
 are priced as before; the ONU's figure includes its idle draw, so for an
@@ -702,7 +786,7 @@ whole days with an hour-of-day schedule, too short for more.
 
 **Results.** Piggyback's saving over the schedule, and in brackets the oracle's
 (the most any live signal could save), marginal accounting, 0.80 accuracy, mean
-of three seeds (`implementation/results/energy_tests/trace/SUMMARY.md`):
+of three seeds (`implementation/results/energy_tests/trace/SUMMARY.md`, at the git tag `pre-cleanup`):
 
 | Traffic | Households × queries a day | Load 2 | 4 | 8 | 16 | 32 |
 |---|---|---|---|---|---|---|
@@ -761,8 +845,8 @@ not its count; and be judged against the schedule on both kinds of traffic.
 
 §8.1–8.5 consolidated into the one comparison the thesis makes. Every setting
 is in `implementation/config/study.yaml`, with the reason for its value; the
-runs come from `src/scripts/run_study.sh` and the tables from
-`src/scripts/summarize_study.py` (`implementation/results/energy_tests/study/SUMMARY.md`).
+runs come from `src/simulate/run_study.sh` and the tables from
+`src/analyze/summarize_study.py` (`implementation/results/study/SUMMARY.md`).
 
 **Policies.** Three, a reference and two controls:
 
@@ -800,6 +884,17 @@ Events fall on the training days too, so the timetable learns an average that
 includes them. The cascade's own queries are unchanged: the events are other
 traffic at the OLT. Holidays are not used: they are on the calendar, and a fair
 timetable would include them.
+
+**Added on 2026-09-19** (results to be filled in after the rerun): every policy is
+also scored on latency (compute seconds at every tier a query visits: phone at its
+published prefill and decode speeds, ONU at its published speed, OLT at the
+per-sequence speed of the batch it joins), on the bytes crossing the shared PON
+fibre, and on the accuracy it actually delivers at the 0.80 target; a `static_day`
+policy (one OLT rate for the whole day) joins the static-per-hour timetable; and
+four more sensitivities: the ONU at half its cost (84 J), the OLT's energy ×1.07
+(a site PUE of 1.65) and ×1.75 (about where a busy OLT stops being cheaper than
+the phone under marginal accounting), and the households' queries spread flat
+over the day instead of peaking with the OLT's load.
 
 **Settings.** Marginal accounting, ONU 168 J, 40 households of 50 queries a day,
 0.80 accuracy, three seeds (§8.5). Each sensitivity run changes one setting, at
@@ -873,7 +968,7 @@ service) for over 1% of arrivals, indicative only.
   RecServe (mean 0.884, 0.892 and 0.897 either way). But the ONU now answers
   0.1–2% of queries instead of 20–80%, so its window fills slowly and its
   escalation rate strays from β, by up to 14 points at β 0.8 (66–71%). The totals
-  include this (`src/scripts/check_beta_windows.py`; surprises of × 3, loads 8
+  include this (`src/analyze/check_beta_windows.py`; surprises of × 3, loads 8
   and 32).
 
 **What the thesis can claim.**
@@ -891,6 +986,12 @@ service) for over 1% of arrivals, indicative only.
 
 ## 9. Limitations
 
+- **The ladder assumes a device weaker than the gateway.** The user tier runs a ~1B
+  model (§6); a flagship phone running its ~3B model would be more accurate than the
+  ONU, and for it the ONU tier would not apply. The phone and the ONU also come
+  from different model families (Llama 3.2, Qwen2.5), because the phone's energy
+  source measured no Qwen model smaller than 1.5B [10]; part of the accuracy step
+  between them (0.47 to 0.69) is the family, not the size.
 - **The OLT's whole-system figure is converted, not measured.** Host, idle and
   building are added with Google's shares [18] and an industry-average PUE
   [19], not metered on a real central-office server. The conversion likely
@@ -948,35 +1049,31 @@ service) for over 1% of arrivals, indicative only.
 
 ## 10. Reproducing
 
+The root `README.md` explains every folder and file. From `implementation/`:
+
 ```bash
-cd implementation
-.venv/bin/modal run src/modal_apps/measure_gpu_energy.py     # OLT sweep, ~15 min on one L4
-.venv/bin/modal run src/modal_apps/collect_answers.py        # all tiers' answers, 1,319 queries
-.venv/bin/python src/scripts/check_confidence.py results/energy_tests/<answers>.raw.jsonl
-# every simulation default, with what it means and where its value comes from:
-# config/sim_piggyback.yaml (flags override it for one run)
-.venv/bin/python src/scripts/sim_piggyback.py                # piggyback simulation (§8), ~30 s
-.venv/bin/python src/scripts/sim_piggyback.py --boundary gpu
-for s in 0.05 0.1 0.2 0.5; do .venv/bin/python src/scripts/sim_piggyback.py --onu-scale $s; done
-# load drifting off the average day, 14 days (§8.2), and marginal accounting (§8.3); add --seed 8 / 9
-.venv/bin/python src/scripts/sim_piggyback.py --load-sigma 0.5 --days 14 [--onu-scale 0.2]
-.venv/bin/python src/scripts/sim_piggyback.py --accounting marginal [--load-sigma 0.5 --days 14]
-# the trace-driven baseline (§8.5): hourly load from BurstGPT (and Azure 2024 for the drift check),
-# then 60 runs (~30 min at 10 in parallel) and their tables
-.venv/bin/python src/scripts/prepare_load_traces.py --azure  # writes data/load_traces/
-bash src/scripts/run_trace_baseline.sh 10
-.venv/bin/python src/scripts/summarize_trace_runs.py         # results/energy_tests/trace/SUMMARY.md
-# the case study (§8.6): config/study.yaml, 54 runs (~1 h at 10 in parallel; keep the lid open)
-bash src/scripts/run_study.sh 10
-.venv/bin/python src/scripts/summarize_study.py              # results/energy_tests/study/SUMMARY.md
-.venv/bin/python src/scripts/make_energy_artifact.py         # results page, from the files above
+# 1. measure (Modal, rented GPUs; only needed to redo the measurements)
+.venv/bin/modal run src/measure/measure_gpu_energy.py      # OLT sweep, batches 1..64, ~15 min on one L4
+.venv/bin/modal run src/measure/collect_answers.py         # every tier answers the 1,319 questions
+.venv/bin/python src/analyze/check_confidence.py results/measurements/<answers>.raw.jsonl
+# 2. every tier-level number (§3, §4, §7, §8.3) -> results/tier_energy.md, ~5 s
+.venv/bin/python src/analyze/tier_energy.py
+# 3. the OLT's load (§8.5): BurstGPT hourly counts and their drift -> data/load_traces/
+.venv/bin/python src/simulate/prepare_load_traces.py --azure
+# 4. the case study (§8.6): config/study.yaml, 54 runs (~1 h at 10 in parallel; keep the lid open)
+bash src/simulate/run_study.sh 10
+.venv/bin/python src/analyze/summarize_study.py            # results/study/SUMMARY.md
+.venv/bin/python src/analyze/check_beta_windows.py         # the beta-window check of §8.6
+# one-off runs: every setting is in config/simulation.yaml (study: config/study.yaml)
+.venv/bin/python src/simulate/simulate.py --config config/study.yaml \
+    --policies recserve,static_day,static_hour,broadcast,oracle --peak-loads 8
 ```
 
-Every output and log is kept in `implementation/results/energy_tests/` (see its
-README). The scripts write there with a UTC timestamp in each file name, so a
-rerun never overwrites an earlier result. Raw terminal logs (`*.log`) are
-committed here through an exception to the repo's global `*.log` ignore rule; a
-cleaned copy of each (`*.txt`) sits beside it.
+The measurements and their raw logs are in `implementation/results/measurements/`
+(a `*.log` is the raw terminal output, committed through an exception to the
+repo's `*.log` ignore rule; the `*.txt` beside it is the same, cleaned). The
+§8.2–8.5 runs, their scripts and the results page are not in the tree any more:
+`git checkout pre-cleanup` brings them back.
 
 ## References
 
@@ -1006,3 +1103,13 @@ cleaned copy of each (`*.txt`) sits beside it.
 24. Stojkovic et al. *DynamoLLM: Designing LLM Inference Clusters for Performance and Energy Efficiency.* HPCA 2025. Azure LLM Inference Dataset 2024, https://github.com/Azure/AzurePublicDataset/blob/master/AzureLLMInferenceDataset2024.md
 25. Cisco. *Understand GPON Technology* (downstream broadcast, GEM port filtering, AES per ONU, downstream multicast GEM ports); ITU-T G.984.3 (GPON) and G.9807.1 (XGS-PON). https://www.cisco.com/c/en/us/support/docs/switches/catalyst-pon-series/216230-understand-gpon-technology.html
 26. Samsi et al. *From Words to Watts: Benchmarking the Energy Costs of Large Language Model Inference.* arXiv:2310.03003. https://arxiv.org/abs/2310.03003
+27. ZTE. *ZTE unveils AI-powered home network solutions at MWC Barcelona 2025* (AI home media center, 4 TOPS NPU). https://www.zte.com.cn/global/about/news/zte-unveils-ai-powered-home-network-solutions-at-mwc-barcelona-2025.html
+28. *ZTE released AI FTTR solution, empowering home network security* (6 TOPS NPU). The Register, 2026-06-29. https://www.theregister.com/networks/2026/06/29/zte-released-ai-fttr-solution-empowering-home-network-security/5263593
+29. CNX Software. *Broadcom BCM68850 and BCM55050 SoCs target Wi-Fi 8 and 50G PON fiber gateways*, 2026-05-28. https://www.cnx-software.com/2026/05/28/broadcom-bcm68850-and-bcm55050-socs-target-wi-fi-8-and-50g-pon-fiber-gateways/
+30. hack-gpon.org, ONT hardware pages: Huawei HN8010Ts (https://hack-gpon.org/xgs/ont-huawei-hn8010ts/), Huawei HG8010H (https://hack-gpon.org/ont-huawei-hg8010h/), ZTE F6645P (https://hack-gpon.org/router/ont-zte-f6645p/).
+31. Turing Pi. *RK3588 LLM Benchmarks: GGUF Quantization Compared* (https://turingpi.com/llm-inference-benchmarks-rk3588-gguf-quantization/) and *Running LLMs on RK3588 NPU with RKLLM* (https://turingpi.com/rkllm-rk3588-npu-llm-inference-turing-pi-rk1/).
+32. NVIDIA. *NVIDIA Jetson Orin Nano Developer Kit Gets a "Super" Boost* (Table 2, LLM tokens/s with MLC, INT4). https://developer.nvidia.com/blog/nvidia-jetson-orin-nano-developer-kit-gets-a-super-boost/
+33. Tummalapalli, Arayakandy, Pal and Kundan. *LLM Inference at the Edge: Mobile, NPU, and GPU Performance Efficiency Trade-offs Under Sustained Load.* arXiv:2603.23640. https://arxiv.org/abs/2603.23640
+34. Apple Machine Learning Research. *Introducing Apple's On-Device and Server Foundation Models* (on-device model of about 3 billion parameters). https://machinelearning.apple.com/research/introducing-apple-foundation-models
+35. Gemini Team, Google. *Gemini: A Family of Highly Capable Multimodal Models* (Nano-1 1.8B and Nano-2 3.25B parameters, 4-bit). arXiv:2312.11805.
+36. Meta. *Llama 3.2 model card* (GSM8K, 8-shot CoT: 1B 44.4, 3B 77.7). https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct

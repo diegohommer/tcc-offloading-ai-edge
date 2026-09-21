@@ -1,6 +1,8 @@
-torch
-transformers>=4.39
-datasets>=2.18
-scikit-learn
-numpy
-pyyaml
+# Python packages for the whole pipeline (versions: the ones the thesis results were produced with).
+#   simulate/, analyze/, energy/:  numpy, pyyaml (+ pandas for prepare_load_traces.py)
+#   measure/ (runs on Modal GPUs): modal, datasets (GSM8K); vLLM is installed inside the Modal image
+numpy>=2.5
+pyyaml>=6.0
+pandas>=3.0
+modal>=1.5
+datasets>=5.0

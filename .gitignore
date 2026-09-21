@@ -220,17 +220,11 @@ __marimo__/
 # AppleDouble sidecar files (seen on some Docker-Desktop bind mounts)
 ._*
 
-# RecServe's utils.load_sentiment_dataset() caches each split as
-# ./<dataset>_test via datasets.save_to_disk(), relative to wherever the
-# process's cwd is when the script runs (unanchored so it's caught
-# regardless of cwd).
-*_test/
-
-# Generated experiment output
-implementation/results/traces/
-# ...but the energy tests' raw run logs are results in their own right: keep them
+# One-off simulator runs (src/simulate/simulate.py without --out)
+implementation/results/adhoc/
+# The measurements' raw run logs are results in their own right: keep them
 # (overrides the global *.log rule above)
-!implementation/results/energy_tests/*.log
+!implementation/results/measurements/*.log
 
 # LaTeX build artifacts (regenerate with latexmk/pdflatex, see thesis/latex/README.md)
 thesis/latex/*.aux

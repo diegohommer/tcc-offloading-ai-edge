@@ -1,0 +1,142 @@
+# Settings of the simulator, src/simulate/simulate.py.
+#
+# The simulator takes every default from this file. A command-line flag
+# overrides one value for one run (e.g. --households 40, --load-trace
+# conversation), and --config points at another file. Every flag has an entry
+# here and the simulator refuses to start if one is missing or unknown, so this
+# file is the complete list. Each run's JSON records the values it used.
+#
+# Each entry says what the setting does and where its value comes from:
+#   [source]  a paper or our own measurement
+#   [data]    derived from a dataset in this repo
+#   [swept]   varied across runs in the results; the value here is one point
+#   [choice]  set by us and not yet justified: to be derived or swept
+#
+# Energy figures are not here. They live, each with its source, in
+# config/energy_sources.yaml and are read through src/energy/three_tier.py.
+
+recserve:
+  # Escalation thresholds, swept to trace each policy's accuracy-energy curve.
+  # A tier escalates when its confidence falls below this quantile of its own
+  # recent confidences. RecServe's own knob. [source: RecServe]
+  betas: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  # Confidence history per tier, in answers, one per tier shared by every
+  # household. [source: RecServe recommends 300-1000]
+  window: 1000
+  # Confidence signal. mean = exp(mean token logprob), RecServe's definition.
+  # min = exp(min token logprob): separates right from wrong better on this
+  # data (energy_tests.md §4), but is not RecServe's. [source: RecServe]
+  confidence: mean
+
+load:
+  # OLT load at the busiest hour of the average (training) day, in queries in
+  # service. Unknown for a real OLT, so it is swept. [swept]
+  peak_loads: [0.5, 1, 2, 4, 8, 16, 32]
+  # Replay BurstGPT's hourly requests as the OLT's load: conversation (people
+  # chatting), api, all; null = the synthetic average day. [data: data/load_traces/]
+  load_trace: null
+  # Trace days static_day and static_hour are calibrated on;
+  # every policy then runs on the days after. [choice: half of BurstGPT's 61 days]
+  train_days: 30
+  # Synthetic average day only: log-sd and correlation time (hours) of the load's
+  # drift off it. Measured on the traces: sigma 0.24-0.61, tau 1-14 h
+  # (data/load_traces/drift_fit.json). [swept]
+  load_sigma: 0.0
+  load_tau: 12.0
+  # Synthetic average day only: days simulated. With a trace the run covers every
+  # day after train_days. [choice]
+  days: 3
+
+surges:
+  # Unforeseen events on the replayed trace's load (load_trace only): what no
+  # timetable or calendar knows about -- a news surge, a big game running long, a
+  # neighbouring OLT's traffic moved here, an outage elsewhere. Each event
+  # multiplies the OLT's load by surge_factor (a surge) or divides it (a dip),
+  # equally likely. 1 = none: the trace as recorded. [swept]
+  surge_factor: 1.0
+  # Expected events a day, a Poisson process. [choice]
+  surge_per_day: 1.0
+  # Length of an event, hours. [choice]
+  surge_hours: 3.0
+
+cascade:
+  # Households sharing the OLT. Each has its own phone and ONU and learns the
+  # OLT's cost from its own answers only. [swept]
+  households: 1
+  # Queries a day at each household's phone. No source for a real household. [swept]
+  per_day: 2000
+  # When the households send their queries (with load_trace only). trace: in
+  # proportion to the trace's traffic, so they are busiest when the OLT is (the same
+  # people, the same day). flat: the same number every hour, so their demand is
+  # independent of the OLT's load: a sensitivity check on that assumption. [choice]
+  household_shape: trace
+
+energy:
+  # Where the OLT's energy is counted: system = whole server and building at
+  # PUE 1.54; system-low = PUE 1.09; gpu = the card alone. [source: §7, Google]
+  boundary: system
+  # average: a query pays its share of the OLT batch's energy. marginal: every
+  # tier is charged only what the query adds, nothing for being on. [choice:
+  # both are reported; marginal is the one a routing decision changes]
+  accounting: average
+  # Multiplies the ONU's energy per token (config/energy_sources.yaml): a stand-in
+  # for a more or less efficient gateway accelerator. [swept]
+  onu_scale: 1.0
+  # Multiplies the OLT's energy after the boundary conversion: 1.65 / 1.54 = 1.07
+  # puts it at Latin America's average PUE instead of the global one; larger values
+  # stand for a server whose host draws more than Google's shares say. [swept]
+  olt_scale: 1.0
+
+policy:
+  # Policies run (src/simulate/cascade.py explains each): recserve (RecServe as
+  # published), recserve_no_onu (RecServe without the ONU), static_day (one OLT
+  # rate for the whole day), static_hour (one per hour: the timetable), broadcast
+  # (the OLT's rate broadcast on the PON to every ONU: the proposal), oracle (the
+  # true rate), piggyback (the OLT's rate on the household's own answers only),
+  # stale_low / stale_high (static_day set at the wrong load). recserve is
+  # required: savings are read against it.
+  policies: [recserve, recserve_no_onu, static_day, static_hour, broadcast, oracle, piggyback, stale_low, stale_high]
+  # Relative margin before leaving the default route: take the cheaper route only
+  # if it is at least this fraction cheaper. [choice: 0 = no margin]
+  delta: 0.0
+  # stale_low and stale_high assume this many times less and more load than
+  # they meet. [choice]
+  stale_factor: 4.0
+
+learning:
+  # Reports per tier a household needs before it starts deciding; until then it
+  # behaves as plain RecServe. [choice, no basis. Estimating an escalation rate to
+  # +-0.1 at 95% confidence takes ~96 answers]
+  warmup: 20
+  # EWMA weight for the answer lengths and escalation rates a household learns
+  # from its packets: roughly its last 20 answers. [choice]
+  alpha: 0.05
+  # EWMA weight for the OLT energy rates in the packets; null = same as alpha.
+  # 0.3 was the best of the few values tried with window reports (§8.3). [choice]
+  rate_alpha: null
+  # Pool answer lengths and escalation rates across households: they describe the
+  # questions, not the household (the operator can aggregate them), so a household
+  # decides from its first query. Each household still hears the OLT's rate on its
+  # own. false = every household learns everything from its own answers. [choice]
+  shared_stats: false
+
+report:
+  # What the OLT's packet carries. query = the rate this query's batch ran at.
+  # window = the OLT's mean over its own recent traffic, far less noisy under
+  # marginal accounting (§8.3). [choice]
+  report: query
+  # Minutes the OLT averages over, for report: window and for its broadcast. [choice]
+  report_window: 5.0
+  # Seconds between the OLT's broadcasts of that mean on the PON's downstream
+  # multicast channel (policy broadcast): a few dozen bytes each time. Any value
+  # well below report_window behaves the same. [choice]
+  broadcast_interval_s: 10.0
+
+output:
+  # Accuracies at which the policies' frontiers are read and compared. [choice]
+  acc_targets: [0.60, 0.65, 0.70, 0.75, 0.80, 0.85]
+  # Leave the per-hour routing detail out of the JSON (~75% of the file).
+  no_hourly: false
+  # Random seed: questions drawn, arrivals, OLT batches, drift. [choice: the
+  # results use 7, 8 and 9]
+  seed: 7

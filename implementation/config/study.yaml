@@ -1,13 +1,13 @@
-# The case study's settings (energy_tests.md §8.6): RecServe, the timetable and
-# the dynamic policy (the OLT's cost broadcast on the PON), on predictable and on
-# unpredictable traffic. Everything not listed here is config/sim_piggyback.yaml's
+# The case study's settings (energy_tests.md §8.6): RecServe, the static tables and
+# the broadcast policy (the OLT's cost broadcast on the PON), on predictable and on
+# unpredictable traffic. Everything not listed here is config/simulation.yaml's
 # default; each value below says why the study uses it. run_study.sh varies only
 # the seed and the few settings its sensitivity runs name.
-extends: sim_piggyback.yaml
+extends: simulation.yaml
 
 load:
   # People chatting: the traffic households send. [data: BurstGPT conversation log,
-  # replayed; the timetable learns the first 30 days, every policy runs on the 31 after]
+  # replayed; static_day and static_hour learn the first 30 days, every policy runs on the 31 after]
   load_trace: conversation
   # OLT load at the busiest hour, in queries in service: unknown for a real OLT. [swept]
   peak_loads: [2, 4, 8, 16, 32]
@@ -29,10 +29,12 @@ energy:
   accounting: marginal
 
 policy:
-  # RecServe; RecServe without the ONU (control); the timetable; the dynamic policy
-  # (broadcast); the dynamic policy fed only by the household's own answers
-  # (piggyback: ablation); the oracle (upper bound on any live signal).
-  policies: [stepwise, skip_onu, schedule, broadcast, piggyback, oracle]
+  # RecServe; RecServe without the ONU (control); the OLT's cost from a table set in
+  # advance, one rate per day (static_day) or per hour (static_hour, the timetable);
+  # the OLT's cost broadcast on the PON (broadcast: the proposal); the oracle (upper
+  # bound on any live signal); broadcast fed only by the household's own answers
+  # (piggyback: ablation).
+  policies: [recserve, recserve_no_onu, static_day, static_hour, broadcast, oracle, piggyback]
 
 learning:
   # Question statistics pooled across households, for every energy-aware policy

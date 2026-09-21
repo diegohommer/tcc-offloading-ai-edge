@@ -1,173 +1,178 @@
-# TCC: Energy Cost of Hierarchical LLM Inference over PON
+# TCC: energy-aware LLM offloading over a passive optical network
 
-**Topic:** energy cost of confidence-based offloading policies in
-hierarchical LLM inference cascades (user → edge/ONU → fog/OLT → cloud)
-over passive optical networks (PON).
+Undergraduate thesis (UFRGS, Computer Science), advisor Prof. Dr. Gabriel Luca
+Nazar, co-advisor Prof. Dr. Dennis Giovani Balreira.
 
-This repository hosts the thesis's experimental harness: a real offloading
-cascade (RecServe), instrumented to produce a per-query trace, plus an
-energy-costing module that converts that trace into J/query using layer
-energy tables measured from published sources.
+## The question in one paragraph
 
-## Current state: a classification harness, not the thesis's generative cascade
-
-The published open-source RecServe implementation
-(`implementation/src/recserve/vendor/`, vendored unmodified) only does
-**sentiment classification** with **three** tiers (end/edge/cloud), no
-token generation, and no decode phase. This repo's instrumented wrapper
-(`implementation/src/recserve/traced_recursive_serve.py`) extends that to
-the thesis's **four**-tier architecture — user / onu / fog / cloud,
-matching Pakpahan and Hwang (IEEE Access vol. 14, 2026) Fig. 1 — using
-four encoder-only classifiers of increasing capability (distilroberta /
-roberta-base / roberta-large / deberta-large, 66M-400M parameters)
-escalating via the same beta-quantile confidence threshold RecServe (and
-Pakpahan's own architecture) uses, one tier at a time. The thesis's actual
-target needs a **generative** cascade of four decoder LLMs (0.5B-70B+)
-with prompt/output token counts per layer (design not yet written up;
-section 12 of the master document is the energy-aware policy design
-instead — see below).
-
-This repository sits at that midpoint, by explicit decision:
-
-1. **Real and working now:** run the 4-tier classification cascade end to
-   end, recording a per-query trace — layer visited, prompt tokens (via
-   each model's own tokenizer), confidence, latency. This validates the
-   beta-quantile escalation mechanism and the whole trace-to-energy
-   pipeline. Tier names (`user`/`onu`/`fog`/`cloud`) are the same keys used
-   by `implementation/config/layer_energy.yaml`, so a hop's tier doubles
-   as its energy lookup key directly, with no tier-to-layer proxy
-   indirection.
-2. **Deliberately not fabricated:** the layer energy tables
-   (`implementation/config/layer_energy.yaml`) were measured on decoder
-   LLMs doing multi-token decode, not on these tiny classifiers — no
-   *published* energy measurement exists for distilroberta/roberta-base/
-   roberta-large/deberta-large. So no "real" energy number is invented for
-   the classification cascade. An optional, clearly-labeled proxy
-   (`--smoke-test-energy`) prices each tier's forward pass as if it were
-   decode on that tier's representative model, solely to exercise the cost
-   formulas end to end — never to cite as a thesis result.
-   Since 2026-08-29 there is also a **first-party** alternative to that
-   proxy: `src/scripts/measure_tier_energy.py` measures these four models'
-   actual energy on the local CPU via Intel RAPL, recorded under
-   `local_measurement` in `layer_energy.yaml`. Those numbers are really
-   measured, but of 66M-400M encoders on one CPU — a different unit
-   (J per *prompt* token, single forward pass) from the decode-phase
-   literature tables, and never to be mixed with them.
-3. **Not built yet:** the real generative cascade (four decoder models,
-   per-layer precision choice, local quantized and/or hosted-API execution).
-   See `implementation/src/layers/generative_layer.py` for the interface
-   already fixed and what's left to decide before implementing it.
-
-## Structure
-
-Two top-level halves: `implementation/` (all code, config, and generated
-output) and `thesis/` (the LaTeX draft and reference papers) — nothing
-code-related sits at the repo root.
+A home's LLM queries can be answered at three places along a fibre (PON) network:
+the user's **device** (a light device running a 1B model, priced as a phone), the
+home's **ONU** with an AI accelerator (a 1.5B model on a Hailo-10H NPU), or the
+operator's **OLT** in the central office, a GPU shared by many homes (a 7B model). **RecServe** is a published method that climbs this ladder one step
+at a time: a tier answers, and passes the query up only if it isn't confident, so
+queries are answered as low as possible and the shared links carry little.
+The OLT batches many homes' queries together, so the busier it is, the cheaper
+each query becomes, and at busy hours it can undercut the tiers below it. This
+thesis keeps RecServe's three tiers and its escalation rule, and adds a **dynamic**
+choice of where a query goes: **if the tiers knew what the OLT costs right now,
+how much energy could they save, at the same accuracy, and at what cost in latency
+and PON traffic?** And where should that knowledge come from: nowhere (RecServe),
+a table set in advance (per day or per hour), or a live figure the OLT
+**broadcasts** on the PON to every ONU?
 
 ```
-implementation/
-  requirements.txt
-  config/
-    layer_energy.yaml         # layer energy tables, each value with its source and caveats
-  src/
-    recserve/                   # everything RecServe-specific lives here
-      vendor/                     # unmodified vendored copy of RecServe (see NOTICE.md)
-      traced_recursive_serve.py   # instrumented reimplementation of RecServe's escalation loop
-      run_classification_cascade.py   # runs RecServe over a dataset, writes a trace (JSONL)
-    energy/                    # reusable costing library, not tied to RecServe
-      layer_energy.py          # loads config/layer_energy.yaml
-      cost.py                  # per-query formulas: J/query, J/token
-    layers/
-      generative_layer.py       # interface stub for the generative cascade (not implemented)
-    scripts/
-      compute_energy_report.py  # converts a trace into an energy report (CSV) via the layer energy tables
-      run_policy_matrix.py      # runs every tier on every query -> answer matrix (phase 1 of the lambda sweep)
-      sweep_energy_policy.py    # replays the energy-aware policy over that matrix (phase 2), form x lambda
-      measure_tier_energy.py    # measures real per-tier energy on this machine via Intel RAPL
-  results/
-    traces/                    # output of the scripts above (generated, not version-controlled)
+   phone (1B)  ──>  ONU (1.5B)  ──>  OLT (7B, batched GPU)
+       ^               ^                  │
+       └───────────────┴── broadcast: "a query costs X J here right now"
+```
+
+## How the code is organised: four stages
+
+```
+ 1. MEASURE (once, on rented GPUs)        2. ENERGY MODEL                 3. SIMULATE                      4. ANALYZE
+ src/measure/                             src/energy/three_tier.py        src/simulate/                    src/analyze/
+   measure_gpu_energy.py ── OLT J/token ─┐  tier prices per query,         replays the recorded answers     tier_energy.py  → results/tier_energy.md
+   collect_answers.py ──── every answer ─┼─ OLT curve vs batch size, ───>  under each policy, on real     summarize_study.py → results/study/SUMMARY.md
+ config/energy_sources.yaml ─ phone, ONU ┘  boundary factors              OLT load (BurstGPT)             check_*.py (sanity checks)
+   (published measurements)                                               → results/study/
+```
+
+1. **Measure.** Two Modal scripts measured what we can't take from the literature:
+   the OLT's energy per token at every batch size, and every tier's answer to
+   every GSM8K question. They cost money and are already done; the results are in
+   `implementation/results/measurements/`.
+2. **Energy model.** One module turns those measurements and two published figures
+   (phone, ONU) into joules per query, on one common energy boundary.
+3. **Simulate.** Households' queries flow through the cascade over a month of real
+   traffic. Every answer is replayed from the recording, so no model runs. Each
+   policy is scored on accuracy and energy.
+4. **Analyze.** Scripts turn the measurements and the simulation runs into the
+   thesis tables.
+
+## The policies you can run
+
+All policies use RecServe's own test to decide *whether* a query escalates. The
+energy-aware ones (every row below the first two) also decide *where* it goes, by
+the lowest expected energy to an answer, and differ **only** in where they get the
+OLT's cost from.
+
+| Policy (`--policies`) | Where the OLT's cost comes from | Role |
+|---|---|---|
+| `recserve` | nowhere: always one tier up | the baseline, RecServe as published |
+| `recserve_no_onu` | nowhere: phone → OLT only | control only (the proposal keeps the ONU): is a saving just dropping it? |
+| `static_day` | one fixed rate for the whole day, learned from past days | a configuration set once |
+| `static_hour` | one rate per hour of day (weekday or weekend), learned from past days | a timetable |
+| `broadcast` | the OLT's own average over its last 5 minutes, broadcast on the PON every 10 s | **the proposal** |
+| `oracle` | the true current cost | the most any live signal could do |
+| `piggyback` | the OLT's 5-minute average, heard only on the home's own answers | ablation: why broadcast |
+| `stale_low`, `stale_high` | `static_day` set at ¼ or 4× the real load | a configuration gone stale |
+
+## Folder and file guide
+
+```
+README.md                      this file
+energy_tests.md                the methodology and results log: every decision, its source, every result
+                               (the thesis's methodology and results chapters are written from it)
+tcc_politica_energia_desenho.md   the energy-policy design notes (Portuguese)
 thesis/
-  latex/                     # TCC LaTeX draft (infufrgs/abntex2 template), see thesis/latex/README.md
-  papers/                    # local copies of cited papers, not version-controlled, see thesis/papers/README.md
+  latex/                       the thesis itself (tcc.tex, the UFRGS class, bibliography); see its README
+  papers/                      local copies of cited papers (not committed)
+implementation/
+  requirements.txt             Python packages
+  config/
+    energy_sources.yaml        the phone's and the ONU's published energy figures and the OLT's
+                               boundary factors, each with its exact source (paper, table)
+    simulation.yaml            every simulator setting, with what it does and where its value comes from
+    study.yaml                 the case study's settings (extends simulation.yaml)
+  data/load_traces/            the OLT's load: BurstGPT's requests per hour (61 days) and how much
+                               real traffic drifts around a timetable; see its README
+  src/
+    measure/                   STAGE 1: runs on Modal GPUs
+      measure_gpu_energy.py    the OLT's energy vs batch size (NVML energy counter, vLLM, one L4)
+      collect_answers.py       every tier answers every GSM8K test question; logprobs kept
+      gsm8k.py                 the GSM8K task: prompt template and answer scoring
+    energy/                    STAGE 2
+      three_tier.py            the energy model: phone and ONU prices, the OLT's curve (average and
+                               marginal), the boundary conversion, loading the recorded answers
+    simulate/                  STAGE 3: the simulator
+      simulate.py              the entry point: reads the settings, runs every policy at every load and
+                               beta, writes the results
+      olt_load.py              the OLT's load over time: BurstGPT replayed, unforeseen surges, and the
+                               static_day / static_hour tables learned from past days
+      olt_energy.py            what a query truly costs (average or marginal accounting), and the OLT's
+                               5-minute report that the broadcast and piggyback policies hear
+      routing.py               the decision rules: RecServe's confidence window and the energy-aware
+                               "cheapest expected route" rule
+      cascade.py               one run: one policy serving the whole query stream
+      frontier.py              comparing policies at equal accuracy
+      run_study.sh             runs the whole case study (78 runs), at low priority, optionally on chosen cores
+      prepare_load_traces.py   builds data/load_traces/ from the public BurstGPT trace
+    analyze/                   STAGE 4
+      tier_energy.py           every tier-level table (costs, crossovers, marginal cost, answers)
+      summarize_study.py       the case study's tables
+      check_confidence.py      checks the recorded answers' confidence scores before routing on them
+      check_beta_windows.py    checks that skipping tiers does not disturb RecServe's thresholds
+  results/                     every output; see its README
+    measurements/              stage 1's data and logs
+    tier_energy.md             tier-level tables
+    study/                     the case study's 78 runs and SUMMARY.md
 ```
 
 ## Running it
 
+Setup, once:
+
 ```bash
 cd implementation
-python -m venv .venv && source .venv/bin/activate
-pip install --index-url https://download.pytorch.org/whl/cpu torch
-pip install -r requirements.txt
-
-# Part 1 (functional): run the real cascade, write the trace
-python src/recserve/run_classification_cascade.py --dataset sst2 --limit 40
-
-# Part 2 (cost): convert the trace into energy
-python src/scripts/compute_energy_report.py results/traces/sst2_test.jsonl --smoke-test-energy
-
-# Part 3 (energy-aware policy): sweep the escalation rule's weighting form x lambda
-#   3a. run every tier on every query once (the sweep replays this offline)
-python src/scripts/run_policy_matrix.py --dataset sst2 --limit 0
-#   3b. sweep, priced with the literature tables (labelled smoke-test energy)
-python src/scripts/sweep_energy_policy.py results/traces/sst2_test.matrix.jsonl
-
-# Optional: price the sweep with energy measured on THIS machine instead of
-# the borrowed decode-phase numbers. Needs read access to the RAPL counters:
-#   sudo find -L /sys/class/powercap -name energy_uj -exec chmod a+r {} +
-# (root-only by default since CVE-2020-8694; resets on reboot, revert with chmod 400)
-python src/scripts/measure_tier_energy.py --limit 40 --repeats 3
-python src/scripts/sweep_energy_policy.py results/traces/sst2_test.matrix.jsonl \
-    --measured-energy results/traces/measured_tier_energy.json
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
-Models (`distilroberta-base-sst2-distilled`, `roberta-base-SST-2`,
-`roberta-large-sst2`, `deberta-large-finetuned-sst2`) download automatically
-from the Hugging Face Hub on first use. `--device -1` (default) runs on CPU;
-this environment has no GPU.
+Run any set of policies (the case study's 40 households over BurstGPT's month of
+traffic, OLT peak load 8, every RecServe beta; about 1–2 min):
 
-## Next steps (not implemented here)
+```bash
+.venv/bin/python src/simulate/simulate.py --config config/study.yaml \
+    --policies recserve,static_day,static_hour,broadcast,oracle --peak-loads 8
+```
 
-See section 11 of the TCC master document for the full pending list
-(advisor confirmation, the L40S figure, MLPerf Power, load constants from a
-real trace). From this repository's side specifically:
+Every setting can be changed the same way (`--help` lists them; `config/simulation.yaml`
+explains each one). Results go to `results/adhoc/`.
 
-- Decide and implement the generative cascade
-  (`implementation/src/layers/generative_layer.py`): per-layer
-  model/precision choice, local quantized vs. hosted-API execution.
-- Reimplement the confidence rule for Seq2Seq (normalized perplexity, per
-  the RecServe paper's abstract), since the released code only covers
-  Seq2Class.
-- Fix `|T_prompt|` and `|T_gen|` from a real generative-cascade trace, not
-  a separately estimated distribution.
-- **Decide how to reframe the energy-aware policy.** The mechanism is
-  implemented and evaluated (`src/scripts/sweep_energy_policy.py`), but
-  the headline result is **negative**: weighting the confidence threshold
-  by an energy cost is *redundant with RecServe's existing β knob*. With
-  a static cost, `exp(−λ·cost)` is a constant multiplier on `T(β)`, and
-  scaling a quantile by a constant simply yields another quantile — the
-  same control under a different name. Three attempts to escape the
-  degeneracy (static per-pair cost, per-hop cost, per-query cost scaled
-  by output length) all landed within noise of tuning β alone
-  (+0.0039 / +0.0012 / +0.0026 accuracy at matched energy). Full analysis
-  and three possible directions in `tcc_politica_energia_desenho.md` §14
-  (written in Portuguese, for discussion with the advisor).
+Reproduce every number in the thesis:
 
-  The earlier "31% energy for 0.1 accuracy points" figure from the SST-2
-  runs still holds arithmetically, but is **not evidence the mechanism
-  works** — tuning β reaches the same frontier. It looked impressive only
-  because that cascade's tiers sat within 4.6 accuracy points of each
-  other, so cutting escalation cost almost nothing.
+| Step | Command (from `implementation/`) | Time | Writes |
+|---|---|---|---|
+| tier tables | `.venv/bin/python src/analyze/tier_energy.py` | ~5 s | `results/tier_energy.md` |
+| answer checks | `.venv/bin/python src/analyze/check_confidence.py results/measurements/<answers>.raw.jsonl` | ~5 s | printed |
+| the case study | `bash src/simulate/run_study.sh 6 0-5` (6 jobs pinned to cores 0–5, lowest priority; keep the laptop awake) | ~2–3 h | `results/study/` |
+| its tables | `.venv/bin/python src/analyze/summarize_study.py` | ~10 s | `results/study/SUMMARY.md` |
+| threshold check | `.venv/bin/python src/analyze/check_beta_windows.py` | a few min | printed |
+| load traces | `.venv/bin/python src/simulate/prepare_load_traces.py --azure` (streams the 1.1 GB Azure trace once) | minutes | `data/load_traces/` |
+| measurements | `.venv/bin/modal run src/measure/measure_gpu_energy.py`, `... collect_answers.py` (a Modal account, paid GPU time) | ~15–20 min each | `results/measurements/` |
 
-  Still genuinely open, independent of that result:
-  - **§6's batch-aware cost profile** — the one untested source of cost
-    variability, and per §14 the most likely way to break the degeneracy,
-    since the cloud tier's batching swing is ~30×.
-  - **A fog-tier model that is actually stronger than the ONU tier.**
-    SOLAR-10.7B measured *worse* than Llama-3.1-8B (§13.1), which breaks
-    the cascade's monotonicity assumption. `qwen2.5:14b` is the candidate.
-  - **The cloud tier of the generative cascade** — 32B+ is not viable
-    locally (QwQ-32B measured at 1.2 tok/s), so it needs the GPPD cluster
-    or a hosted endpoint.
+## Where each thesis number comes from
 
----
-**Author:** Diego Amorim
+| Number | Table | Computed by | From |
+|---|---|---|---|
+| OLT energy per token at batch 1–64 (falls 51×); two runs agree within 1.4% | `results/tier_energy.md` §1–2 | `analyze/tier_energy.py` | `measurements/gpu_energy_*_run{1,2}.json` |
+| Phone 15.7 J, ONU 243 J (91 J marginal) per query | `tier_energy.md` §3 | `energy/three_tier.py: published_rates` | `config/energy_sources.yaml` + answer lengths |
+| OLT per query at each boundary (× 2.47 whole system) | `tier_energy.md` §4 | `three_tier.py: olt_factor, boundary` | Google's shares, PUE 1.54 |
+| OLT cheaper than the ONU from batch ≈ 5; never cheaper than the phone | `tier_energy.md` §5 | `tier_energy.py: crossing` | §3 and §4 |
+| One more query: ~9 J on a busy OLT, ~820 J on an idle one | `tier_energy.md` §6 | `three_tier.py: OltCurve.marginal_rates` | the batch curve |
+| Accuracy 0.47 / 0.69 / 0.92; confidence separates right from wrong | `tier_energy.md` §7 | `tier_energy.py`, `check_confidence.py` | `measurements/gsm8k_*.raw.jsonl` |
+| Traffic shape (46× day swing, drift σ ≈ 0.6) | `data/load_traces/drift_fit.json` | `simulate/prepare_load_traces.py` | BurstGPT |
+| Every policy's energy at equal accuracy; savings over RecServe and over the static tables; surges; latency, PON traffic and accuracy delivered; the sensitivities | `results/study/SUMMARY.md` | `analyze/summarize_study.py` | `results/study/*.json` ← `simulate/run_study.sh` |
+| RecServe's thresholds keep their meaning when tiers are skipped | printed | `analyze/check_beta_windows.py` | the simulator |
+
+## History
+
+On 2026-09-19 the repo was cut down to what the thesis uses. Removed: the first
+harness (RecServe's sentiment-classification code and a 4-tier classifier cascade),
+an Ollama-based collection, a laptop energy measurement (Intel RAPL), an early
+energy-policy sweep, the results web page, and the simulation runs of the
+exploration that led to the case study (energy_tests.md §8.2–8.5). All of it is
+in git at the tag **`pre-cleanup`**:
+
+```bash
+git checkout pre-cleanup            # the repo as it was; `git checkout main` to come back
+```
