@@ -1,0 +1,82 @@
+# Energy figures for the tiers NOT measured by this project, and the factors that
+# put every tier on one boundary. Read by src/energy/three_tier.py, the only code
+# that prices energy; the OLT's own figures are first-party, in
+# results/measurements/gpu_energy_*.json (src/measure/measure_gpu_energy.py).
+#
+# Every number below was checked against its paper's text (energy_tests.md §5-§7).
+#
+# Boundary: tiers are compared at the SYSTEM boundary -- what the device (and for
+# the OLT, its server and building) draws to answer a query. The user and ONU
+# sources are already at, or close to, that boundary; only the OLT, measured at
+# its GPU card, is converted (olt_boundary below).
+
+user:
+  # Stands for a light device running a ~1B model (mid-range phone, smart speaker,
+  # glasses); priced as a phone, where careful measurements exist (energy_tests.md §6).
+  device: "OnePlus 15 phone (Snapdragon 8 Elite Gen 5, SM8850)"
+  model: "Llama-3.2-1B-Instruct, 4-bit weights (w4), llama.cpp on the CPU"
+  source: "Cai et al., Is Your NPU Ready for LLMs?, arXiv:2607.05475, Table 5 (Llama3.2-1B, CPU, llama.cpp, w4, OnePlus 15 column)"
+  prefill_J_per_prompt_token: 0.016       # printed as 1.6e4 uJ/token
+  decode_J_per_generated_token: 0.074     # printed as 7.4e4 uJ/token
+  prefill_tokens_per_s: 287.6            # same row: used only for latency, never for energy
+  decode_tokens_per_s: 72.2
+  protocol: "cooled below 28 C, airplane mode, screen off, one warm-up and at least three trials, 256-token prefill and decode workloads"
+  boundary: >
+    Whole SoC ("total chip energy, including CPU, GPU, NPU, and other on-chip
+    components") from Qualcomm Power Telemetry. Off-chip memory, display and
+    radio are not counted, so it is a lower bound on the phone. Used as is under
+    both accountings.
+
+onu:
+  device: "Raspberry Pi 5 (8 GB) with the Raspberry Pi AI HAT+ 2: Hailo-10H NPU, 40 TOPS (INT4), 8 GB on-module memory"
+  why: >
+    An M.2-class edge NPU (<5 W) of the kind an AI home gateway would carry; the
+    host is a Raspberry Pi 5 standing in for the gateway's own SoC (energy_tests.md §5).
+  model: "Qwen2.5-1.5B-Instruct, 4-bit (the source states Q4_K_M), Hailo Ollama on the NPU"
+  source: "Cloud to Edge: Benchmarking LLM Inference On Hardware-Accelerated Single-Board Computers, arXiv:2604.24785, Table 3 (qwen2.5:1.5b-instruct row, RPi 5 + HAT+ column)"
+  J_per_generated_token_all_in: 0.88      # printed as 0.88 MJ/Mtok
+  tokens_per_s: 6.34                      # generated tokens / whole inference time: also its latency
+  protocol: "one fixed ~12-token prompt, 100 generated tokens, n = 5 runs, Mecheer JK-PM07 meter at the power input, Q4_K_M; power mode not stated"
+  boundary: >
+    Whole system (Pi and HAT) at its plug, idle NOT subtracted: mean power x
+    inference time / generated tokens, one all-in figure per generated token
+    (its short prompt's prefill included). Already at the system boundary.
+  idle_W: 3.5
+  idle_source: >
+    Tummalapalli et al., LLM Inference at the Edge: Mobile, NPU, and GPU
+    Performance Efficiency Trade-offs Under Sustained Load, arXiv:2603.23640,
+    Table 1: RPi 5 + Hailo-10H idle power ~3.5 W. Used only under marginal
+    accounting, where a query pays what it adds: 0.88 - 3.5 / 6.34 = 0.33 J per token.
+  cross_check: >
+    Tummalapalli et al. measure the same model on the same hardware (Q4_0, 20
+    runs, 1 kHz INA219 on the Pi's PMIC rails): 6.914 tok/s and 270.5 mJ per
+    generated token, at 1.870 W, below the board's 3.5 W idle, so the rails they
+    read exclude part of the system and the figure is closest to the energy above
+    idle, which agrees with the 0.33 J above. The row used here matches their
+    speed; Table 3's other Qwen 2.5 1.5B row (4.37 tok/s, 1.30 J) does not.
+
+olt_boundary:
+  source: "Elsworth et al. (Google), Measuring the environmental impact of delivering AI at Google Scale, arXiv:2508.15734, section 4.1 and Table 1"
+  shares:                          # of a median Gemini Apps text prompt, 0.24 Wh
+    active_accelerators: 0.58      # 0.14 Wh
+    host_cpu_and_dram: 0.25        # 0.06 Wh
+    idle_machines: 0.10            # 0.02 Wh
+    datacenter_overhead: 0.08      # 0.02 Wh, at Google's fleet PUE 1.09
+  pue:
+    isp_site: 1.54                 # Uptime Institute Global Data Center Survey 2025, global average
+                                   # (Latin America about 1.65, as secondary sources report Uptime's regional
+                                   # figures; primary not accessed. The olt_scale x1.07 runs cover it)
+    lower_bound: 1.09              # Google's fleet average: a best case, not a central office
+  conversion: >
+    GPU card (NVML) x (accelerators + host + idle) / accelerators x PUE =
+    x 1.60 x 1.54 = x 2.47. Google's overhead share is left out and the site's
+    own PUE applied instead.
+  marginal: >
+    Under marginal accounting (a query pays only what it adds, energy_tests.md
+    §8.3) no tier is charged for being on: the idle-machines share is dropped
+    ((accelerators + host) / accelerators x PUE = x 2.20), the OLT's card
+    figure is its net-of-idle rate at batch 1 and the batch-energy slope above
+    it, and the ONU loses its idle draw (onu.idle_W).
+  caveat: >
+    Google's shares come from large multi-accelerator hosts. A central-office
+    server holding a single 72 W L4 may spend a larger share on its host.
