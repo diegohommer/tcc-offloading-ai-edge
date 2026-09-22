@@ -1,11 +1,10 @@
 %==============================================================================
-% tcc.tex --- Evaluating the energy cost of confidence-based offloading
-% policies in hierarchical LLM inference cascades over passive optical
-% networks
+% tcc.tex --- Energy-Aware Recursive Offloading for LLM Inference: A Case
+% Study on Passive Optical Networks
 %
 % Metadata, the abstracts (no text yet), the table of contents and lists, the
 % chapter/section skeleton and the references. Running text so far: the
-% Introduction's opening paragraphs; the rest is still to be written.
+% Introduction (two \todo placeholders left); the rest is still to be written.
 %
 % Written in English (class option `english'); UFRGS also requires an
 % abstract in Portuguese, the `translatedabstract' environment below.
@@ -22,17 +21,19 @@
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage{amsmath}
+\usepackage{xcolor}
+% Marks unfinished text in red; remove every \todo before submission.
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 
 %------------------------------------------------------------------------------
 % Document metadata
 %------------------------------------------------------------------------------
-\title{Evaluating the energy cost of confidence-based offloading policies in
-  hierarchical LLM inference cascades over passive optical networks}
+\title{Energy-Aware Recursive Offloading for LLM Inference: A Case Study on
+  Passive Optical Networks}
 
 % Title of the Portuguese abstract (Resumo)
-\translatedtitle{Avalia\c{c}\~ao do custo energ\'etico de pol\'iticas de
-  offloading baseadas em confian\c{c}a em cascatas hier\'arquicas de
-  infer\^encia de LLMs sobre redes \'opticas passivas}
+\translatedtitle{Offloading Recursivo Sens\'ivel \`a Energia para Infer\^encia de
+  LLMs: Um Estudo de Caso em Redes \'Opticas Passivas}
 
 \author{Amorim}{Diego Hommerding}
 
@@ -45,15 +46,15 @@
 \keyword{Distributed LLM inference}
 \keyword{Passive optical networks}
 \keyword{Energy efficiency}
-\keyword{Confidence-based offloading}
-\keyword{Fog computing}
+\keyword{Energy-aware offloading}
+\keyword{Model cascades}
 
 % Keywords of the Portuguese abstract (Resumo)
 \translatedkeyword{Infer\^encia distribu\'ida de LLMs}
 \translatedkeyword{Redes \'opticas passivas}
 \translatedkeyword{Efici\^encia energ\'etica}
-\translatedkeyword{Offloading baseado em confian\c{c}a}
-\translatedkeyword{Computa\c{c}\~ao em n\'evoa}
+\translatedkeyword{Offloading sens\'ivel \`a energia}
+\translatedkeyword{Cascatas de modelos}
 
 %==============================================================================
 \begin{document}
@@ -96,9 +97,8 @@
 %==============================================================================
 
 As the use of Large Language Models (LLMs) becomes widespread, both at work and at
-home~\cite{bick2026rapid}, even though attitudes toward it still vary widely by age
-and country~\cite{oecd2025technologies}, the challenge of adapting the network
-architecture to handle this rapidly evolving technology remains an active research
+home~\cite{bick2026rapid}, the challenge of adapting the network architecture to handle 
+this rapidly evolving technology remains an active research
 topic~\cite{chen2026network}. Since evolution seldom happens in isolation, the network
 itself has also been undergoing changes, one of which is the adoption of Passive Optical
 Network (PON) technology in the access network~\cite{effenberger2007introduction}. Driven
@@ -109,24 +109,64 @@ cost are some of the broad topics that need to be taken into account as both of 
 changes happen in parallel.
 
 
-On the models' side, LLM inference is expensive~\cite{chen2026network}, and one way of
-making it cheaper is the model cascade: a smaller model answers what it can, and the query
-is only passed to a larger one when its answer is not reliable
-enough~\cite{chen2024frugalgpt}. The idea predates today's LLMs, having been used to
-speed up BERT-sized classifiers~\cite{li2021cascadebert}. What counts as expensive depends on the
-setting: the layers a classifier runs, the price of an API call, or the energy spent
-answering each query.
+On the models' side, cost is a concern as well, since LLM inference is
+expensive~\cite{chen2026network}. One way of making it cheaper is the model cascade: a
+smaller model answers what it can, and the query is only passed to a larger one when
+its answer is not reliable enough~\cite{chen2024frugalgpt}. What counts as expensive
+depends on the setting, from the price of an API call to the energy spent answering
+each query, and energy is the cost this work is concerned with. Treating it as a cost
+of its own is the idea behind Green AI, which argues that efficiency should be reported alongside
+accuracy~\cite{schwartz2020green}, and some serving systems already use it to decide
+which model answers a query: GreenServ picks a model from a heterogeneous pool based on
+the accuracy and energy it has observed, and uses 31\% less energy than routing at
+random~\cite{ziller2026greenserv}.
 
-Where the models run is a separate question. With edge computing, inference is no longer
-confined to the cloud, but spread across end devices, edge nodes, and cloud servers, each
-tier further from the user than the one below, and with more computing
-power~\cite{chen2026network}. RecServe puts the two ideas together, placing a cascade on
+These systems choose which model answers, but not where it runs, which is a separate
+question. With edge computing, inference is no longer confined to the cloud, but spread
+across end devices, edge nodes, and cloud servers, each tier further from the user than
+the one below, and with more computing power~\cite{chen2026network}. RecServe puts the two ideas together, placing a cascade on
 the tiers of such a network and letting each tier decide, from the confidence scores it
 has seen recently, whether to answer the query or to pass it up~\cite{wu2025recserve}.
-Following RecServe's decision rule, \citeonline{pakpahan2026continuum} bring tiered LLM inference into the access network
-itself, equipping Optical Network Units (ONUs) and Optical Line Terminals (OLTs) to run
-part of the inference, so that a Time and Wavelength
-Division Multiplexed PON (TWDM-PON) provides the edge and fog tiers of such a hierarchy.
+Following RecServe's decision rule, \citeonline{pakpahan2026continuum} bring tiered
+LLM inference into the access network itself, equipping Optical Network Units (ONUs)
+and Optical Line Terminals (OLTs) to run part of the inference, so that a Time and
+Wavelength Division Multiplexed PON (TWDM-PON) provides the edge and fog tiers of
+such a hierarchy. In both works, however, a tier decides whether to pass a query up
+from confidence alone, and the energy spent at each tier plays no part in that
+decision.
+
+In this work, we propose an energy-aware version of RecServe, in which a tier decides
+whether to answer a query or pass it up based not only on its confidence, but also on
+the energy spent answering at each tier. As a case study, we simulate a three-tier
+hierarchy over a PON, formed by the user device, the ONU and the OLT, each running a
+larger model than the one below. We evaluate two energy-aware strategies: one follows
+a fixed timetable of the OLT's cost, while the other takes advantage of the PON
+downstream broadcast, with the OLT periodically announcing its current cost to every
+ONU. Both are compared with RecServe at the same target accuracy, in energy per query
+and in communication burden, under recorded conversation traffic with and without
+unforeseen surges. \todo{one or two sentences with the main results, once the Results
+chapter is settled.}
+
+The contributions of this work are:
+\begin{itemize}
+  \item An energy-aware version of RecServe, in which the decision to answer a query
+  or pass it up takes into account the energy spent at each tier, and not only
+  confidence;
+  \item An energy model of the user device, the ONU and the OLT under a single
+  measurement boundary, with the OLT's energy measured by us on a GPU;
+  \item An offloading strategy that uses the PON downstream broadcast to share the
+  OLT's current cost with every ONU;
+  \item A simulation study on recorded conversation traffic, with and without
+  unforeseen surges, comparing the energy-aware strategies with RecServe in energy per
+  query and communication burden.
+\end{itemize}
+
+The remainder of this work is organized as follows. Chapter~\ref{chap:review}
+reviews RecServe, tiered inference over PON, and how LLM inference energy is measured
+on each class of hardware. Chapter~\ref{chap:methodology} describes the energy-aware
+policy, the energy model, and the simulation setup. Chapter~\ref{chap:results}
+presents the results of the case study, and Chapter~\ref{chap:conclusion} concludes the
+work. \todo{revise once the chapter plan is final.}
 
 \section{Use of Artificial Intelligence Tools}
 \label{sec:ai-tools}
