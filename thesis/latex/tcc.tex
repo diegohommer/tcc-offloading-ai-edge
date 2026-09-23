@@ -83,11 +83,14 @@
 % Alphabetical. The list does not replace spelling each term out at its first
 % use in the text; the argument sets the label width (the widest entry).
 \begin{listofabbrv}{TWDM-PON}
+  \item[DBA] Dynamic Bandwidth Allocation
+  \item[G-PON] Gigabit-capable Passive Optical Network
   \item[HFC] Hybrid Fiber-Coaxial
   \item[LLM] Large Language Model
   \item[OLT] Optical Line Terminal
   \item[ONU] Optical Network Unit
   \item[PON] Passive Optical Network
+  \item[TDMA] Time Division Multiple Access
   \item[TWDM-PON] Time and Wavelength Division Multiplexed Passive Optical Network
 \end{listofabbrv}
 
@@ -181,28 +184,123 @@ work.
 \label{chap:review}
 %==============================================================================
 
-\section{Recursive confidence-based offloading: RecServe}
+% Layout: background first (short, textbook
+% sources), then related work grouped by approach (one paragraph per work:
+% problem, mechanism, evaluation, headline number, limitation for this work;
+% each group closed by a short synthesis), then the gaps this work addresses.
+
+\todo{chapter opening: one short paragraph on what the chapter covers, in order.}
+
+\section{Passive Optical Networks}
+\label{sec:pon}
+A PON is an access network technology that uses a shared fiber architecture, where a
+single fiber coming out of an OLT is split passively to serve several dozen ONUs at the
+subscribers' premises, up to 128 of them in Gigabit-capable PON
+(G-PON)~\cite{effenberger2007introduction}. The OLT downstream works as a broadcast,
+transmitting a data signal that the splitters passively replicate across all the ONUs
+connected to it. Each ONU looks at the frame headers and extracts only the data that is
+addressed to it, discarding the rest~\cite{effenberger2007introduction}.
+
+In the opposite direction, since the fiber is shared between multiple ONUs, the upstream
+operates using Time Division Multiple Access (TDMA) to avoid collisions. The OLT assigns
+strictly synchronized time slots to each ONU via Dynamic Bandwidth Allocation (DBA), so
+each ONU can take turns bursting data back~\cite{effenberger2007introduction}. The two
+directions are therefore not symmetric: anything the OLT sends reaches every ONU at once,
+while each ONU can only speak in its own slot.
+
+More recently, TWDM-PON, selected as the primary solution for NG-PON2, stacked several wavelength pairs on
+top of the time sharing, each pair running its own TDMA, to multiply the capacity of the
+same fiber~\cite{luo2013twdm}. TWDM-PON is the setting in
+which \citeonline{pakpahan2026continuum} place tiered LLM inference
+(Section~\ref{sec:pakpahan}), and the downstream broadcast is what one of the strategies
+evaluated in this work relies on: a single message from the OLT reaches every ONU, with
+no extra upstream traffic (Chapter~\ref{chap:methodology}).
+
+
+
+\section{LLM Inference and Model Cascades}
+\label{sec:llm-background}
+
+\todo{prefill and decode; confidence scores; model cascades; the
+device/edge/fog/cloud continuum.}
+
+\section{Tiered LLM Inference}
+\label{sec:tiered}
+
+\todo{short opening of the group.}
+
+\subsection{Recursive Confidence-Based Offloading: RecServe}
 \label{sec:recserve}
 
-\section{Hierarchical inference over TWDM-PON}
+\todo{mechanism, evaluation and results; limitation: energy is not part of the
+decision. Possibly a figure of the recursion.}
+
+\subsection{Hierarchical Inference over TWDM-PON}
 \label{sec:pakpahan}
 
-\section{Energy metrics for LLM inference}
+\todo{tiers mapped onto the PON, controller, models per tier, their comparison
+of offloading mechanisms; limitation: confidence alone decides.}
+
+\todo{synthesis of the group.}
+
+\section{Energy-Aware LLM Serving and Routing}
+\label{sec:energy-routing}
+
+\todo{one paragraph per work; then a comparison table and a synthesis
+(number of tiers, network model, decision basis).}
+
+% Comparison table skeleton; uncomment when the rows are filled.
+% \begin{table}[htb]
+%   \centering
+%   \caption{Comparison of related works.}
+%   \label{tab:related}
+%   \begin{tabular}{lcccc}
+%     \hline
+%     Work & Tiers & Energy-aware & Network model & Decision basis \\
+%     \hline
+%     % rows
+%     \hline
+%   \end{tabular}
+% \end{table}
+
+\section{Energy Metrics for LLM Inference}
 \label{sec:metrics}
 
-\section{Energy measurement by hardware class}
+\todo{per token, per query, per phase, per-query carbon; measurement boundary;
+average vs.\ marginal accounting (definitions only, choices go in
+Chapter~\ref{chap:methodology}).}
+
+\section{Energy Measurement by Hardware Class}
 \label{sec:measurements}
 
-\subsection{User device}
+\todo{short opening: how each class is measured and why the published figures
+are not directly comparable.}
+
+\subsection{User Device}
+\label{sec:measurements-user}
+
+\todo{}
 
 \subsection{Edge}
+\label{sec:measurements-edge}
+
+\todo{}
 
 \subsection{Fog}
+\label{sec:measurements-fog}
+
+\todo{}
 
 \subsection{Cloud}
+\label{sec:measurements-cloud}
+
+\todo{}
 
 \section{Challenges Addressed in This Work}
 \label{sec:challenges}
+
+\todo{the gaps, one per contribution in Chapter~\ref{chap:introduction};
+how this work addresses them; contrast with the closest works.}
 
 %==============================================================================
 \chapter{Methodology}
