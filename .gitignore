@@ -243,3 +243,8 @@ thesis/latex/*.snm
 thesis/latex/*.vrb
 thesis/latex/tcc.pdf
 
+# Reference papers: local only, never committed --
+# licensing varies by source. Layout: reviewed/ (cited in tcc.bib),
+# to_review/ (proposed, not cited yet), and loose PDFs at the
+# top (collected, not cited).
+thesis/papers/
