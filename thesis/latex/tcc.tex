@@ -294,22 +294,26 @@ judgement is made. In AutoMix, the smaller model checks its own answer through f
 self-verification, without extensive training, and since this check can be noisy, a
 router decides from the resulting confidence whether to move up to a larger model,
 reducing the computational cost by over 50\% at comparable
-performance~\cite{aggarwal2023automix}. The same idea carries over to the network edge:
-a compact model close to the user answers most queries, and only the difficult ones are
-passed on to more powerful devices or to the cloud~\cite{chen2026network}.
+performance~\cite{aggarwal2023automix}.
 
 \section{Tiered LLM Inference}
 \label{sec:tiered}
 
-\todo{short opening of the group: the device/edge/fog/cloud continuum, each tier
-further from the user and with more compute~\cite{chen2026network}, as the setting of
-the two works below.}
+The idea of a model cascade was also brought into the network itself, by organizing it
+in tiers that go from the user's own device, through the edge and the fog, up to the
+cloud, with a larger, more capable LLM at each step up~\cite{pakpahan2026continuum}. A
+query then climbs the tiers only as far as it needs, so simpler queries are answered
+before they reach the cloud. Answering closer to the user shortens the network path and
+lowers latency~\cite{chen2026network}, and fewer queries crossing the network means less
+traffic: RecServe, for instance, reduces the communication burden by over 50\% compared
+with serving every query in the cloud~\cite{wu2025recserve}.
 
 \subsection{Recursive Confidence-Based Offloading: RecServe}
 \label{sec:recserve}
 
-\todo{mechanism, evaluation and results; limitation: energy is not part of the
-decision. Possibly a figure of the recursion.}
+\todo{mechanism, evaluation and results (its over 50\% cut in communication burden is
+already in Section~\ref{sec:tiered}, do not repeat it); limitation: energy is not part of
+the decision. Possibly a figure of the recursion.}
 
 \subsection{Hierarchical Inference over TWDM-PON}
 \label{sec:pakpahan}
