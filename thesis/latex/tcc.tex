@@ -188,10 +188,11 @@ work.
 \label{chap:review}
 %==============================================================================
 
-% Layout: background first (short, textbook
-% sources), then related work grouped by approach (one paragraph per work:
-% problem, mechanism, evaluation, headline number, limitation for this work;
-% each group closed by a short synthesis), then the gaps this work addresses.
+% Layout: background first (short, textbook sources), then related work grouped
+% by approach (one paragraph per work: problem, mechanism, evaluation, headline
+% number, limitation for this work; each group closed by a short synthesis),
+% then the gaps this work addresses. Kept to six sections and one level of
+% subsections, and cited once per claim or per paragraph, not per sentence.
 
 \todo{chapter opening: one short paragraph on what the chapter covers, in order.}
 
@@ -200,7 +201,7 @@ work.
 A PON is an access network technology that uses a shared fiber architecture, where a
 single fiber coming out of an OLT is split passively to serve several dozen ONUs at the
 subscribers' premises, up to 128 of them in Gigabit-capable PON
-(G-PON)~\cite{effenberger2007introduction}. The OLT downstream works as a broadcast,
+(G-PON). The OLT downstream works as a broadcast,
 transmitting a data signal that the splitters passively replicate across all the ONUs
 connected to it. Each ONU looks at the frame headers and extracts only the data that is
 addressed to it, discarding the rest~\cite{effenberger2007introduction}.
@@ -220,15 +221,13 @@ which \citeonline{pakpahan2026continuum} place tiered LLM inference
 evaluated in this work relies on: a single message from the OLT reaches every ONU, with
 no extra upstream traffic (Chapter~\ref{chap:methodology}).
 
-
-
 \section{LLM Inference and Model Cascades}
 \label{sec:llm-background}
 
 LLMs are scaled Pre-trained Language Models (PLMs): Transformer models with
 self-attention mechanisms~\cite{vaswani2017attention}, pre-trained on large-scale
 text corpora, that solve a wide range of tasks using natural
-language~\cite{zhao2023survey}. Researchers noticed that the more a PLM is scaled,
+language. Researchers noticed that the more a PLM is scaled,
 in model size or in training data, the more capable it tends to become at problem
 solving. Large PLMs also show abilities that smaller ones lack, such as solving a new
 task from a few examples given in the prompt~\cite{zhao2023survey}. However, the
@@ -303,38 +302,17 @@ of offloading mechanisms; limitation: confidence alone decides.}
 %   \end{tabular}
 % \end{table}
 
-\section{Energy Metrics for LLM Inference}
+\section{Measuring LLM Inference Energy}
 \label{sec:metrics}
-
-\todo{per token, per query, per phase, per-query carbon; measurement boundary;
-average vs.\ marginal accounting (definitions only, choices go in
-Chapter~\ref{chap:methodology}).}
-
-\section{Energy Measurement by Hardware Class}
 \label{sec:measurements}
 
-\todo{short opening: how each class is measured and why the published figures
-are not directly comparable.}
+\todo{metrics: energy per token, per query and per phase, and per-query carbon;
+the measurement boundary; average vs.\ marginal accounting (definitions only, the
+choices go in Chapter~\ref{chap:methodology}).}
 
-\subsection{User Device}
-\label{sec:measurements-user}
-
-\todo{}
-
-\subsection{Edge}
-\label{sec:measurements-edge}
-
-\todo{}
-
-\subsection{Fog}
-\label{sec:measurements-fog}
-
-\todo{}
-
-\subsection{Cloud}
-\label{sec:measurements-cloud}
-
-\todo{}
+\todo{how each hardware class is measured, one paragraph each: user device, edge,
+fog, and the cloud as a reference point; why the published figures are not
+directly comparable.}
 
 \section{Challenges Addressed in This Work}
 \label{sec:challenges}
