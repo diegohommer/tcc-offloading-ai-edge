@@ -1084,7 +1084,7 @@ repo's `*.log` ignore rule; the `*.txt` beside it is the same, cleaned). The
 5. Niu, Zhang, Li, Zhao, Wang, Wang and Chen. *TokenPowerBench: Benchmarking the Power Consumption of LLM Inference.* AAAI 2026 (main track). arXiv:2512.03024. https://arxiv.org/abs/2512.03024
 6. Yang et al. *Part-time Power Measurements: nvidia-smi's Lack of Attention* (SC'24: *Accurate and Convenient Energy Measurements for GPUs*). arXiv:2312.02741. https://arxiv.org/abs/2312.02741
 7. Delavande, Pierrard and Luccioni. *Understanding Efficiency: Quantization, Batching, and Serving Strategies in LLM Energy Use.* arXiv:2601.22362. https://arxiv.org/abs/2601.22362
-8. Solovyeva and Castor. *Towards Green AI: Decoding the Energy of LLM Inference in Software Development.* (local: `thesis/papers/TowardsGreenLLM.pdf`)
+8. Solovyeva and Castor. *Towards Green AI: Decoding the Energy of LLM Inference in Software Development.* arXiv:2602.05712.
 9. Caravaca, Cuevas and Cuevas. *From Prompts to Power: Measuring the Energy Footprint of LLM Inference.* arXiv:2511.05597.
 10. Cai et al. *Is Your NPU Ready for LLMs? Dissecting the Hidden Efficiency Bottlenecks in Mobile LLM Inference.* arXiv:2607.05475.
 11. Kubwimana and Huang. *EdgeReasoning: Characterizing Reasoning LLM Deployment on Edge GPUs.* arXiv:2511.01866.

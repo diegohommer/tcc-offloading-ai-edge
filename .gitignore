@@ -243,8 +243,3 @@ thesis/latex/*.snm
 thesis/latex/*.vrb
 thesis/latex/tcc.pdf
 
-# Reference papers: kept locally for convenience, not redistributed --
-# licensing varies by source (some are open-access, some aren't checked).
-# See thesis/papers/README.md.
-thesis/papers/*.pdf
-
