@@ -85,9 +85,11 @@
 \begin{listofabbrv}{TWDM-PON}
   \item[DBA] Dynamic Bandwidth Allocation
   \item[G-PON] Gigabit-capable Passive Optical Network
+  \item[GPU] Graphics Processing Unit
   \item[HFC] Hybrid Fiber-Coaxial
   \item[KV] Key-Value
   \item[LLM] Large Language Model
+  \item[NG-PON2] Next-Generation Passive Optical Network Stage 2
   \item[OLT] Optical Line Terminal
   \item[ONU] Optical Network Unit
   \item[PLM] Pre-trained Language Model
@@ -108,11 +110,10 @@ topic~\cite{chen2026network}. Since evolution seldom happens in isolation, the n
 itself has also been undergoing changes, one of which is the adoption of Passive Optical
 Network (PON) technology in the access network~\cite{effenberger2007introduction}. Driven
 by the demand for greater capacity, lower latency, and reduced operating costs, PON is
-being deployed alongside or in place of the hybrid fiber-coaxial (HFC)
+being deployed alongside or in place of the Hybrid Fiber-Coaxial (HFC)
 plant~\cite{prodnik2025migration}. Quality of service, scalability, security, and energy
 cost are some of the broad topics that need to be taken into account as both of these
 changes happen in parallel.
-
 
 On the models' side, cost is a concern as well, since LLM inference is
 expensive~\cite{chen2026network}. One way of making it cheaper is the model cascade: a
@@ -160,7 +161,7 @@ The contributions of this work are:
   decision to answer a query or pass it up takes into account the energy spent at each
   tier, and not only confidence;
   \item An energy model of the user device, the ONU and the OLT under a single
-  measurement boundary, with the OLT's energy measured by us on a GPU;
+  measurement boundary, with the OLT's energy measured by us on a Graphics Processing Unit (GPU);
   \item An offloading strategy that uses the PON downstream broadcast to share the
   OLT's current cost with every ONU;
   \item A simulation study on recorded conversation traffic, with and without
@@ -169,11 +170,11 @@ The contributions of this work are:
 \end{itemize}
 
 The remainder of this work is organized as follows. Chapter~\ref{chap:review}
-reviews RecServe, tiered inference over PON, and how LLM inference energy is measured
-on each class of hardware. Chapter~\ref{chap:methodology} describes the energy-aware
+presents the background on PONs and LLM inference, and reviews tiered LLM inference,
+energy-aware LLM serving, and how LLM inference energy is measured. Chapter~\ref{chap:methodology} describes the energy-aware
 policy, the energy model, and the simulation setup. Chapter~\ref{chap:results}
 presents the results of the case study, and Chapter~\ref{chap:conclusion} concludes the
-work. \todo{revise once the chapter plan is final.}
+work. \todo{revise the descriptions of Chapters~\ref{chap:methodology} and~\ref{chap:results} once they are written.}
 
 \section{Use of Artificial Intelligence Tools}
 \label{sec:ai-tools}
@@ -213,7 +214,7 @@ each ONU can take turns bursting data back~\cite{effenberger2007introduction}. T
 directions are therefore not symmetric: anything the OLT sends reaches every ONU at once,
 while each ONU can only speak in its own slot.
 
-More recently, TWDM-PON, selected as the primary solution for NG-PON2, stacked several wavelength pairs on
+More recently, TWDM-PON, selected as the primary solution for the Next-Generation PON Stage 2 (NG-PON2), stacked several wavelength pairs on
 top of the time sharing, each pair running its own TDMA, to multiply the capacity of the
 same fiber~\cite{luo2013twdm}. TWDM-PON is the setting in
 which \citeonline{pakpahan2026continuum} place tiered LLM inference
@@ -235,7 +236,7 @@ size of these models places heavy demands on memory, computation and energy when
 them~\cite{chen2026network}.
 
 Services that use LLMs respond to a user query in two phases~\cite{zhou2024survey}. In the prefill phase, the LLM processes the whole user prompt at once, storing
-intermediate results for every prompt token (the key-value, or KV, cache) and generating
+intermediate results for every prompt token (the Key-Value, or KV, cache) and generating
 the first output token. In the decode phase, it generates the rest of the answer one
 token at a time, each step reusing the KV cache and adding the new token to it. The two
 phases use the hardware differently: prefill processes many tokens in parallel and tends
