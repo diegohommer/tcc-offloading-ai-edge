@@ -22,6 +22,8 @@
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,decorations.pathreplacing,calc}
 % Marks unfinished text in red; remove every \todo before submission.
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 
@@ -212,7 +214,17 @@ operates using Time Division Multiple Access (TDMA) to avoid collisions. The OLT
 strictly synchronized time slots to each ONU via Dynamic Bandwidth Allocation (DBA), so
 each ONU can take turns bursting data back~\cite{effenberger2007introduction}. The two
 directions are therefore not symmetric: anything the OLT sends reaches every ONU at once,
-while each ONU can only speak in its own slot.
+while each ONU can only speak in its own slot. Figure~\ref{fig:pon} shows both
+directions.
+
+\begin{figure}[htb]
+  \centering
+  \caption{Downstream broadcast and upstream TDMA in a PON}
+  \label{fig:pon}
+  \vspace{6pt}
+  \input{figures/pon_broadcast_tdma}
+  \legend{Source: Adapted from \citeonline{roonie2013pon}}
+\end{figure}
 
 More recently, TWDM-PON, selected as the primary solution for the Next-Generation PON Stage 2 (NG-PON2), stacked several wavelength pairs on
 top of the time sharing, each pair running its own TDMA, to multiply the capacity of the
@@ -238,12 +250,22 @@ them~\cite{chen2026network}.
 Services that use LLMs respond to a user query in two phases~\cite{zhou2024survey}. In the prefill phase, the LLM processes the whole user prompt at once, storing
 intermediate results for every prompt token (the Key-Value, or KV, cache) and generating
 the first output token. In the decode phase, it generates the rest of the answer one
-token at a time, each step reusing the KV cache and adding the new token to it. The two
+token at a time, each step reusing the KV cache and adding the new token to it
+(Figure~\ref{fig:prefill-decode}). The two
 phases use the hardware differently: prefill processes many tokens in parallel and tends
 to be limited by computation, while each decode step processes a single token but moves
 about as much data as prefill, which makes it limited by memory
 bandwidth~\cite{zhong2024distserve}. This is why the energy of a query
 is often reported separately for each phase (Section~\ref{sec:metrics}).
+
+\begin{figure}[htb]
+  \centering
+  \caption{Prefill and decode phases of LLM inference}
+  \label{fig:prefill-decode}
+  \vspace{6pt}
+  \input{figures/prefill_decode}
+  \legend{Source: Adapted from \citeonline{zhou2024survey}}
+\end{figure}
 
 To generate each token, the LLM assigns a probability to every token in its vocabulary,
 and a low probability on the tokens it picks is a sign that it is unsure of the
@@ -262,7 +284,21 @@ tasks~\cite{wu2025recserve}, and compares it with the confidences each tier has 
 recently, rather than with a fixed threshold that would have to be tuned by hand for each
 task, model and network condition (Section~\ref{sec:recserve}).
 
-\todo{model cascades; the device/edge/fog/cloud continuum.}
+A model cascade places several models one after the other, from the cheapest to the most
+expensive. The query is sent to the cheapest one first, and if its answer is reliable,
+that answer is returned and the more expensive models are never queried; otherwise, the query moves on to the next model
+in the list. FrugalGPT judges reliability with a separate scoring function that gives
+each answer a score between 0 and 1, and with it matches the performance of GPT-4 at up
+to 98\% lower cost~\cite{chen2024frugalgpt}. Cascades also differ in how that
+judgement is made. In AutoMix, the smaller model checks its own answer through few-shot
+self-verification, without extensive training, and since this check can be noisy, a
+router decides from the resulting confidence whether to move up to a larger model,
+reducing the computational cost by over 50\% at comparable
+performance~\cite{aggarwal2023automix}. The same idea carries over to the network edge:
+a compact model close to the user answers most queries, and only the difficult ones are
+passed on to more powerful devices or to the cloud~\cite{chen2026network}.
+
+\todo{the device/edge/fog/cloud continuum.}
 
 \section{Tiered LLM Inference}
 \label{sec:tiered}
@@ -278,8 +314,16 @@ decision. Possibly a figure of the recursion.}
 \subsection{Hierarchical Inference over TWDM-PON}
 \label{sec:pakpahan}
 
-\todo{tiers mapped onto the PON, controller, models per tier, their comparison
-of offloading mechanisms; limitation: confidence alone decides.}
+\todo{tiers mapped onto the PON (Figure~\ref{fig:pakpahan}), controller, models per
+tier, their comparison of offloading mechanisms; limitation: confidence alone decides.}
+
+\begin{figure}[!htb]
+  \centering
+  \caption{Tiered LLM inference continuum on a PON}
+  \label{fig:pakpahan}
+  \includegraphics[width=\textwidth]{figures/pakpahan2026_fig1_tiered_continuum.jpg}
+  \legend{Source: \citeonline{pakpahan2026continuum}, CC BY 4.0}
+\end{figure}
 
 \todo{synthesis of the group.}
 
@@ -292,7 +336,7 @@ of offloading mechanisms; limitation: confidence alone decides.}
 % Comparison table skeleton; uncomment when the rows are filled.
 % \begin{table}[htb]
 %   \centering
-%   \caption{Comparison of related works.}
+%   \caption{Comparison of related works}
 %   \label{tab:related}
 %   \begin{tabular}{lcccc}
 %     \hline
