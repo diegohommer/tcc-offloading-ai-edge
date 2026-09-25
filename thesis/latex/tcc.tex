@@ -138,9 +138,11 @@ such a hierarchy. In both works, however, a tier decides whether to pass a query
 from confidence alone, and the energy spent at each tier plays no part in that
 decision.
 
-In this work, we propose an energy-aware version of RecServe, in which a tier decides
-whether to answer a query or pass it up based not only on its confidence, but also on
-the energy spent answering at each tier. As a case study, we simulate a three-tier
+In this work, we propose the integration of energy awareness into recursive tiered LLM
+inference.
+Building on RecServe's recursive offloading, a tier decides whether to answer a query or
+pass it up based not only on its confidence, but also on the energy spent answering at
+each tier. As a case study, we simulate a three-tier
 hierarchy over a PON, formed by the user device, the ONU and the OLT, each running a
 larger model than the one below. We evaluate two energy-aware strategies: one follows
 a fixed timetable of the OLT's cost, while the other takes advantage of the PON
@@ -152,9 +154,9 @@ chapter is settled.}
 
 The contributions of this work are:
 \begin{itemize}
-  \item An energy-aware version of RecServe, in which the decision to answer a query
-  or pass it up takes into account the energy spent at each tier, and not only
-  confidence;
+  \item The integration of energy awareness into recursive tiered LLM inference, in which the
+  decision to answer a query or pass it up takes into account the energy spent at each
+  tier, and not only confidence;
   \item An energy model of the user device, the ONU and the OLT under a single
   measurement boundary, with the OLT's energy measured by us on a GPU;
   \item An offloading strategy that uses the PON downstream broadcast to share the
