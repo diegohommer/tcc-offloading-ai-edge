@@ -172,8 +172,8 @@ The contributions of this work are:
 \end{itemize}
 
 The remainder of this work is organized as follows. Chapter~\ref{chap:review}
-presents the background on PONs and LLM inference, and reviews tiered LLM inference,
-energy-aware LLM serving, and how LLM inference energy is measured. Chapter~\ref{chap:methodology} describes the energy-aware
+presents the background on PONs, LLM inference and how its energy is measured, and
+reviews the work on tiered LLM inference and on energy-aware LLM serving. Chapter~\ref{chap:methodology} describes the energy-aware
 policy, the energy model, and the simulation setup. Chapter~\ref{chap:results}
 presents the results of the case study, and Chapter~\ref{chap:conclusion} concludes the
 work. \todo{revise the descriptions of Chapters~\ref{chap:methodology} and~\ref{chap:results} once they are written.}
@@ -187,19 +187,31 @@ assumes full responsibility for the content, analyses, and conclusions presented
 work.
 
 %==============================================================================
-\chapter{Literature Review}
+\chapter{Background and Related Work}
 \label{chap:review}
 %==============================================================================
 
-% Layout: background first (short, textbook sources), then related work grouped
-% by approach (one paragraph per work: problem, mechanism, evaluation, headline
-% number, limitation for this work; each group closed by a short synthesis),
-% then the gaps this work addresses. Kept to six sections and one level of
-% subsections, and cited once per claim or per paragraph, not per sentence.
+% Layout: 2.1 Background holds the concepts the work builds on (PON, LLM
+% inference, confidence, cascades and tiers, energy measurement), with no competing
+% work; 2.2 Related Work groups the competing works by what they share (one
+% paragraph per work: problem, mechanism, evaluation, headline number, limitation
+% for this work; each group closed by a short synthesis); 2.3 states the gaps this
+% work addresses. Cited once per claim or per paragraph, not per sentence.
 
-\todo{chapter opening: one short paragraph on what the chapter covers, in order.}
+This chapter presents the concepts this work builds on and the works closest to it. The
+background, in Section~\ref{sec:background}, introduces PONs and their downstream
+broadcast, which one of the strategies evaluated in this work relies on
+(Section~\ref{sec:pon}); how an LLM answers a query and how its confidence in the answer
+is measured (Section~\ref{sec:llm-background}); how cascades of models are spread across
+network tiers (Section~\ref{sec:cascades-tiers}); and how the energy of LLM inference is
+measured (Section~\ref{sec:metrics}). Section~\ref{sec:related} then reviews the work on
+tiered LLM inference and on energy-aware LLM serving, and Section~\ref{sec:challenges}
+closes the chapter with the gaps this work addresses.
 
-\section{Passive Optical Networks}
+\section{Background}
+\label{sec:background}
+
+\subsection{Passive Optical Networks}
 \label{sec:pon}
 A PON is an access network technology that uses a shared fiber architecture, where a
 single fiber coming out of an OLT is split passively to serve several dozen ONUs at the
@@ -234,7 +246,7 @@ which \citeonline{pakpahan2026continuum} place tiered LLM inference
 evaluated in this work relies on: a single message from the OLT reaches every ONU, with
 no extra upstream traffic (Chapter~\ref{chap:methodology}).
 
-\section{LLM Inference and Model Cascades}
+\subsection{LLM Inference}
 \label{sec:llm-background}
 
 LLMs are scaled Pre-trained Language Models (PLMs): Transformer models with
@@ -284,6 +296,9 @@ tasks~\cite{wu2025recserve}, and compares it with the confidences each tier has 
 recently, rather than with a fixed threshold that would have to be tuned by hand for each
 task, model and network condition (Section~\ref{sec:recserve}).
 
+\subsection{Model Cascades and Tiered Inference}
+\label{sec:cascades-tiers}
+
 A model cascade places several models one after the other, from the cheapest to the most
 expensive. The query is sent to the cheapest one first, and if its answer is reliable,
 that answer is returned and the more expensive models are never queried; otherwise, the query moves on to the next model
@@ -296,9 +311,6 @@ router decides from the resulting confidence whether to move up to a larger mode
 reducing the computational cost by over 50\% at comparable
 performance~\cite{aggarwal2023automix}.
 
-\section{Tiered LLM Inference}
-\label{sec:tiered}
-
 The idea of a model cascade was also brought into the network itself, by organizing it
 in tiers that go from the user's own device, through the edge and the fog, up to the
 cloud, with a larger, more capable LLM at each step up~\cite{pakpahan2026continuum}. A
@@ -308,18 +320,35 @@ lowers latency~\cite{chen2026network}, and fewer queries crossing the network me
 traffic: RecServe, for instance, reduces the communication burden by over 50\% compared
 with serving every query in the cloud~\cite{wu2025recserve}.
 
-\subsection{Recursive Confidence-Based Offloading: RecServe}
+\subsection{Measuring LLM Inference Energy}
+\label{sec:metrics}
+\label{sec:measurements}
+
+\todo{metrics: energy per token, per query and per phase, and per-query carbon;
+the measurement boundary; average vs.\ marginal accounting (definitions only, the
+choices go in Chapter~\ref{chap:methodology}).}
+
+\todo{how each hardware class is measured, one paragraph each: user device, edge,
+fog, and the cloud as a reference point; why the published figures are not
+directly comparable.}
+
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Tiered LLM Inference}
+\label{sec:tiered}
+
 \label{sec:recserve}
+\todo{RecServe, two or three paragraphs: mechanism, evaluation and results (its over
+50\% cut in communication burden is already in Section~\ref{sec:cascades-tiers}, do not
+repeat it);
+limitation: energy is not part of the decision. Its Fig.~1 is CC BY 4.0 and can be
+reused.}
 
-\todo{mechanism, evaluation and results (its over 50\% cut in communication burden is
-already in Section~\ref{sec:tiered}, do not repeat it); limitation: energy is not part of
-the decision. Possibly a figure of the recursion.}
-
-\subsection{Hierarchical Inference over TWDM-PON}
 \label{sec:pakpahan}
-
-\todo{tiers mapped onto the PON (Figure~\ref{fig:pakpahan}), controller, models per
-tier, their comparison of offloading mechanisms; limitation: confidence alone decides.}
+\todo{Pakpahan and Hwang, one or two paragraphs: tiers mapped onto the PON
+(Figure~\ref{fig:pakpahan}), controller, models per tier, their Table~1 comparing
+edge-cloud collaborative inference methods; limitation: confidence alone decides.}
 
 \begin{figure}[!htb]
   \centering
@@ -329,13 +358,17 @@ tier, their comparison of offloading mechanisms; limitation: confidence alone de
   \legend{Source: \cite{pakpahan2026continuum}}
 \end{figure}
 
+\todo{the other methods compared in Pakpahan and Hwang's Table~1, one paragraph each:
+Tabi, EdgeShard, and Draft-Verify (Hao et al.). PerLLM, also in that table, is
+energy-aware and goes in Section~\ref{sec:energy-routing}.}
+
 \todo{synthesis of the group.}
 
-\section{Energy-Aware LLM Serving and Routing}
+\subsection{Energy-Aware LLM Serving and Routing}
 \label{sec:energy-routing}
 
-\todo{one paragraph per work; then a comparison table and a synthesis
-(number of tiers, network model, decision basis).}
+\todo{one paragraph per work (PerLLM, CR$^2$, GreenServ, EcoThink); then a comparison
+table and a synthesis (number of tiers, network model, decision basis).}
 
 % Comparison table skeleton; uncomment when the rows are filled.
 % \begin{table}[htb]
@@ -350,18 +383,6 @@ tier, their comparison of offloading mechanisms; limitation: confidence alone de
 %     \hline
 %   \end{tabular}
 % \end{table}
-
-\section{Measuring LLM Inference Energy}
-\label{sec:metrics}
-\label{sec:measurements}
-
-\todo{metrics: energy per token, per query and per phase, and per-query carbon;
-the measurement boundary; average vs.\ marginal accounting (definitions only, the
-choices go in Chapter~\ref{chap:methodology}).}
-
-\todo{how each hardware class is measured, one paragraph each: user device, edge,
-fog, and the cloud as a reference point; why the published figures are not
-directly comparable.}
 
 \section{Challenges Addressed in This Work}
 \label{sec:challenges}
