@@ -86,9 +86,11 @@
   \item[DBA] Dynamic Bandwidth Allocation
   \item[G-PON] Gigabit-capable Passive Optical Network
   \item[HFC] Hybrid Fiber-Coaxial
+  \item[KV] Key-Value
   \item[LLM] Large Language Model
   \item[OLT] Optical Line Terminal
   \item[ONU] Optical Network Unit
+  \item[PLM] Pre-trained Language Model
   \item[PON] Passive Optical Network
   \item[TDMA] Time Division Multiple Access
   \item[TWDM-PON] Time and Wavelength Division Multiplexed Passive Optical Network
@@ -223,8 +225,44 @@ no extra upstream traffic (Chapter~\ref{chap:methodology}).
 \section{LLM Inference and Model Cascades}
 \label{sec:llm-background}
 
-\todo{prefill and decode; confidence scores; model cascades; the
-device/edge/fog/cloud continuum.}
+LLMs are scaled Pre-trained Language Models (PLMs): Transformer models with
+self-attention mechanisms~\cite{vaswani2017attention}, pre-trained on large-scale
+text corpora, that solve a wide range of tasks using natural
+language~\cite{zhao2023survey}. Researchers noticed that the more a PLM is scaled,
+in model size or in training data, the more capable it tends to become at problem
+solving. Large PLMs also show abilities that smaller ones lack, such as solving a new
+task from a few examples given in the prompt~\cite{zhao2023survey}. However, the
+size of these models places heavy demands on memory, computation and energy when serving
+them~\cite{chen2026network}.
+
+Services that use LLMs respond to a user query in two phases~\cite{zhou2024survey}. In the prefill phase, the LLM processes the whole user prompt at once, storing
+intermediate results for every prompt token (the key-value, or KV, cache) and generating
+the first output token. In the decode phase, it generates the rest of the answer one
+token at a time, each step reusing the KV cache and adding the new token to it. The two
+phases use the hardware differently: prefill processes many tokens in parallel and tends
+to be limited by computation, while each decode step processes a single token but moves
+about as much data as prefill, which makes it limited by memory
+bandwidth~\cite{zhong2024distserve}. This is why the energy of a query
+is often reported separately for each phase (Section~\ref{sec:metrics}).
+
+To generate each token, the LLM assigns a probability to every token in its vocabulary,
+and a low probability on the tokens it picks is a sign that it is unsure of the
+answer~\cite{zhao2023survey}. A confidence score turns these probabilities into
+a single number per answer. Ideally, that number is calibrated, meaning that answers
+given with 80\% confidence are correct 80\% of the time, but modern neural networks are
+often poorly calibrated, and tend to be more confident than they are
+accurate~\cite{guo2017calibration}. For generated text, the most common scores
+combine the probabilities of all the generated tokens, for example through their
+average, their minimum, or the likelihood of the whole answer normalized by its
+length~\cite{geng2023survey}. Perplexity is closely related to the last one:
+it is the inverse probability of a sequence, normalized by its number of tokens, so the
+more likely the answer, the lower its perplexity~\cite[ch.~3]{jurafsky2026speech}.
+RecServe uses a normalized perplexity as the confidence of its generation
+tasks~\cite{wu2025recserve}, and compares it with the confidences each tier has seen
+recently, rather than with a fixed threshold that would have to be tuned by hand for each
+task, model and network condition (Section~\ref{sec:recserve}).
+
+\todo{model cascades; the device/edge/fog/cloud continuum.}
 
 \section{Tiered LLM Inference}
 \label{sec:tiered}
