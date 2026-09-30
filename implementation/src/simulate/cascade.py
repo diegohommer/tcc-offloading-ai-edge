@@ -110,6 +110,7 @@ def believed_olt_rate(
     if policy == "oracle":
         return setup.prices.expected_olt(load)
     if policy == "broadcast":
+        # the ONU relays it to the household's devices over the LAN, taken as free and instant
         return setup.broadcasts[n]
     return learned.rates.get("olt")  # piggyback
 

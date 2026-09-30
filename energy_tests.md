@@ -874,6 +874,13 @@ A few dozen bytes every 10 s is negligible on a 1.25–10 Gb/s link and adds no
 message per ONU. It needs OLT and ONU software that does not exist today, as does
 an ONU with an LLM accelerator.
 
+**The last hop, ONU to device.** The broadcast ends at the ONU, but the phone
+decides first. The ONU keeps the latest value and hands it to the household's
+devices over the home LAN, which their traffic crosses anyway: a device asks
+before it decides, or reads it from the ONU's last reply. That is a few bytes
+and well under a millisecond on the LAN, so the simulation treats it as free and
+instant: a device decides on the latest broadcast, as the ONU does.
+
 **Traffic.** *Predictable*: BurstGPT's conversation log as recorded (§8.5).
 *Unpredictable*: the same, plus events no timetable or calendar knows about, such
 as a news surge, a big game running long, a neighbouring OLT's traffic moved here,
@@ -1035,7 +1042,9 @@ service) for over 1% of arrivals, indicative only.
   (the † rows of §8.6).
 - **The broadcast is not standardized.** A PON's downstream multicast channel
   exists [25], but an OLT that reports its energy on it, and an ONU agent that
-  reads it, would be new software.
+  reads it and relays it to the household's devices on the LAN, would be new
+  software. That relay is not simulated: devices read the broadcast at no cost
+  or delay.
 - **One confidence window per tier, shared by all households.** A real ONU keeps
   its own. Skipped most of the day, it would see a few queries a day and take
   months to fill a 1,000-answer window, so its threshold would be noisy; the
