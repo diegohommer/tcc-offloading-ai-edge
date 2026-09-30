@@ -97,7 +97,9 @@ implementation/
     simulate/                  STAGE 3: the simulator
       simulate.py              the entry point: reads the settings, runs every policy at every load and
                                beta, writes the results
-      olt_load.py              the OLT's load over time: BurstGPT replayed, unforeseen surges, and the
+      load_modes.py            the OLT's load, one interface for the case study (a replayed trace with
+                               surges) and the earlier exploration (the average day with drift)
+      olt_load.py              the pieces those use: BurstGPT replayed, unforeseen surges, and the
                                static_day / static_hour tables learned from past days
       olt_energy.py            what a query truly costs (average or marginal accounting), and the OLT's
                                5-minute report that the broadcast and piggyback policies hear

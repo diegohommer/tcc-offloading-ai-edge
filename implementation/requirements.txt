@@ -6,3 +6,7 @@ pyyaml>=6.0
 pandas>=3.0
 modal>=1.5
 datasets>=5.0
+# development only: black, isort and pylint (config in pyproject.toml and pylintrc)
+black>=26.5
+isort>=9.0
+pylint>=4.1

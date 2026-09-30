@@ -1,29 +1,13 @@
 #!/usr/bin/env python3
-"""Check that a collected trace's confidence scores are sound before anything routes on them.
+"""Check that a collected answers file's confidence scores are sound before anything routes on them.
 
-ROLE IN THE PIPELINE
-    A check on measure/collect_answers.py's output (results/measurements/*.raw.jsonl),
-    run before the simulator replays it. energy_tests.md §4.
+Per tier: every generated token has one logprob, all <= 0; the stored confidence equals
+exp(mean token logprob), RecServe's; how many answers hit the token limit; and how well
+confidence separates correct from wrong answers (Welch t, for exp(mean) and exp(min)).
 
-RecServe routes on confidence, so a silent error here -- a missing logprob, a
-count that does not line up with the generated tokens, a stored value computed
-differently from what the paper specifies -- corrupts every downstream result
-without looking wrong. This checks, per tier:
-
-  integrity   every generated token has a logprob, one per token, all <= 0
-  formula     the stored confidence equals exp(mean token logprob), recomputed
-              from the raw logprobs -- RecServe's generative confidence
-              (normalised perplexity)
-  truncation  how many answers hit the token limit (a cut-off answer is scored,
-              and its confidence computed, on a partial chain of reasoning)
-  signal      whether confidence separates correct from wrong answers, by Welch
-              t, for RecServe's exp(mean logprob) and for exp(min logprob), the
-              definition the design doc (section 13.2) found separates better
-
-Usage:
-    python src/analyze/check_confidence.py results/measurements/gsm8k_zeroshot_user-onu-olt_n1319_20260911T023919Z.raw.jsonl
-    python src/analyze/check_confidence.py results/measurements/gsm8k_zeroshot_onu_n1319_20260911T031326Z.raw.jsonl
+Usage: python src/analyze/check_confidence.py results/measurements/<answers>.raw.jsonl
 """
+
 from __future__ import annotations
 
 import collections
@@ -35,7 +19,15 @@ from pathlib import Path
 
 
 def welch_t(a: list[float], b: list[float]) -> float | None:
-    """Welch's t for mean(a) - mean(b); None when either group is too small."""
+    """Return Welch's t for mean(a) - mean(b).
+
+    Args:
+        a: The first group's values.
+        b: The second group's values.
+
+    Returns:
+        Welch's t, or None when either group is too small.
+    """
     if len(a) < 2 or len(b) < 2:
         return None
     va, vb = st.variance(a), st.variance(b)
@@ -43,19 +35,31 @@ def welch_t(a: list[float], b: list[float]) -> float | None:
     return (st.mean(a) - st.mean(b)) / denom if denom > 0 else None
 
 
+def format_t(t: float | None) -> str:
+    """Format a Welch t for the report."""
+    return "n/a (too few in a group)" if t is None else f"{t:+.2f}"
+
+
 def main() -> int:
-    """Check every tier in the answers file given on the command line; exit 1 if any check fails."""
+    """Check every tier in the answers file given on the command line.
+
+    Returns:
+        The process exit code: 0 if every check passes, 1 if any fails, 2 on bad usage.
+    """
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     by_tier: dict[str, list[dict]] = collections.defaultdict(list)
-    for line in open(Path(sys.argv[1])):
-        rec = json.loads(line)
-        by_tier[rec["tier"]].append(rec)
+    with open(Path(sys.argv[1]), encoding="utf-8") as f:
+        for line in f:
+            rec = json.loads(line)
+            by_tier[rec["tier"]].append(rec)
 
     failed = False
-    for tier in [t for t in ("user", "onu", "olt", "fog", "cloud") if t in by_tier] + \
-                [t for t in by_tier if t not in ("user", "onu", "olt", "fog", "cloud")]:
+    for tier in [t for t in ("user", "onu", "olt", "fog", "cloud") if t in by_tier] + [
+        t for t in by_tier if t not in ("user", "onu", "olt", "fog", "cloud")
+    ]:
+        # --- Integrity and formula, per answer ---
         recs = by_tier[tier]
         problems = collections.Counter()
         conf_mean = {True: [], False: []}
@@ -80,15 +84,17 @@ def main() -> int:
             conf_mean[bool(r["correct"])].append(recomputed)
             conf_min[bool(r["correct"])].append(math.exp(min(valid)))
 
+        # --- Report ---
         n = len(recs)
         truncated = sum(r.get("finish_reason") == "length" for r in recs)
         acc = sum(bool(r["correct"]) for r in recs) / n
         t_mean = welch_t(conf_mean[True], conf_mean[False])
         t_min = welch_t(conf_min[True], conf_min[False])
-        fmt = lambda t: "n/a (too few in a group)" if t is None else f"{t:+.2f}"
 
-        print(f"\n[{tier}] {recs[0].get('model', '?')}  n={n}  accuracy={acc:.3f}  "
-              f"truncated at token limit: {truncated}")
+        print(
+            f"\n[{tier}] {recs[0].get('model', '?')}  n={n}  accuracy={acc:.3f}  "
+            f"truncated at token limit: {truncated}"
+        )
         # Report every check on its own line, so one failing check never hides
         # the status of the others.
         checks = [
@@ -96,8 +102,11 @@ def main() -> int:
             ("missing", "missing logprob", "no logprob missing"),
             ("sign", "logprob > 0", "all logprobs <= 0"),
             ("empty", "no logprobs at all", "every record has logprobs"),
-            ("formula", "stored confidence != exp(mean logprob)",
-             "stored confidence = exp(mean token logprob)"),
+            (
+                "formula",
+                "stored confidence != exp(mean logprob)",
+                "stored confidence = exp(mean token logprob)",
+            ),
             ("range", "confidence outside (0, 1]", "confidence within (0, 1]"),
         ]
         for name, problem, ok_text in checks:
@@ -114,9 +123,15 @@ def main() -> int:
             mean_ok = f"{st.mean(ok):.4f}" if ok else "  -   "
             mean_bad = f"{st.mean(bad):.4f}" if bad else "  -   "
             t = t_mean if label.startswith("exp(mean") else t_min
-            print(f"  signal     {label}: correct {mean_ok} vs wrong {mean_bad}  Welch t = {fmt(t)}")
+            print(
+                f"  signal     {label}: correct {mean_ok} vs wrong {mean_bad}  Welch t = {format_t(t)}"
+            )
 
-    print("\nALL CHECKS PASSED" if not failed else "\nSOME CHECKS FAILED -- fix before routing on this trace")
+    print(
+        "\nALL CHECKS PASSED"
+        if not failed
+        else "\nSOME CHECKS FAILED -- fix before routing on this trace"
+    )
     return 1 if failed else 0
 
 

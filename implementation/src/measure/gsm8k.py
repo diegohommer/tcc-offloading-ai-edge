@@ -1,31 +1,11 @@
-"""GSM8K generation task: prompt template, answer scoring, difficulty stratification.
+"""The GSM8K task: prompt template, answer scoring and difficulty.
 
-ROLE IN THE PIPELINE
-    Used by measure/collect_answers.py (prompts, scoring) and measure/measure_gpu_energy.py
-    (the same prompts, so the energy sweep runs the workload the cascade answers).
-
-Why this task replaces SST-2 for the generative cascade
---------------------------------------------------------
-Every J/token value in config/layer_energy.yaml is DECODE energy -- joules per
-OUTPUT token. The SST-2 classification harness generates zero output tokens, so
-it exercises none of what those numbers measure (see the smoke-test caveat in
-compute_energy_report.py). GSM8K asks for chain-of-thought reasoning, which
-produces ~100-300 output tokens per query -- the decode-dominated regime the
-energy tables were actually measured in (Caravaca et al. use 300 output tokens;
-Fadel Argerich et al. use up to 100).
-
-It also satisfies the requirement the escalation mechanism depends on: a real
-spread of difficulty. RecServe's beta-quantile threshold is calibrated from the
-distribution of recent confidence scores, so a workload of uniform difficulty
-collapses the policy into "escalate everything" or "escalate nothing". GSM8K
-problems range from one arithmetic step to eight or more, and that variation is
-*measurable* -- see difficulty_steps() -- so routing behaviour can be reported
-against true difficulty rather than only in aggregate.
-
-Scoring is exact-match on the final integer, so no LLM judge is needed (unlike
-MT-Bench) and no BLEU approximation is involved (unlike the WMT sets RecServe
-used for its Seq2Seq experiments).
+GSM8K asks for step-by-step reasoning, so every tier generates a few hundred tokens (the
+decode-dominated regime the energy figures describe). Its problems range from one to eight
+or more arithmetic steps, the spread of difficulty RecServe's threshold needs, and scoring
+is exact match on the final number, so no judge model is needed.
 """
+
 from __future__ import annotations
 
 import re
@@ -40,6 +20,7 @@ from dataclasses import dataclass
 # Kept deliberately short: prompt tokens are billed by the same energy model as
 # generated ones, so a verbose preamble would inflate every tier's cost equally
 # and dilute the differences the experiment is trying to measure.
+# pylint: disable-next=line-too-long
 PROMPT_TEMPLATE = """Solve the problem. Reason step by step, then give the final numeric answer on its own last line in exactly this form:
 #### <number>
 
@@ -55,15 +36,30 @@ _FALLBACK_NUM_RE = re.compile(r"(-?[\d,]+(?:\.\d+)?)")
 
 @dataclass
 class GSM8KItem:
-    """One GSM8K test question with its gold answer and difficulty."""
+    """One GSM8K test question with its gold answer and difficulty.
+
+    Attributes:
+        question: The problem statement.
+        reference_answer: The gold final number, normalized.
+        reference_solution: The full worked solution, kept for difficulty scoring.
+        difficulty_steps: The number of calculator steps in the gold solution.
+    """
+
     question: str
-    reference_answer: str      # gold final number, normalized
-    reference_solution: str    # full worked solution, kept for difficulty scoring
-    difficulty_steps: int      # number of calculator steps in the gold solution
+    reference_answer: str
+    reference_solution: str
+    difficulty_steps: int
 
 
 def _normalize_number(raw: str | None) -> str | None:
-    """Canonical form so '1,000', '1000', and '1000.0' all compare equal."""
+    """Return a number's canonical form, so '1,000', '1000' and '1000.0' all compare equal.
+
+    Args:
+        raw: The number as written, or None.
+
+    Returns:
+        The canonical form, or None when raw is not a number.
+    """
     if raw is None:
         return None
     cleaned = raw.replace(",", "").strip().rstrip(".")
@@ -76,12 +72,23 @@ def _normalize_number(raw: str | None) -> str | None:
 
 
 def build_prompt(question: str) -> str:
-    """The zero-shot prompt every tier receives for this question (before its chat template)."""
+    """Return the zero-shot prompt every tier receives for a question (before its chat template).
+
+    Args:
+        question: The problem statement.
+    """
     return PROMPT_TEMPLATE.format(question=question.strip())
 
 
 def extract_answer(generated_text: str) -> str | None:
-    """Pull the model's final numeric answer out of its generation."""
+    """Return the model's final numeric answer from its generation.
+
+    Args:
+        generated_text: The model's answer.
+
+    Returns:
+        The number after "####", else the last number in the text, normalized; or None.
+    """
     matches = _ANSWER_RE.findall(generated_text)
     if matches:
         return _normalize_number(matches[-1])
@@ -90,32 +97,51 @@ def extract_answer(generated_text: str) -> str | None:
 
 
 def is_correct(generated_text: str, reference_answer: str) -> bool:
-    """True if the final number in the model's answer equals the gold answer."""
+    """Return whether the final number in the model's answer equals the gold answer.
+
+    Args:
+        generated_text: The model's answer.
+        reference_answer: The gold final number, normalized.
+    """
     predicted = extract_answer(generated_text)
     return predicted is not None and predicted == reference_answer
 
 
 def difficulty_steps(reference_solution: str) -> int:
-    """Number of calculator annotations (<<...>>) in GSM8K's gold solution.
+    """Return the number of calculator annotations (<<...>>) in GSM8K's gold solution.
 
-    GSM8K marks each arithmetic step inline, e.g. '<<5*3=15>>'. Counting them
-    gives an objective difficulty measure supplied by the dataset itself -- not a
-    proxy invented here -- which lets routing be reported against true difficulty
-    ("did the hard problems actually escalate?") rather than only in aggregate.
+    GSM8K marks each arithmetic step inline (e.g. '<<5*3=15>>'), so counting them gives
+    a difficulty measure supplied by the dataset itself.
+
+    Args:
+        reference_solution: The gold worked solution.
     """
     return reference_solution.count("<<")
 
 
 def parse_reference(raw_answer: str) -> tuple[str | None, int]:
-    """Split a GSM8K 'answer' field into (final number, difficulty steps)."""
+    """Split a GSM8K 'answer' field into (final number, difficulty steps).
+
+    Args:
+        raw_answer: The dataset's answer field (worked solution ending in "#### n").
+    """
     match = _ANSWER_RE.search(raw_answer)
     final = _normalize_number(match.group(1)) if match else None
     return final, difficulty_steps(raw_answer)
 
 
 def load_gsm8k(split: str = "test", limit: int | None = None) -> list[GSM8KItem]:
-    """Load GSM8K from the Hugging Face hub (config 'main')."""
-    from datasets import load_dataset
+    """Load GSM8K from the Hugging Face hub (config 'main').
+
+    Args:
+        split: The dataset split.
+        limit: How many questions to keep (None: all).
+
+    Returns:
+        The questions whose gold answer parses.
+    """
+    # imported here so scoring and prompts work without the datasets package
+    from datasets import load_dataset  # pylint: disable=import-outside-toplevel
 
     dataset = load_dataset("openai/gsm8k", "main", split=split)
     if limit:
@@ -126,10 +152,12 @@ def load_gsm8k(split: str = "test", limit: int | None = None) -> list[GSM8KItem]
         final, steps = parse_reference(row["answer"])
         if final is None:
             continue  # malformed gold answer; skip rather than score against None
-        items.append(GSM8KItem(
-            question=row["question"],
-            reference_answer=final,
-            reference_solution=row["answer"],
-            difficulty_steps=steps,
-        ))
+        items.append(
+            GSM8KItem(
+                question=row["question"],
+                reference_answer=final,
+                reference_solution=row["answer"],
+                difficulty_steps=steps,
+            )
+        )
     return items
