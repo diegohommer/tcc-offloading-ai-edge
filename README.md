@@ -159,8 +159,8 @@ Reproduce every number in the thesis:
 | OLT energy per token at batch 1–64 (falls 51×); two runs agree within 1.4% | `results/tier_energy.md` §1–2 | `analyze/tier_energy.py` | `measurements/gpu_energy_*_run{1,2}.json` |
 | Phone 15.7 J, ONU 243 J (91 J marginal) per query | `tier_energy.md` §3 | `energy/three_tier.py: published_rates` | `config/energy_sources.yaml` + answer lengths |
 | OLT per query at each boundary (× 2.47 whole system) | `tier_energy.md` §4 | `three_tier.py: olt_factor, boundary` | Google's shares, PUE 1.54 |
-| OLT cheaper than the ONU from batch ≈ 5; never cheaper than the phone | `tier_energy.md` §5 | `tier_energy.py: crossing` | §3 and §4 |
-| One more query: ~9 J on a busy OLT, ~820 J on an idle one | `tier_energy.md` §6 | `three_tier.py: OltCurve.marginal_rates` | the batch curve |
+| OLT cheaper than the ONU from batch ≈ 6.6; never cheaper than the phone | `tier_energy.md` §5 | `tier_energy.py: crossing` | §3 and §4 |
+| One more query: ~9 J on a busy OLT, ~793 J on an idle one | `tier_energy.md` §6 | `three_tier.py: OltCurve.marginal_rates` | the batch curve |
 | Accuracy 0.47 / 0.69 / 0.92; confidence separates right from wrong | `tier_energy.md` §7 | `tier_energy.py`, `check_confidence.py` | `measurements/gsm8k_*.raw.jsonl` |
 | Traffic shape (46× day swing, drift σ ≈ 0.6) | `data/load_traces/drift_fit.json` | `simulate/prepare_load_traces.py` | BurstGPT |
 | Every policy's energy at equal accuracy; savings over RecServe and over the static tables; surges; latency, PON traffic and accuracy delivered; the sensitivities | `results/study/SUMMARY.md` | `analyze/summarize_study.py` | `results/study/*.json` ← `simulate/run_study.sh` |

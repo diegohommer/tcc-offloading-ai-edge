@@ -25,7 +25,13 @@ BURSTGPT = [
     768, 727, 469, 443, 318, 331, 180, 142, 165, 347, 710, 953,
     1318, 1283, 1551, 1109, 1283, 1170, 998, 1377, 1127, 940, 912, 877,
 ]  # fmt: skip
-"""BurstGPT arrivals per hour of day (61 days of Azure OpenAI traffic): only its shape is used."""
+"""BurstGPT arrivals per hour of day (61 days of Azure OpenAI traffic): only its shape is used.
+
+Typed in before data/load_traces/ was prepared, so it is not derived from it: it follows the
+'all' column's average day (correlation 0.99, max shape difference 0.12). Only the synthetic
+average day uses it; the case study replays data/load_traces/. Kept as is because every
+run's JSON records it.
+"""
 
 
 # ==========================================
