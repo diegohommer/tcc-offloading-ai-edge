@@ -98,6 +98,7 @@
   \item[PLM] Pre-trained Language Model
   \item[PON] Passive Optical Network
   \item[PUE] Power Usage Effectiveness
+  \item[SDN] Software-Defined Networking
   \item[TDMA] Time Division Multiple Access
   \item[TWDM-PON] Time and Wavelength Division Multiplexed Passive Optical Network
 \end{listofabbrv}
@@ -182,11 +183,10 @@ work. \todo{revise the descriptions of Chapters~\ref{chap:methodology} and~\ref{
 
 \section{Use of Artificial Intelligence Tools}
 \label{sec:ai-tools}
-Generative Artificial Intelligence tools were used during the preparation of this work,
-both as a writing aid for parts of this text and as an assistant in its implementation.
-All AI-assisted content was critically reviewed, edited, and validated by the author, who
-assumes full responsibility for the content, analyses, and conclusions presented in this
-work.
+This work was prepared with the help of a generative Artificial Intelligence tool,
+Claude (Anthropic), used through Claude Code. It helped draft and revise parts of this
+text and write the code of the measurements and of the simulation. The author read and corrected every passage and every piece of code
+it produced, and is responsible for everything this work states and concludes.
 
 %==============================================================================
 \chapter{Background and Related Work}
@@ -218,7 +218,7 @@ closes the chapter with the gaps this work addresses.
 A PON is an access network technology that uses a shared fiber architecture, where a
 single fiber coming out of an OLT is split passively to serve several dozen ONUs at the
 subscribers' premises, up to 128 of them in Gigabit-capable PON
-(G-PON). The OLT downstream works as a broadcast,
+(G-PON). Because the fiber is shared, the OLT downstream works as a broadcast,
 transmitting a data signal that the splitters passively replicate across all the ONUs
 connected to it. Each ONU looks at the frame headers and extracts only the data that is
 addressed to it, discarding the rest~\cite{effenberger2007introduction}.
@@ -240,11 +240,11 @@ at once, while each ONU can only speak in its own slot, as Figure~\ref{fig:pon} 
 
 More recently, TWDM-PON, selected as the primary solution for the Next-Generation PON Stage 2 (NG-PON2), stacked several wavelength pairs on
 top of the time sharing, each pair running its own TDMA, to multiply the capacity of the
-same fiber~\cite{luo2013twdm}. TWDM-PON is the setting in
-which \citeonline{pakpahan2026continuum} place tiered LLM inference
-(Section~\ref{sec:pakpahan}). The downstream broadcast is what one of the strategies
-evaluated in this work relies on, since a single message from the OLT reaches every ONU
-with no extra upstream traffic (Chapter~\ref{chap:methodology}).
+same fiber~\cite{luo2013twdm}, and it is the setting in which
+\citeonline{pakpahan2026continuum} place tiered LLM inference
+(Section~\ref{sec:pakpahan}). One of the strategies evaluated in this work relies on
+the downstream broadcast, since a single message from the OLT reaches every ONU with no
+extra upstream traffic (Chapter~\ref{chap:methodology}).
 
 \subsection{LLM Inference}
 \label{sec:llm-background}
@@ -259,15 +259,16 @@ task from a few examples given in the prompt~\cite{zhao2023survey}. However, the
 size of these models places heavy demands on memory, computation and energy when serving
 them~\cite{chen2026network}.
 
-Services that use LLMs respond to a user query in two phases~\cite{zhou2024survey}. In the prefill phase, the LLM processes the whole user prompt at once, storing
+These demands come from how an LLM answers a query, which happens in two
+phases~\cite{zhou2024survey}. In the prefill phase, the LLM processes the whole user prompt at once, storing
 intermediate results for every prompt token (the Key-Value, or KV, cache) and generating
 the first output token. In the decode phase, it generates the rest of the answer one
 token at a time, each step reusing the KV cache and adding the new token to it
 (Figure~\ref{fig:prefill-decode}). The two phases use the hardware differently, as prefill processes many tokens in
 parallel and tends to be limited by computation, while each decode step processes a single token
 but moves about as much data as prefill, which makes it limited by memory
-bandwidth~\cite{zhong2024distserve}. So the energy of a query is often reported
-separately for each phase (Section~\ref{sec:metrics}).
+bandwidth~\cite{zhong2024distserve}. For this reason, the energy of a query is often
+reported separately for each phase (Section~\ref{sec:metrics}).
 
 \begin{figure}[htb]
   \centering
@@ -281,18 +282,20 @@ separately for each phase (Section~\ref{sec:metrics}).
 To generate each token, the LLM assigns a probability to every token in its vocabulary,
 and a low probability on the tokens it picks is a sign that it is unsure of the
 answer~\cite{zhao2023survey}. A confidence score turns these probabilities into
-a single number per answer. A good score is calibrated, meaning that answers given with 80\% confidence are correct
-80\% of the time. Modern neural networks, however, are often poorly calibrated, and tend
-to be more confident than they are accurate~\cite{guo2017calibration}. For generated text, the most common scores
-combine the probabilities of all the generated tokens, for example through their
-average, their minimum, or the likelihood of the whole answer normalized by its
-length~\cite{geng2023survey}. Perplexity, closely related to the last one, is the inverse probability of a
-sequence normalized by its number of tokens, so the more likely the answer, the lower its
-perplexity~\cite[ch.~3]{jurafsky2026speech}.
-RecServe uses a normalized perplexity as the confidence of its generation
-tasks~\cite{wu2025recserve}. Each tier compares it with the confidences it has seen
-recently, rather than with a fixed threshold that would have to be tuned by hand for each
-task, model and network condition (Section~\ref{sec:recserve}).
+a single number per answer. For generated text, the most common scores combine the
+probabilities of all the generated tokens, for example through their average, their
+minimum, or the likelihood of the whole answer normalized by its
+length~\cite{geng2023survey}. Perplexity, closely related to the last one, is the
+inverse probability of a sequence normalized by its number of tokens, so the more likely
+the answer, the lower its perplexity~\cite[ch.~3]{jurafsky2026speech}.
+
+Ideally, a score is calibrated, meaning that answers given with 80\% confidence are
+correct 80\% of the time. Modern neural networks, however, are often poorly calibrated,
+and tend to be more confident than they are accurate~\cite{guo2017calibration}.
+RecServe does not rely on a fixed threshold, which would have to be tuned by hand for each
+task, model and network condition. It uses a normalized perplexity as the confidence of
+its generation tasks and compares it with the confidences each tier has seen
+recently~\cite{wu2025recserve} (Section~\ref{sec:recserve}).
 
 \subsection{Model Cascades and Tiered Inference}
 \label{sec:cascades-tiers}
@@ -308,10 +311,10 @@ without extensive training. Since this check can be noisy, a router then decides
 resulting confidence whether to move up to a larger model, reducing the computational
 cost by over 50\% at comparable performance~\cite{aggarwal2023automix}.
 
-The idea of a model cascade was also brought into the network itself. The network is
-organized in tiers that go from the user's own device, through the edge and the fog, up
-to the cloud, with a larger, more capable LLM at each step up~\cite{pakpahan2026continuum}. A
-query then climbs the tiers only as far as it needs, so simpler queries are answered
+The idea of a model cascade was also brought into the network itself, whose tiers go
+from the user's own device, through the edge and the fog, up to the cloud, with a larger,
+more capable LLM at each step up~\cite{pakpahan2026continuum}. A query then climbs the
+tiers only as far as it needs, so simpler queries are answered
 before they reach the cloud. Answering closer to the user shortens the network path and
 lowers latency~\cite{chen2026network}, and fewer queries crossing the network means less traffic. RecServe, for instance,
 reduces the communication burden by over 50\% compared
@@ -324,9 +327,7 @@ with serving every query in the cloud~\cite{wu2025recserve}.
 Studies report the energy of LLM inference per generated token or separately for the
 prefill and decode phases~\cite{solovyeva2026green}, or per
 query~\cite{elsworth2025measuring,chung2025mlenergy}, and there is no agreed way of
-measuring any of them. Estimates for
-similar tasks differ widely depending on which parts of the system each study
-counts~\cite{elsworth2025measuring}. This work compares tiers per query, since different
+measuring any of them. Of these units, this work compares tiers per query, since different
 models can answer the same prompt with responses of very different lengths, and a figure
 per token would hide how verbose each model is~\cite{chung2025mlenergy}. Each query's
 energy is still built from the two phases, as the energy per prompt token in the prefill
@@ -353,8 +354,11 @@ charge it. Average accounting charges each query its share of the batch's energy
 marginal accounting charges only what the query adds to it
 (Chapter~\ref{chap:methodology}).
 
-Each class of hardware is measured with different tools. On GPUs, energy is read through
-the NVIDIA Management Library (NVML), as \citeonline{chung2025mlenergy} do. Phones expose
+The boundary also depends on the tool, since each class of hardware is measured
+differently. GPUs report their own energy in software, read through the NVIDIA
+Management Library (NVML) on the NVIDIA GPUs this work uses, while libraries such as
+Zeus, used by \citeonline{chung2025mlenergy}, read it on both NVIDIA and AMD GPUs.
+Phones expose
 on-chip telemetry that reports the energy of the whole chip~\cite{cai2026npu}.
 Single-board edge devices are measured with a power meter at the plug, which includes the
 whole system~\cite{renney2026cloud}, or with current sensors on the board's power
@@ -368,17 +372,31 @@ boundary.
 \subsection{Tiered LLM Inference}
 \label{sec:tiered}
 
+The works closest to ours place a cascade of LLMs on the tiers of a network.
 \label{sec:recserve}
-\todo{RecServe, two or three paragraphs: mechanism, evaluation and results (its over
-50\% cut in communication burden is already in Section~\ref{sec:cascades-tiers}, do not
-repeat it);
-limitation: energy is not part of the decision. Its Fig.~1 is CC BY 4.0 and can be
-reused.}
+RecServe~\cite{wu2025recserve} deploys progressively larger models on the end device,
+the edge node and the cloud, and every query starts at the device. Each tier keeps the
+confidence scores of its last $k$ answers and sets its threshold at their
+$\beta$-quantile. If an answer's confidence reaches the threshold, it goes back to the
+user. Otherwise, the query moves to the next tier, which repeats the test, until it
+reaches the cloud. The threshold follows each tier's own recent scores, so it needs no
+manual tuning, and each tier passes up roughly a fraction $\beta$ of its queries. On
+sentiment classification and translation tasks, RecServe reaches accuracies close to
+those of the cloud alone, with a better trade-off between accuracy and communication
+than a cascade with fixed, hand-tuned thresholds. RecServe's theoretical
+analysis considers the cost of each tier, but only as a fixed number to guide the choice
+of $\beta$, and each query is still decided on its confidence alone.
 
 \label{sec:pakpahan}
-\todo{Pakpahan and Hwang, one or two paragraphs: tiers mapped onto the PON
-(Figure~\ref{fig:pakpahan}), controller, models per tier, their Table~1 comparing
-edge-cloud collaborative inference methods; limitation: confidence alone decides.}
+\citeonline{pakpahan2026continuum} bring this hierarchy into the access network, mapping
+four tiers onto a TWDM-PON (Figure~\ref{fig:pakpahan}). Tiny LLMs run on user devices,
+quantized models on ONUs equipped with an accelerator, models of 7 to 13 billion
+parameters on OLTs at the central office, and larger models in the cloud. Most of their
+work is on the network side, where a Software-Defined Networking (SDN) controller gives
+inference traffic its own priority queue in the DBA and switches on a second wavelength
+under congestion, reducing average inference latency by up to 50\% in simulation. Each
+tier decides whether to serve a request or pass it up with RecServe's rule, so here too
+the decision rests on confidence alone.
 
 \begin{figure}[!htb]
   \centering
@@ -388,31 +406,56 @@ edge-cloud collaborative inference methods; limitation: confidence alone decides
   \legend{Source: \cite{pakpahan2026continuum}}
 \end{figure}
 
-\todo{the other methods compared in Pakpahan and Hwang's Table~1, one paragraph each:
-Tabi, EdgeShard, and Draft-Verify (Hao et al.). PerLLM, also in that table, is
-energy-aware and goes in Section~\ref{sec:energy-routing}.}
+The other edge--cloud methods compared by \citeauthoronline{pakpahan2026continuum} split the
+work differently. Tabi~\cite{wang2023tabi} is a two-model cascade within one server,
+passing a query to the larger model when the smaller one's calibrated confidence falls
+below a threshold profiled offline for each task. EdgeShard~\cite{zhang2024edgeshard}
+splits a single LLM into shards of layers placed on edge devices and a cloud server, so
+every query runs the whole model and there is no decision to make per query. In the
+draft--verify method of \citeonline{hao2024hybrid}, a small model at the edge generates
+blocks of tokens that a large model in the cloud verifies, replacing the tokens it finds
+unlikely. It reaches the quality of the large model on GSM8K at 25.8\% of its cost,
+although every block needs a round trip to the cloud.
 
-\todo{synthesis of the group.}
+Of the works above, only RecServe and the architecture of
+\citeauthoronline{pakpahan2026continuum} decide at every tier whether to answer a query
+or pass it up, and both decide from confidence alone. None of these works, including
+those two, uses the energy spent at each tier to decide where a query is answered.
 
 \subsection{Energy-Aware LLM Serving and Routing}
 \label{sec:energy-routing}
 
-\todo{one paragraph per work (PerLLM, CR$^2$, GreenServ, EcoThink); then a comparison
-table and a synthesis (number of tiers, network model, decision basis).}
+Other works bring energy into the decision itself, choosing where, or by which model, a
+query is answered. PerLLM~\cite{yang2024perllm} schedules LLM requests between edge servers running small
+models and a cloud server running a larger one. A central scheduler assigns each request
+to one server so as to minimize transmission, inference and idle energy while meeting
+its deadline, reducing energy cost by more than 50\% compared with a cloud-only, an
+edge-only and another edge--cloud scheduler. The quality of the answers plays no part in
+the decision, as the authors acknowledge, and each request is placed once, with no
+second chance at a larger model.
 
-% Comparison table skeleton; uncomment when the rows are filled.
-% \begin{table}[htb]
-%   \centering
-%   \caption{Comparison of related works}
-%   \label{tab:related}
-%   \begin{tabular}{lcccc}
-%     \hline
-%     Work & Tiers & Energy-aware & Network model & Decision basis \\
-%     \hline
-%     % rows
-%     \hline
-%   \end{tabular}
-% \end{table}
+CR$^2$~\cite{xue2026cr2} routes queries between a small model on the user's device and
+a pool of larger models on an edge server. The device decides from the query alone
+whether to answer locally or defer, weighing accuracy against a cost that combines
+latency and energy, and the edge then picks one of its models for each deferred query.
+At the same accuracy, it reduces this cost by up to 16.9\% compared with the strongest
+baseline router. Energy is modeled as each platform's profiled power times its latency,
+so the cost of the edge changes with the wireless channel, but not with how busy the
+edge is.
+
+Energy-aware routing has also been applied within a single server. GreenServ learns
+online which of 16 LLMs gives the best trade-off between accuracy and measured GPU
+energy for each kind of query, and uses 31\% less energy than routing at
+random~\cite{ziller2026greenserv}. EcoThink sends simple queries to a small model that
+answers directly and complex ones to a larger model that reasons step by step, using
+40.4\% less energy than reasoning on every query~\cite{li2026ecothink}. Both
+choose among models on a single node rather than across network tiers, and GreenServ
+serves one query at a time, so the energy of a query does not depend on the others being
+served.
+
+In the tiered works, the decision is made at every tier from the confidence of an
+answer, but energy is left out of it. The energy-aware works use energy, but decide once
+per query, over two tiers at most, before any model has answered.
 
 \section{Challenges Addressed in This Work}
 \label{sec:challenges}
