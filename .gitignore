@@ -248,3 +248,7 @@ thesis/latex/tcc.pdf
 # to_review/ (proposed, not cited yet), and loose PDFs at the
 # top (collected, not cited).
 thesis/papers/
+
+# olcli (Overleaf sync) local state
+thesis/latex/.olcli.json
+.claude/scheduled_tasks.lock
