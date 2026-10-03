@@ -81,9 +81,11 @@ def burstgpt_sessions() -> dict:
     """Measure the shape of one burst of conversation in BurstGPT, for the household generator.
 
     A session is one conversation, the closest the trace comes to a user: it has no user id.
-    Three shapes are kept, each as an inverse CDF so the simulator resamples the measured
-    distribution instead of a fitted one: how many requests a conversation holds, how long
-    its author pauses between two of them, and when conversations start over the day.
+    Four shapes are kept, so the simulator resamples what was measured rather than a fitted
+    curve: how many requests a burst holds, how long its author pauses between two of them,
+    when bursts open over the day, and how much quieter a weekend is than a weekday. The
+    first two are stored as inverse CDFs, the last two as mean bursts per hour of each day
+    type.
 
     Downloads BurstGPT_3.csv (232 MB) once into implementation/.cache/load_traces/.
 
@@ -116,9 +118,21 @@ def burstgpt_sessions() -> dict:
     per_session = c.groupby(burst).size()
     gap = gap[(~opens) & (gap > 0)]
 
-    # --- When bursts open, by hour of day, relative to the busiest hour ---
-    first = c["Timestamp"][opens.to_numpy()]
-    by_hour = np.bincount(((first - start) // 3600 % 24).astype(int), minlength=24).astype(float)
+    # --- When bursts open, split by hour of day and by weekday or weekend ---
+    # The trace runs about twice as busy on a weekday as at the weekend, and the two shapes
+    # differ. Without that split the generated week is flat, and a timetable that knows the
+    # calendar would have nothing to be right about.
+    first = (c["Timestamp"][opens.to_numpy()] - start).to_numpy()
+    day = (first // 86400).astype(int)
+    hour = (first // 3600 % 24).astype(int)
+    opened_per_dow = [int((day % 7 == d).sum()) for d in range(7)]
+    weekend = sorted(int(d) for d in np.argsort(opened_per_dow)[:2])
+    is_weekend = np.isin(day % 7, weekend)
+    by_type = {}
+    for name, rows in (("weekday", ~is_weekend), ("weekend", is_weekend)):
+        days_of_type = max(len(np.unique(day[rows])), 1)
+        counts = np.bincount(hour[rows], minlength=24).astype(float)
+        by_type[name] = [round(v, 3) for v in counts / days_of_type]
 
     q = (np.arange(ICDF_POINTS) + 0.5) / ICDF_POINTS
     return {
@@ -133,7 +147,8 @@ def burstgpt_sessions() -> dict:
         "requests_per_session_mean": round(float(per_session.mean()), 3),
         "requests_per_session_icdf": [int(v) for v in per_session.quantile(q)],
         "think_time_s_icdf": [round(float(v), 1) for v in gap.quantile(q)],
-        "starts_by_hour": [round(float(v), 4) for v in by_hour / by_hour.max()],
+        "weekend_days_mod7": weekend,
+        "starts_by_hour": by_type,
     }
 
 

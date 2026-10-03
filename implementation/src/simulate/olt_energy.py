@@ -8,8 +8,6 @@ import math
 import sys
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
 from energy.three_tier import OltCurve
 
@@ -95,96 +93,3 @@ class Energy:
                 dec += w * b
             self._cache[key] = (pf, dec)
         return self._cache[key]
-
-
-class OltReporter:
-    """The OLT's own mean energy rate over the last few minutes of its traffic.
-
-    Much steadier than one query's rate (which under marginal accounting is ~100x higher
-    when the query found the OLT idle), and at most `minutes` old. It rides on an answer
-    (piggyback) or goes out in the OLT's broadcast.
-    """
-
-    # ==========================================
-    # Initialization
-    # ==========================================
-    def __init__(
-        self,
-        load_at,
-        prices: Energy,
-        curve: OltCurve,
-        olt_tokens: float,
-        minutes: float,
-        max_load: float,
-        rng,
-    ):
-        """Set up the reporter.
-
-        Args:
-            load_at: The OLT's true load at any times.
-            prices: True energy rates.
-            curve: The OLT's measured curve.
-            olt_tokens: Mean tokens of an OLT answer (for service time, Little's law).
-            minutes: The averaging window.
-            max_load: The run's highest load, to size the batch table.
-            rng: This report stream's own random generator.
-        """
-        self.load_at, self.curve, self.tok, self.minutes, self.rng = (
-            load_at,
-            curve,
-            olt_tokens,
-            minutes,
-            rng,
-        )
-        self.kmax = max(
-            int(max_load + 8 * math.sqrt(max_load) + 10), 80
-        )  # rates hold at batch 64 beyond
-        self.table = np.array([prices.olt(1 + k) for k in range(self.kmax + 1)])
-        self.log_b, self.log_tps = np.log(curve.b), np.log(curve.tps)
-
-    # ==========================================
-    # Reports
-    # ==========================================
-    def _arrivals_per_s(self, loads: np.ndarray) -> np.ndarray:
-        """Return arrivals per second at these loads (Little's law, service at batch 1 + load)."""
-        b = np.clip(1 + loads, self.curve.b[0], self.curve.b[-1])
-        tps = np.exp(np.interp(np.log(b), self.log_b, self.log_tps))
-        return loads / (self.tok / (tps / b))
-
-    def means_at(self, ts, chunk: int = 2000) -> list:
-        """Return the OLT's report at each of these times.
-
-        Over the window the OLT sees n ~ Poisson(arrivals) queries, each meeting its own
-        batch, 1 + Poisson(load at its time); the report is the mean of their rates.
-
-        Args:
-            ts: Times, in hours.
-            chunk: How many times to compute at once.
-
-        Returns:
-            [(J/prompt token, J/generated token)] per time.
-        """
-        ts, w, out = np.asarray(ts, dtype=float), self.minutes / 60, []
-        for c in range(0, len(ts), chunk):
-            t = ts[c : c + chunk]
-            n = np.maximum(
-                1,
-                self.rng.poisson(self._arrivals_per_s(self.load_at(t - w / 2)) * self.minutes * 60),
-            )
-            when = np.repeat(t, n) - w * self.rng.random(int(n.sum()))  # each arrival in the window
-            k = np.minimum(self.rng.poisson(self.load_at(when)), self.kmax)  # the batch it met
-            sums = np.add.reduceat(self.table[k], np.concatenate([[0], np.cumsum(n)[:-1]]), axis=0)
-            out += [(float(pf), float(dec)) for pf, dec in sums / n[:, None]]
-        return out
-
-    def broadcasts(self, times, interval_s: float) -> list:
-        """Return what a household knows at each arrival: the OLT's last broadcast before it.
-
-        Args:
-            times: Arrival times, in hours.
-            interval_s: Seconds between broadcasts.
-        """
-        dt = interval_s / 3600
-        slots, which = np.unique(np.floor(np.asarray(times) / dt), return_inverse=True)
-        sent = self.means_at(slots * dt)
-        return [sent[j] for j in which]

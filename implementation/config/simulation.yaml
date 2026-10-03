@@ -28,48 +28,23 @@ recserve:
   # data (energy_tests.md §4), but is not RecServe's. [source: RecServe]
   confidence: mean
 
-load:
-  # OLT load at the busiest hour of the average (training) day, in queries in
-  # service. Unknown for a real OLT, so it is swept. [swept]
-  peak_loads: [0.5, 1, 2, 4, 8, 16, 32]
-  # Replay BurstGPT's hourly requests as the OLT's load: conversation (people
-  # chatting), api, all; null = the synthetic average day. [data: data/load_traces/]
-  load_trace: null
-  # Trace days static_day and static_hour are calibrated on;
-  # every policy then runs on the days after. [choice: half of BurstGPT's 61 days]
-  train_days: 30
-  # Synthetic average day only: log-sd and correlation time (hours) of the load's
-  # drift off it. Measured on the traces: sigma 0.24-0.61, tau 1-14 h
-  # (data/load_traces/drift_fit.json). [swept]
-  load_sigma: 0.0
-  load_tau: 12.0
-  # Synthetic average day only: days simulated. With a trace the run covers every
-  # day after train_days. [choice]
-  days: 3
-
-surges:
-  # Unforeseen events on the replayed trace's load (load_trace only): what no
-  # timetable or calendar knows about -- a news surge, a big game running long, a
-  # neighbouring OLT's traffic moved here, an outage elsewhere. Each event
-  # multiplies the OLT's load by surge_factor (a surge) or divides it (a dip),
-  # equally likely. 1 = none: the trace as recorded. [swept]
-  surge_factor: 1.0
-  # Expected events a day, a Poisson process. [choice]
-  surge_per_day: 1.0
-  # Length of an event, hours. [choice]
-  surge_hours: 3.0
-
-cascade:
-  # Households sharing the OLT. Each has its own phone and ONU and learns the
-  # OLT's cost from its own answers only. [swept]
-  households: 1
-  # Queries a day at each household's phone. No source for a real household. [swept]
-  per_day: 2000
-  # When the households send their queries (with load_trace only). trace: in
-  # proportion to the trace's traffic, so they are busiest when the OLT is (the same
-  # people, the same day). flat: the same number every hour, so their demand is
-  # independent of the OLT's load: a sensitivity check on that assumption. [choice]
-  household_shape: trace
+traffic:
+  # Households on the OLT. Unknown for any one deployment, so it is swept. A Huawei
+  # MA5800-X2 carries up to 16,000 subscribers and a ZTE C600 up to 34,816; below about
+  # 2,000 the OLT almost never holds two queries at once. [swept: vendor datasheets]
+  subscribers: [1000, 2000, 5000, 10000, 20000]
+  # Weekly-active LLM users in one household. The weakest number here: it moves the
+  # OLT's batch about as much as the subscriber count does. [choice: no Brazilian
+  # adoption figure yet]
+  users_per_home: 1.0
+  # Messages one active user sends a day. ChatGPT's consumer figures for July 2025:
+  # 2.5 billion messages a day over more than 700 million weekly users. BurstGPT's
+  # campus trace gives about 4 independently. [source: Chatterji et al.]
+  per_user_day: 3.6
+  # Days simulated, and the days before them the timetable is observed over. A month
+  # is what an operator would have watched before shipping a table. [choice]
+  test_days: 28
+  calibration_days: 28
 
 energy:
   # Where the OLT's energy is counted: system = whole server and building at

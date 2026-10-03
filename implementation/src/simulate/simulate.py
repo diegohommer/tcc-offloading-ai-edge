@@ -2,7 +2,7 @@
 """Simulate households' queries through the phone -> ONU -> OLT cascade, under each policy.
 
 Every answer is replayed from the recorded collection, so no model runs here. Results come
-out per OLT peak load, RecServe beta and policy, and policies are compared at equal
+out per OLT size, RecServe beta and policy, and policies are compared at equal
 accuracy. Usage and the meaning of every setting: README.md and config/simulation.yaml.
 """
 
@@ -23,7 +23,7 @@ import numpy as np
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
-from cascade import POLICIES, run, RunSetup
+from cascade import calibrate, POLICIES, run, RunSetup
 from energy.three_tier import (
     load_answers,
     olt_factor,
@@ -35,9 +35,8 @@ from energy.three_tier import (
     TIERS,
 )
 from frontier import frontier, iso_accuracy
-from load_modes import SyntheticMode, TraceMode
-from olt_energy import Energy, OltReporter
-from olt_load import BURSTGPT
+from households import Households
+from olt_energy import Energy
 
 CONFIG = ROOT / "config" / "simulation.yaml"
 """The default settings file."""
@@ -47,10 +46,10 @@ ADHOC = ROOT / "results" / "adhoc"
 
 
 def main() -> int:
-    """Run every policy at every OLT peak load and beta, print the tables and write the results.
+    """Run every policy at every OLT size and beta, print the tables and write the results.
 
     The steps, each a function below: read_settings, answers_by_question,
-    check_combinations, build_prices; then, per OLT peak load, prepare_peak, olt_summary
+    check_combinations, build_prices; then, per OLT size, prepare_population, olt_summary
     and run_policies; finally print_tables and write_results.
 
     Returns:
@@ -64,13 +63,12 @@ def main() -> int:
     if answers is None:
         return 1
     policies = s.policies.split(",")
-    if not check_combinations(s, policies):
+    if not check_combinations(policies):
         return 1
     published, factor, curve, prices = build_prices(s)
-    mode = (TraceMode if s.load_trace else SyntheticMode)(s, sorted(answers))
     betas = [float(b) for b in s.betas.split(",")]
     targets = [float(t) for t in s.acc_targets.split(",")]
-    peaks = [float(p) for p in s.peak_loads.split(",")]
+    sizes = [int(n) for n in s.subscribers.split(",")]
     # each tier's mean prompt and answer length, and the phone's and ONU's fixed J per query
     mean_tokens = {
         t: (
@@ -83,32 +81,31 @@ def main() -> int:
         t: published[t]["pf"] * mean_tokens[t][0] + published[t]["dec"] * mean_tokens[t][1]
         for t in ("user", "onu")
     }
-    print_header(s, sources, answers, mode, factor, accuracy, fixed)
+    print_header(s, sources, answers, factor, accuracy, fixed)
 
     # --- Every OLT peak load, beta and policy ---
     rows, hourly, configs, frontiers = [], [], [], []
-    for peak in peaks:
-        setup = prepare_peak(peak, s, mode, answers, prices, curve, mean_tokens, policies)
-        configs.append(olt_summary(peak, mode, setup, prices, curve, mean_tokens))
-        print_peak_line(configs[-1])
-        block, block_hourly = run_policies(setup, peak, betas, policies)
+    for subs in sizes:
+        setup, homes = prepare_population(subs, s, answers, curve, prices)
+        configs.append(olt_summary(subs, homes, setup))
+        print(f"{homes.describe()}; {len(setup.stream):,} queries simulated")
+        block, block_hourly = run_policies(setup, subs, betas, policies)
         iso_accuracy(block)  # adds each row's saving against RecServe at equal accuracy
         rows += block
         hourly += block_hourly
         for p in policies:
             frontiers.append(
                 {
-                    "peak_load": peak,
+                    "subscribers": subs,
                     "policy": p,
                     "J_at_accuracy": frontier([r for r in block if r["policy"] == p], targets),
                 }
             )
 
     # --- Output ---
-    print_tables(rows, betas, peaks, policies, frontiers, targets)
+    print_tables(rows, betas, sizes, policies, frontiers, targets)
     write_results(
         s,
-        mode,
         rows,
         hourly,
         configs,
@@ -162,7 +159,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     )
     add = ap.add_argument
     add("--betas", help="comma-separated RecServe beta values")
-    add("--peak-loads", help="comma-separated OLT loads at the busiest hour, in queries in service")
+    add("--subscribers", help="comma-separated household counts on the OLT")
     add(
         "--boundary",
         choices=("system", "system-low", "gpu"),
@@ -180,8 +177,6 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         choices=("average", "marginal"),
         help="share of the batch, or what a query adds",
     )
-    add("--load-sigma", type=float, help="log-sd of the synthetic load's drift (0 = none)")
-    add("--load-tau", type=float, help="correlation time of that drift, hours")
     add(
         "--report",
         choices=("query", "window"),
@@ -198,23 +193,10 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add("--alpha", type=float, help="EWMA weight for learned answer lengths and escalation rates")
     add("--rate-alpha", type=float, help="EWMA weight for reported energy rates (unset: --alpha)")
     add("--warmup", type=int, help="reports per tier before a household decides")
-    add("--days", type=int, help="days simulated on the synthetic average day")
-    add("--per-day", type=int, help="queries per day at the user tier, per household")
-    add("--households", type=int, help="households sharing the OLT, each learning on its own")
-    add(
-        "--household-shape",
-        choices=("trace", "flat"),
-        help="households' queries over the day: like the OLT's load, or flat",
-    )
-    add(
-        "--load-trace",
-        choices=("conversation", "api", "all"),
-        help="replay BurstGPT's hourly requests as the OLT's load (data/load_traces/)",
-    )
-    add("--train-days", type=int, help="trace days the configs and the schedule are calibrated on")
-    add("--surge-factor", type=float, help="load multiplier of an unforeseen event (1 = none)")
-    add("--surge-per-day", type=float, help="expected unforeseen events a day")
-    add("--surge-hours", type=float, help="length of an unforeseen event, hours")
+    add("--users-per-home", type=float, help="weekly-active LLM users in one household")
+    add("--per-user-day", type=float, help="messages one active user sends a day")
+    add("--test-days", type=int, help="days simulated")
+    add("--calibration-days", type=int, help="days before them the timetable is observed over")
     add("--broadcast-interval-s", type=float, help="seconds between the OLT's broadcasts")
     add(
         "--shared-stats",
@@ -289,7 +271,7 @@ def answers_by_question(confidence: str):
     return answers, accuracy, models, sources
 
 
-def check_combinations(s, policies) -> bool:
+def check_combinations(policies) -> bool:
     """Check that the settings can go together.
 
     Args:
@@ -301,24 +283,6 @@ def check_combinations(s, policies) -> bool:
     """
     if "recserve" not in policies or not set(policies) <= set(POLICIES):
         print(f"--policies must include recserve and come from {POLICIES}", file=sys.stderr)
-        return False
-    if s.load_trace and s.load_sigma:
-        print(
-            "--load-trace replays a real load; --load-sigma drifts the synthetic average day",
-            file=sys.stderr,
-        )
-        return False
-    if s.household_shape == "flat" and not s.load_trace:
-        print(
-            "--household-shape flat applies to a replayed trace: use it with --load-trace",
-            file=sys.stderr,
-        )
-        return False
-    if s.surge_factor != 1 and not s.load_trace:
-        print(
-            "--surge-factor adds events to a replayed trace: use it with --load-trace",
-            file=sys.stderr,
-        )
         return False
     return True
 
@@ -343,113 +307,85 @@ def build_prices(s):
 # ==========================================
 # One OLT peak load
 # ==========================================
-def prepare_peak(peak, s, mode, answers, prices, curve, mean_tokens, policies) -> RunSetup:
-    """Build what every run at this OLT peak load shares, so the runs differ only by policy.
+def prepare_population(subs, s, answers, curve, prices):
+    """Build the stream one OLT size runs on, and the timetable it ships with.
+
+    Two streams come out of the same population: the calibration days, which only exist so
+    the static tables have a month to be observed over, and the test days that follow. The
+    seeds differ so the two are not the same month twice.
 
     Args:
-        peak: The OLT's load at its busiest hour.
+        subs: Households on the OLT.
         s: The parsed settings.
-        mode: The load mode (TraceMode or SyntheticMode).
         answers: answers[question][tier].
-        prices: True energy rates.
         curve: The OLT's measured curve.
-        mean_tokens: Each tier's mean (prompt, answer) length.
-        policies: The policies to run.
+        prices: True energy rates.
 
     Returns:
-        The RunSetup: the same batches, static rates and OLT reports for every policy.
+        (the RunSetup every policy at this size shares, the Households that made it).
     """
-    rng = np.random.default_rng([s.seed, int(peak * 1000)])
-    loads = [peak * mode.relative_load(t) * m for (_, t, _), m in zip(mode.stream, mode.multiplier)]
-    batches = [1 + int(k) for k in rng.poisson(loads)]  # the OLT batch each query would meet
-    static_rates = mode.static_rates(peak, prices, loads)
+    homes = Households(subs, s.users_per_home, s.per_user_day)
+    questions = sorted(answers)
 
-    def reporter(stream_id):
-        """Return the OLT's own-mean reporter; stream_id keeps each stream's randomness apart."""
-        return OltReporter(
-            lambda ts: mode.load_at(ts, peak),
-            prices,
-            curve,
-            mean_tokens["olt"][1],
-            s.report_window,
-            max(loads),
-            np.random.default_rng([s.seed, int(peak * 1000), stream_id]),
-        )
+    def schedule_key(hour):
+        """Return static_hour's cell for a time: (0 weekday / 1 weekend, hour of day)."""
+        return (0 if homes.weekday(int(hour // 24)) else 1, int(hour) % 24)
 
-    olt_reports = (
-        reporter(2).means_at(mode.times)
-        if s.report == "window" and "piggyback" in policies
-        else None
-    )
-    broadcasts = (
-        reporter(3).broadcasts(mode.times, s.broadcast_interval_s)
-        if "broadcast" in policies
-        else None
-    )
-    return RunSetup(
+    watched = RunSetup(
         answers=answers,
-        stream=mode.stream,
-        batches=batches,
-        loads=loads,
+        stream=homes.stream(questions, s.calibration_days, 0, s.seed),
+        curve=curve,
         prices=prices,
-        static_rates=static_rates,
+        static_rates={},
         settings=s,
-        olt_reports=olt_reports,
-        schedule_key=mode.schedule_key,
-        broadcasts=broadcasts,
+        schedule_key=schedule_key,
     )
+    # One table is observed and then shipped, whatever beta the operator later runs at, so
+    # the calibration happens once at the middle of the sweep rather than per beta.
+    betas = sorted(float(b) for b in s.betas.split(","))
+    setup = RunSetup(
+        answers=answers,
+        stream=homes.stream(questions, s.test_days, s.calibration_days, s.seed + 1),
+        curve=curve,
+        prices=prices,
+        static_rates=calibrate(watched, betas[len(betas) // 2]),
+        settings=s,
+        schedule_key=schedule_key,
+    )
+    return setup, homes
 
 
-def olt_summary(peak, mode, setup, prices, curve, mean_tokens) -> dict:
-    """Summarize what the OLT costs over the day at this peak load, for the printout and the JSON.
+def olt_summary(subs, homes, setup) -> dict:
+    """Summarize the population and what it sends, for the printout and the JSON.
+
+    What the OLT then costs is no longer something to summarize here: it depends on the
+    policy, so each run reports its own mean batch.
 
     Args:
-        peak: The OLT's load at its busiest hour.
-        mode: The load mode.
-        setup: This peak load's RunSetup.
-        prices: True energy rates.
-        curve: The OLT's measured curve.
-        mean_tokens: Each tier's mean (prompt, answer) length.
+        subs: Households on the OLT.
+        homes: The Households that made the stream.
+        setup: This size's RunSetup.
 
     Returns:
         The summary, one entry of the JSON's "configs".
     """
-
-    def per_query(rates):
-        """Return J per query at the OLT's mean prompt and answer length."""
-        return rates[0] * mean_tokens["olt"][0] + rates[1] * mean_tokens["olt"][1]
-
-    olt_query_joules = [
-        prices.rates("olt", b)[0] * setup.answers[q]["olt"]["tp"]
-        + prices.rates("olt", b)[1] * setup.answers[q]["olt"]["tg"]
-        for (q, _, _), b in zip(setup.stream, setup.batches)
-    ]
-    service_s = curve.service_s(
-        1 + peak, mean_tokens["olt"][1]
-    )  # Little's law: load = arrivals x time
     return {
-        "peak_load": peak,
-        "peak_arrivals_per_h": peak / service_s * 3600,
-        "trough_load": peak * min(mode.average_day),
-        "max_load_in_service": max(setup.loads),  # the curve is measured to batch 64
-        "share_arrivals_over_64": float(np.mean(np.array(setup.loads) > 63)),
-        "olt_service_s_at_peak": service_s,
-        "olt_J_per_query_mean": st.mean(olt_query_joules),
-        "olt_J_per_query_peak_hour": prices.expected_olt(peak)[0] * mean_tokens["olt"][0]
-        + prices.expected_olt(peak)[1] * mean_tokens["olt"][1],
-        "olt_J_per_query_trough_hour": per_query(prices.expected_olt(peak * min(mode.average_day))),
-        "olt_hourly_J_per_query": [
-            per_query(prices.expected_olt(peak * mode.average_day[h])) for h in range(24)
-        ],
+        "subscribers": subs,
+        "users_per_home": homes.users,
+        "messages_per_user_day": homes.per_user_day,
+        "messages_per_day": homes.messages_per_day,
+        "bursts_per_day": homes.sessions_per_day,
+        "queries_simulated": len(setup.stream),
+        "weekend_days_mod7": sorted(homes.weekend),
     }
 
 
-def run_policies(setup: RunSetup, peak, betas, policies):
-    """Run every beta and policy at this peak load.
+def run_policies(setup: RunSetup, subs, betas, policies):
+    """Run every beta and policy at this OLT size.
 
     Args:
-        setup: This peak load's RunSetup.
-        peak: The OLT's load at its busiest hour.
+        setup: This size's RunSetup.
+        subs: Households on the OLT.
         betas: RecServe's beta values.
         policies: The policies to run.
 
@@ -459,11 +395,11 @@ def run_policies(setup: RunSetup, peak, betas, policies):
     block, block_hourly = [], []
     for beta in betas:
         for policy in policies:
-            metrics, hours = run(setup, beta, policy)
-            block.append({"peak_load": peak, "beta": beta, "policy": policy, **metrics})
+            metrics, hours, _ = run(setup, beta, policy)
+            block.append({"subscribers": subs, "beta": beta, "policy": policy, **metrics})
             if not setup.settings.no_hourly:
                 block_hourly.append(
-                    {"peak_load": peak, "beta": beta, "policy": policy, "hours": hours}
+                    {"subscribers": subs, "beta": beta, "policy": policy, "hours": hours}
                 )
     return block, block_hourly
 
@@ -471,13 +407,13 @@ def run_policies(setup: RunSetup, peak, betas, policies):
 # ==========================================
 # Printout and files
 # ==========================================
-def print_header(s, sources, answers, mode, factor, accuracy, fixed) -> None:
+def print_header(s, sources, answers, factor, accuracy, fixed) -> None:
     """Print the run's settings and inputs, before any policy runs."""
     reports = f"its {s.report_window:g}-min mean" if s.report == "window" else "per query"
     print(f"answers: {', '.join(sources)}")
     print(
-        f"n={len(answers)} queries, {len(mode.stream)} arrivals over {mode.describe()}; "
-        f"{s.households} household(s) x {s.per_day}/day; confidence exp({s.confidence}); "
+        f"n={len(answers)} questions; {s.test_days} days after {s.calibration_days} "
+        f"calibration days; confidence exp({s.confidence}); "
         f"OLT boundary {s.boundary} (x{factor:.2f}), {s.accounting} accounting; OLT reports "
         f"{reports}; delta={s.delta}, window={s.window}"
     )
@@ -485,25 +421,16 @@ def print_header(s, sources, answers, mode, factor, accuracy, fixed) -> None:
     print(f"per query: user {fixed['user']:.1f} J, ONU {fixed['onu']:.1f} J (fixed)\n")
 
 
-def print_peak_line(cfg) -> None:
-    """Print one line per OLT peak load: its traffic and what an OLT query costs over the day."""
-    print(
-        f"peak load {cfg['peak_load']:g}: ~{cfg['peak_arrivals_per_h']:,.0f} OLT queries/h at peak; "
-        f"OLT J/query {cfg['olt_J_per_query_trough_hour']:.0f} (trough) to "
-        f"{cfg['olt_J_per_query_peak_hour']:.0f} (peak), all-OLT mean {cfg['olt_J_per_query_mean']:.0f}"
-    )
-
-
-def print_tables(rows, betas, peaks, policies, frontiers, targets) -> None:
-    """Print every result row, the median saving per peak load, and J per query at equal accuracy."""
+def print_tables(rows, betas, sizes, policies, frontiers, targets) -> None:
+    """Print every result row, the median saving per OLT size, and J per query at equal accuracy."""
     # --- Every row ---
     print(
-        f"\n{'load':>5} {'beta':>5} {'policy':>10} {'acc':>7} {'J/query':>8} {'saving':>7} {'fwd':>6} "
+        f"\n{'homes':>7} {'beta':>5} {'policy':>10} {'acc':>7} {'J/query':>8} {'saving':>7} {'fwd':>6} "
         f"{'skip':>6} {'rate err':>8} | " + " ".join(f"{t:>6}" for t in TIERS)
     )
     for r in rows:
         print(
-            f"{r['peak_load']:5g} {r['beta']:5.1f} {r['policy']:>10} {r['accuracy']:7.4f} "
+            f"{r['subscribers']:7d} {r['beta']:5.1f} {r['policy']:>10} {r['accuracy']:7.4f} "
             f"{r['J_per_query']:8.1f} {r['saving_same_accuracy']:7.1%} {r['forwarded_on_arrival']:6.1%} "
             f"{r['skipped_on_escalation']:6.1%} {r['olt_rate_error']:8.1%} | "
             + " ".join(f"{r['final_' + t]:6.1%}" for t in TIERS)
@@ -513,38 +440,40 @@ def print_tables(rows, betas, peaks, policies, frontiers, targets) -> None:
 
     # --- Median saving ---
     print("median saving at equal accuracy, across beta:")
-    for peak in peaks:
+    for subs in sizes:
         med = {
             p: np.nanmedian(
                 [
                     r["saving_same_accuracy"]
                     for r in rows
-                    if r["peak_load"] == peak and r["policy"] == p
+                    if r["subscribers"] == subs and r["policy"] == p
                 ]
                 or [float("nan")]
             )
             for p in policies
             if p != "recserve"
         }
-        print(f"  peak load {peak:5g}: " + "  ".join(f"{p} {v:6.1%}" for p, v in med.items()))
+        print(f"  {subs:7,} households: " + "  ".join(f"{p} {v:6.1%}" for p, v in med.items()))
 
     # --- J per query at equal accuracy ---
     print(
         "\nJ/query at equal accuracy, each policy's own frontier (- = accuracy out of its range):"
     )
-    print(f"{'load':>5} {'acc':>5} " + " ".join(f"{p:>10}" for p in policies))
-    for peak in peaks:
+    print(f"{'homes':>7} {'acc':>5} " + " ".join(f"{p:>10}" for p in policies))
+    for subs in sizes:
         for a in [f"{t:.2f}" for t in targets if round(t, 2) in (0.70, 0.80)]:
-            vals = {f["policy"]: f["J_at_accuracy"][a] for f in frontiers if f["peak_load"] == peak}
+            vals = {
+                f["policy"]: f["J_at_accuracy"][a] for f in frontiers if f["subscribers"] == subs
+            }
             print(
-                f"{peak:5g} {a:>5} "
+                f"{subs:7d} {a:>5} "
                 + " ".join(
                     f"{vals[p]:10.1f}" if vals[p] is not None else f"{'-':>10}" for p in policies
                 )
             )
 
 
-def output_path(s, mode) -> Path:
+def output_path(s) -> Path:
     """Return --out, or results/adhoc/sim_<tag>_<UTC>.csv with a tag naming every non-default setting."""
     if s.out:
         return s.out
@@ -553,11 +482,8 @@ def output_path(s, mode) -> Path:
         s.boundary
         + (f"_onu{s.onu_scale:g}" if s.onu_scale != 1 else "")
         + (f"_olt{s.olt_scale:g}" if s.olt_scale != 1 else "")
-        + ("_flat" if s.household_shape == "flat" else "")
-        + mode.tag()
         + ("_shared" if s.shared_stats else "")
-        + (f"_hh{s.households}x{s.per_day}" if s.households > 1 else "")
-        + (f"_sigma{s.load_sigma:g}" if s.load_sigma else "")
+        + (f"_u{s.users_per_home:g}x{s.per_user_day:g}" if s.users_per_home != 1 else "")
         + ("_marginal" if s.accounting == "marginal" else "")
         + ("_window" if s.report == "window" else "")
         + (f"_ra{s.rate_alpha:g}" if s.rate_alpha is not None else "")
@@ -566,16 +492,15 @@ def output_path(s, mode) -> Path:
 
 
 def write_results(
-    s, mode, rows, hourly, configs, frontiers, sources, models, factor, accuracy, fixed, mean_tokens
+    s, rows, hourly, configs, frontiers, sources, models, factor, accuracy, fixed, mean_tokens
 ) -> None:
     """Write the CSV (one row per load, beta, policy) and the JSON (plus settings, inputs, frontiers)."""
-    out = output_path(s, mode)
+    out = output_path(s)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="", encoding="utf-8") as f:
         wr = csv.DictWriter(f, fieldnames=list(rows[0]))
         wr.writeheader()
         wr.writerows(rows)
-    load_trace, surges = mode.json_fields()
     with open(out.with_suffix(".json"), "w", encoding="utf-8") as f:
         json.dump(
             {
@@ -586,9 +511,6 @@ def write_results(
                 "accuracy": accuracy,
                 "fixed_J_per_query": fixed,
                 "mean_tokens": mean_tokens,
-                "burstgpt": BURSTGPT,
-                "load_trace": load_trace,
-                "surges": surges,
                 "configs": configs,
                 "rows": rows,
                 "frontiers": frontiers,

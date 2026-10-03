@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import collections
 import heapq
-import random
 import statistics as st
 import sys
 from dataclasses import dataclass
@@ -21,7 +20,6 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
 from energy.three_tier import TIERS
-from olt_load import BURSTGPT
 from olt_server import OltServer
 from routing import Learned, on_arrival, on_escalation, TOP, Window
 
@@ -393,52 +391,3 @@ def calibrate(setup: RunSetup, beta: float) -> dict:
         "stale_high": setup.prices.rates("olt", max(int(batch * stale), 1)),
         "static_hour": observed,
     }
-
-
-# ==========================================
-# Query stream
-# ==========================================
-def build_stream(questions, days, per_day, seed, households=1, trace=None, shape="trace"):
-    """Build the time-ordered arrivals at the households' phones.
-
-    Without a trace every day is BurstGPT's average day. With one, arrivals cover the
-    trace's days after training, a Poisson number per hour. Questions are drawn at random
-    with replacement, and each arrival belongs to a household drawn at random.
-
-    Args:
-        questions: The question indices that can be asked.
-        days: Days simulated (synthetic mode only).
-        per_day: Queries per day, per household.
-        seed: Random seed.
-        households: Households sharing the OLT.
-        trace: A TraceLoad to follow, or None for the synthetic average day.
-        shape: "trace" (busiest when the OLT is) or "flat" (the same every hour).
-
-    Returns:
-        [(question, time in hours, household)], sorted by time.
-    """
-    rng = random.Random(seed)
-    pick_household = (lambda: rng.randrange(households)) if households > 1 else (lambda: 0)
-    out = []
-    if trace is None:
-        total = sum(BURSTGPT)
-        for day in range(days):
-            times = []
-            for h in range(24):
-                times += [
-                    24 * day + h + rng.random()
-                    for _ in range(round(per_day * households * BURSTGPT[h] / total))
-                ]
-            out += [(rng.choice(questions), t, pick_household()) for t in sorted(times)]
-        return out
-    nprng = np.random.default_rng([seed, 31])
-    test_days = trace.c[trace.train_days :]
-    per_request = per_day * households * len(test_days) / test_days.sum()
-    for d, day in enumerate(test_days):
-        for h, requests in enumerate(day):
-            if shape == "flat":
-                requests = test_days.mean()
-            t0 = 24 * (trace.train_days + d) + h
-            for t in sorted(t0 + nprng.random(nprng.poisson(per_request * requests))):
-                out.append((rng.choice(questions), float(t), pick_household()))
-    return out

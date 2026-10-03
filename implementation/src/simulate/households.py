@@ -62,9 +62,16 @@ class Households:
 
         self._len = np.array(self.stats["requests_per_session_icdf"])
         self._think = np.array(self.stats["think_time_s_icdf"])
-        shape = np.array(self.stats["starts_by_hour"], dtype=float)
-        self._starts = shape / shape.sum()
-        """Share of a day's conversations that open in each hour."""
+        self.weekend = set(self.stats["weekend_days_mod7"])
+        """Days of the week (index mod 7) the trace runs quiet."""
+
+        per_day = self.stats["sessions_per_day"]
+        self._starts = {
+            name: np.array(v, dtype=float) / per_day
+            for name, v in self.stats["starts_by_hour"].items()
+        }
+        """Bursts opening in each hour of a weekday and of a weekend day, per burst of an
+        average day, so scaling by this population's own rate keeps both shapes."""
 
     # ==========================================
     # The query stream
@@ -89,9 +96,15 @@ class Households:
         rng = np.random.default_rng([seed, 1709])
         qs = np.asarray(questions)
 
-        # --- How many conversations open in each hour of the run ---
+        # --- How many bursts open in each hour of the run, weekday or weekend ---
+        expected = np.concatenate(
+            [
+                self.sessions_per_day
+                * self._starts["weekend" if (first_day + d) % 7 in self.weekend else "weekday"]
+                for d in range(days)
+            ]
+        )
         hours = days * 24
-        expected = self.sessions_per_day * np.tile(self._starts, days)
         opened = rng.poisson(expected)
         total = int(opened.sum())
         if total == 0:
@@ -123,10 +136,18 @@ class Households:
             if times[i] < (first_day + days) * 24
         ]
 
+    def weekday(self, day: int) -> bool:
+        """Return whether a day of the run is a weekday.
+
+        Args:
+            day: Day index, in days since the trace's start.
+        """
+        return day % 7 not in self.weekend
+
     def describe(self) -> str:
         """Return the population, in one line of the printout."""
         return (
             f"{self.count:,} households x {self.users:g} active users x "
             f"{self.per_user_day:g} msg/day = {self.messages_per_day:,.0f} messages/day "
-            f"in {self.sessions_per_day:,.0f} conversations"
+            f"in {self.sessions_per_day:,.0f} bursts, weekends quieter"
         )
