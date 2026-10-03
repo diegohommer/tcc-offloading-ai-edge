@@ -27,6 +27,22 @@ OUT = ROOT / "data" / "load_traces"
 """Where the prepared counts are written."""
 
 BURSTGPT_URL = "https://github.com/HPMLL/BurstGPT/releases/download/v1.1/BurstGPT_1.csv"
+BURSTGPT3_URL = "https://github.com/HPMLL/BurstGPT/releases/download/v2.0/BurstGPT_3.csv"
+"""BurstGPT_3 is the only release carrying a Session ID, which is what a household is built from."""
+SESSION_GAP_S = 600
+"""A pause longer than this opens a new burst, so one burst is one sitting at the keyboard.
+
+Chosen as the value that reproduces BurstGPT's own hourly message curve: resampled bursts
+give a correlation of 0.998 and a peak/trough of 51x against the measured 52x. The 30-minute
+timeout conventional in web analytics gives nearly the same (0.994, 45x); leaving conversation
+ids uncut gives 12x, filling a night the trace shows as empty.
+"""
+ICDF_POINTS = 2000
+"""Points of each stored inverse CDF: enough to resample the measured shape without the raw rows.
+
+Taken at the midpoint of each bin rather than at 0 and 1, so the heaviest conversation in the
+trace does not get 1/ICDF_POINTS of the weight it would need 1/sessions of.
+"""
 AZURE_URL = (
     "https://github.com/Azure/AzurePublicDataset/releases/download/dataset-llm-2024/"
     "AzureLLMInferenceTrace_conv_1week.csv"
@@ -59,6 +75,66 @@ def burstgpt_hourly() -> pd.DataFrame:
         cols[name] = np.bincount(h[h < n], minlength=n)
     idx = np.arange(n)
     return pd.DataFrame({"day": idx // 24, "hour": idx % 24, **cols})
+
+
+def burstgpt_sessions() -> dict:
+    """Measure the shape of one burst of conversation in BurstGPT, for the household generator.
+
+    A session is one conversation, the closest the trace comes to a user: it has no user id.
+    Three shapes are kept, each as an inverse CDF so the simulator resamples the measured
+    distribution instead of a fitted one: how many requests a conversation holds, how long
+    its author pauses between two of them, and when conversations start over the day.
+
+    Downloads BurstGPT_3.csv (232 MB) once into implementation/.cache/load_traces/.
+
+    Returns:
+        The session statistics, written to data/load_traces/burstgpt_sessions.json.
+    """
+    raw = CACHE / "BurstGPT_3.csv"
+    if not raw.exists():
+        CACHE.mkdir(parents=True, exist_ok=True)
+        print(f"downloading {BURSTGPT3_URL}", file=sys.stderr)
+        urllib.request.urlretrieve(BURSTGPT3_URL, raw)
+    df = pd.read_csv(raw, usecols=["Timestamp", "Session ID", "Log Type"])
+
+    # --- Conversations only: the API log has no human pausing between requests ---
+    c = df[df["Log Type"] == "Conversation log"].copy()
+    c["Timestamp"] = c["Timestamp"].astype(float)
+    c = c.sort_values(["Session ID", "Timestamp"])
+    start = c["Timestamp"].min()
+    span_days = (c["Timestamp"].max() - start) / 86400
+
+    # --- Split each conversation into bursts at a pause longer than SESSION_GAP_S ---
+    # A conversation id can span a whole day: someone asks, leaves, and comes back after
+    # dinner. Resampling that pause as it stands would deliver messages at 4 am, which the
+    # trace never shows. Cutting at SESSION_GAP_S keeps a burst to one sitting.
+    gap = c.groupby("Session ID")["Timestamp"].diff()
+    opens = gap.isna() | (gap > SESSION_GAP_S)
+    burst = opens.cumsum()
+
+    # --- Requests per burst, and the pause between two of them ---
+    per_session = c.groupby(burst).size()
+    gap = gap[(~opens) & (gap > 0)]
+
+    # --- When bursts open, by hour of day, relative to the busiest hour ---
+    first = c["Timestamp"][opens.to_numpy()]
+    by_hour = np.bincount(((first - start) // 3600 % 24).astype(int), minlength=24).astype(float)
+
+    q = (np.arange(ICDF_POINTS) + 0.5) / ICDF_POINTS
+    return {
+        "source": BURSTGPT3_URL,
+        "log_type": "Conversation log",
+        "session_gap_s": SESSION_GAP_S,
+        "span_days": round(span_days, 1),
+        "sessions": int(len(per_session)),
+        "requests": int(len(c)),
+        "sessions_per_day": round(len(per_session) / span_days, 1),
+        "requests_per_day": round(len(c) / span_days, 1),
+        "requests_per_session_mean": round(float(per_session.mean()), 3),
+        "requests_per_session_icdf": [int(v) for v in per_session.quantile(q)],
+        "think_time_s_icdf": [round(float(v), 1) for v in gap.quantile(q)],
+        "starts_by_hour": [round(float(v), 4) for v in by_hour / by_hour.max()],
+    }
 
 
 def azure_hourly() -> pd.DataFrame:
@@ -191,6 +267,11 @@ def main() -> int:
     ap.add_argument(
         "--train-days", type=int, default=30, help="BurstGPT days a schedule is fitted on"
     )
+    ap.add_argument(
+        "--sessions",
+        action="store_true",
+        help="also measure the shape of a conversation from BurstGPT_3 (232 MB download)",
+    )
     args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -201,6 +282,16 @@ def main() -> int:
     for col in ("conversation", "api", "all"):
         c = b[col].to_numpy().reshape(-1, 24).astype(float)
         result["burstgpt"][col] = fit(c, args.train_days, weekly=True)
+
+    # --- Conversation shape, for the household generator (optional) ---
+    if args.sessions:
+        s = burstgpt_sessions()
+        with open(OUT / "burstgpt_sessions.json", "w", encoding="utf-8") as f:
+            json.dump(s, f, indent=1)
+        print(
+            f"burstgpt sessions: {s['sessions']:,} conversations over {s['span_days']} days, "
+            f"{s['sessions_per_day']}/day, {s['requests_per_session_mean']} requests each"
+        )
 
     # --- Azure 2024 (optional) ---
     if args.azure:
