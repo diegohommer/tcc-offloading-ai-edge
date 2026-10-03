@@ -17,6 +17,9 @@ import statistics as st
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
+from energy.three_tier import TIERS  # pylint: disable=wrong-import-position
+
 
 def welch_t(a: list[float], b: list[float]) -> float | None:
     """Return Welch's t for mean(a) - mean(b).
@@ -56,9 +59,9 @@ def main() -> int:
             by_tier[rec["tier"]].append(rec)
 
     failed = False
-    for tier in [t for t in ("user", "onu", "olt", "fog", "cloud") if t in by_tier] + [
-        t for t in by_tier if t not in ("user", "onu", "olt", "fog", "cloud")
-    ]:
+    for tier in sorted(
+        by_tier, key=lambda name: TIERS.index(name) if name in TIERS else len(TIERS)
+    ):
         # --- Integrity and formula, per answer ---
         recs = by_tier[tier]
         problems = collections.Counter()
