@@ -130,8 +130,12 @@ def run(setup: RunSetup, beta: float, policy: str):
         policy: One of POLICIES.
 
     Returns:
-        (metrics over the whole stream, per-hour detail).
+        (metrics over the whole stream, per-hour detail, the OLT rates seen in each
+        (day type, hour) cell, which is what a timetable is built from).
     """
+    # The loop below walks one query at a time. Two helpers sit between it and the numbers:
+    # settle() records a query whose answer is final, wherever it was produced, and land()
+    # settles the ones the OLT has just handed back. Everything else is inline.
     s, prices = setup.settings, setup.prices
     top = TIERS[TOP]
     windows = {t: Window(s.window) for t in TIERS}
@@ -147,18 +151,10 @@ def run(setup: RunSetup, beta: float, policy: str):
     rate_errors, latencies = [], []
     answered_at = collections.Counter()
     hourly = [[0.0, 0, 0, 0, 0] for _ in range(24)]
+    seen: dict = {}  # (day type, hour) -> [sum of J/prompt token, sum of J/gen token, answers]
     waiting: list = []  # heap of (second it reaches the OLT, query id)
     flight: dict = {}  # query id -> what a query carries while the OLT holds it
     next_id = 0
-
-    def learners_of(household: int) -> dict:
-        """Return a household's knowledge, creating it the first time it asks."""
-        if household not in households:
-            households[household] = {
-                t: Learned(s.alpha, s.warmup, s.rate_alpha, pool[t] if pool else None)
-                for t in TIERS[:TOP]
-            }
-        return households[household]
 
     def settle(q, hour, household, tier, spent, took, packet):
         """Record a finished query and let its answer travel back down.
@@ -193,7 +189,7 @@ def run(setup: RunSetup, beta: float, policy: str):
         # Every deciding tier at or below where it was produced reads the packet for itself
         # and the tiers above it. The ONU relays everything above the user, so it hears
         # reports even for queries whose inference it skipped.
-        for own, learner in learners_of(household).items():
+        for own, learner in households[household].items():
             if TIERS.index(own) <= TIERS.index(tier):
                 learner.absorb(
                     {u: v for u, v in packet.items() if TIERS.index(u) >= TIERS.index(own)}, tier
@@ -209,6 +205,10 @@ def run(setup: RunSetup, beta: float, policy: str):
             f = flight.pop(qid)
             tg = setup.answers[f["q"]][top]["tg"]
             own = (f["reported"][0], decode_j / tg if tg else 0.0, tg)
+            cell = seen.setdefault(setup.schedule_key(f["hour"]), [0.0, 0.0, 0])
+            cell[0] += own[0]
+            cell[1] += own[1]
+            cell[2] += 1
             # The packet carries either what this query's own answer cost, or the OLT's mean
             # over its recent traffic, which is far steadier under marginal accounting.
             windowed = server.reported_rate() if s.report == "window" else None
@@ -223,28 +223,25 @@ def run(setup: RunSetup, beta: float, policy: str):
                 f["packet"],
             )
 
-    def hand_over(at: float, qid: int) -> None:
-        """Put one query into the OLT at the moment it gets there.
-
-        Args:
-            at: Wall clock it reaches the OLT, in seconds.
-            qid: The query's id.
-        """
-        land(server.advance(at))
-        f = flight[qid]
-        f["prefill_j"] = server.admit(qid, f["prompt_tokens"], setup.answers[f["q"]][top]["tg"], at)
-        f["reported"] = prices.rates(top, max(server.batch, 1))
-
     for q, hour, household in setup.stream:
         now = hour * 3600
 
         # --- Hand over everyone who has genuinely reached the OLT by now ---
         while waiting and waiting[0][0] <= now:
-            hand_over(*heapq.heappop(waiting))
+            at, qid = heapq.heappop(waiting)
+            land(server.advance(at))
+            f = flight[qid]
+            f["prefill_j"] = server.admit(qid, f["prompt_tokens"], f["gen_tokens"], at)
+            f["reported"] = prices.rates(top, max(server.batch, 1))
         land(server.advance(now))
 
         # --- Walk the query up until it is answered, or until it leaves for the OLT ---
-        learners = learners_of(household)
+        if household not in households:
+            households[household] = {
+                t: Learned(s.alpha, s.warmup, s.rate_alpha, pool[t] if pool else None)
+                for t in TIERS[:TOP]
+            }
+        learners = households[household]
         prompt_tokens = setup.answers[q]["user"]["tp"]
         packet: dict[str, tuple[float, float, float]] = {}
         spent = took = 0.0
@@ -286,6 +283,7 @@ def run(setup: RunSetup, beta: float, policy: str):
                     "hour": hour,
                     "household": household,
                     "prompt_tokens": prompt_tokens,
+                    "gen_tokens": setup.answers[q][top]["tg"],
                     "spent": spent,
                     "took": took,
                     "packet": packet,
@@ -321,7 +319,11 @@ def run(setup: RunSetup, beta: float, policy: str):
 
     # --- Nobody else is coming: let the OLT take and finish what is left ---
     while waiting:
-        hand_over(*heapq.heappop(waiting))
+        at, qid = heapq.heappop(waiting)
+        land(server.advance(at))
+        f = flight[qid]
+        f["prefill_j"] = server.admit(qid, f["prompt_tokens"], f["gen_tokens"], at)
+        f["reported"] = prices.rates(top, max(server.batch, 1))
     land(server.drain())
 
     total = len(setup.stream)
@@ -350,7 +352,47 @@ def run(setup: RunSetup, beta: float, policy: str):
         }
         for h, row in enumerate(hourly)
     ]
-    return metrics, per_hour
+    observed = {k: (v[0] / v[2], v[1] / v[2]) for k, v in seen.items() if v[2]}
+    return metrics, per_hour, observed
+
+
+# ==========================================
+# What a timetable is built from
+# ==========================================
+def calibrate(setup: RunSetup, beta: float) -> dict:
+    """Return the OLT rates the static policies ship with, observed over the training days.
+
+    These tables cannot be worked out in advance any more. The OLT's cost is made by the
+    traffic the households send it, so it has to be watched. An operator building a timetable
+    has no energy-aware policy running yet, so what it watches is a plain RecServe month: the
+    cascade climbing one tier at a time, with nothing routing on energy. The tables are then
+    what the OLT charged over that month.
+
+    Args:
+        setup: A setup whose stream covers the calibration days.
+        beta: RecServe's escalation quantile, the same the run will use.
+
+    Returns:
+        {"static_day": rates, "stale_low": ..., "stale_high": ..., "static_hour": {cell: rates}}.
+    """
+    metrics, _, observed = run(setup, beta, "recserve")
+    if not observed:
+        return {}
+    n = len(observed)
+    day = (
+        sum(v[0] for v in observed.values()) / n,
+        sum(v[1] for v in observed.values()) / n,
+    )
+    # The stale pair ship the day figure of an OLT whose batch is wrong by stale_factor,
+    # standing for a table built for a different population than the one it meets.
+    batch = max(metrics["mean_olt_batch"], 1.0)
+    stale = setup.settings.stale_factor
+    return {
+        "static_day": day,
+        "stale_low": setup.prices.rates("olt", max(int(batch / stale), 1)),
+        "stale_high": setup.prices.rates("olt", max(int(batch * stale), 1)),
+        "static_hour": observed,
+    }
 
 
 # ==========================================
