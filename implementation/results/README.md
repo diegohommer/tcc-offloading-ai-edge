@@ -1,46 +1,32 @@
 # Results
 
-Everything the thesis's numbers come from. Nothing here is edited by hand: each
-file is written by the script named beside it (paths from `implementation/`).
+Every file here is written by a script; none is edited by hand. Paths from
+`implementation/`.
 
-## `measurements/`: the raw data (measured once, on rented GPUs)
+## `measurements/`
 
-| File | What | Written by |
-|---|---|---|
-| `gpu_energy_qwen2.5-7b-instruct_l4x1_run2.json` | **The OLT's energy**: Qwen2.5-7B (fp8) on one L4, energy per prompt token and per generated token at batch 1, 2, 4 … 64, gross and net of idle. The reference run | `src/measure/measure_gpu_energy.py` |
-| `gpu_energy_qwen2.5-7b-instruct_l4x1_run1.json` | the same sweep, run before the prefill fix: its decode figures replicate run 2 within 1.4%; its prefill figures are unreliable (energy_tests.md §3.4) | same |
-| `olt_sweep_run{1,2}.log` / `.txt` | the two sweeps' terminal output (`.log` raw, `.txt` cleaned) | same |
-| `gsm8k_zeroshot_user-onu-olt_n1319_<UTC>.raw.jsonl` | **Every tier's answer** to all 1,319 GSM8K test questions, every token's logprob kept. Its phone and OLT rows are used | `src/measure/collect_answers.py` |
-| `gsm8k_zeroshot_onu_n1319_<UTC>.raw.jsonl` | the ONU's answers again, in Q4_K_M (the format its energy source measured). They replace the ONU rows of the file above | same, `TIERS=onu` |
-| `gsm8k_zeroshot_user-onu-olt_n20_smoke.raw.jsonl` | the 20-question smoke test run before the full collection | same, `LIMIT=20` |
-| `collect_*.log` / `.txt` | the collections' terminal output | same |
+Measured once, on rented GPUs (`src/measure/`).
 
-## `tier_energy.md`: every tier-level number
+| File | What |
+|---|---|
+| `gpu_energy_qwen2.5-7b-instruct_l4x1_run3.json` | the OLT's energy per token at batch 1 to 64, gross and net of idle: the reference sweep |
+| `gpu_energy_..._run1.json`, `..._run2.json` | two earlier sweeps, kept as the replication |
+| `olt_sweep_run*.log` / `.txt` | the sweeps' terminal output, raw and cleaned |
+| `gsm8k_zeroshot_user-onu-olt_n1319_<UTC>.raw.jsonl` | every tier's answer to the 1,319 GSM8K questions, every token's logprob; its user and OLT rows are used |
+| `gsm8k_zeroshot_onu_n1319_<UTC>.raw.jsonl` | the ONU's answers in Q4_K_M, its energy source's format |
+| `collect_*.log` / `.txt` | the collections' terminal output |
 
-The OLT's batch curve, the replication, the phone's and the ONU's cost per query,
-the OLT's cost per query at each energy boundary, the batch from which the OLT is
-cheaper, the marginal cost, and the answers table (energy_tests.md §3, §4, §7,
-§8.3). Written by `src/analyze/tier_energy.py` from `measurements/`.
+## `tier_energy.md`
 
-## `study/`: the case study (energy_tests.md §8.6)
+The tier-level tables: the OLT's batch curve, the replication, each tier's cost per query,
+the boundary conversion, the crossovers and the answers. Written by
+`src/analyze/tier_energy.py`.
 
-| File | What | Written by |
-|---|---|---|
-| `study_<scenario>_seed<n>.csv` | one row per (households on the OLT, RecServe beta, policy): accuracy, J per query, latency, PON traffic, the OLT's mean batch, where queries ended up | `src/simulate/run_study.sh` → `simulate.py` |
-| `study_<scenario>_seed<n>.json` | the same, plus each policy's accuracy–energy frontier and the run's settings | same |
-| `study_<scenario>_seed<n>.txt` | the run's printed output | same |
-| `SUMMARY.md` | **the case study's tables**: savings at equal accuracy, mean over seeds 7, 8, 9 | `src/analyze/summarize_study.py` |
+## `study/`
 
-Scenarios (each run three times, seeds 7, 8 and 9, over the household counts in `config/study.yaml`):
-
-- `main`: the study's settings.
-- Sensitivity runs, each changing one setting:
-  - `average`: average accounting;
-  - `onu0.5`, `onu0.2`: a 2× or 5× cheaper ONU;
-  - `olt1.07`, `olt1.75`: the OLT's energy ×1.07 (a site PUE of 1.65) or ×1.75;
-  - `users2`: two active LLM users per household;
-  - `perhousehold`: question statistics learned per household.
+The case study, written by `src/simulate/run_study.sh`: one CSV, JSON and printout per
+scenario and seed, and `SUMMARY.md` from `src/analyze/summarize_study.py`.
 
 ## `adhoc/` (not committed)
 
-Default output of a one-off `simulate.py` run without `--out`.
+Output of one-off `simulate.py` runs.
