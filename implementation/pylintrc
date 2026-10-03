@@ -70,7 +70,7 @@ ignored-modules=
 # pygtk.require().
 # The scripts put src/ (and src/simulate/, src/measure/) on the import path at run time;
 # tell pylint the same, relative to this file, so their imports resolve.
-init-hook='import os, sys; from pylint.config import find_default_config_files; root = os.path.dirname(next(find_default_config_files())); sys.path[:0] = [os.path.join(root, d) for d in ("src", "src/simulate", "src/measure")]'
+init-hook='import os, sys; from pylint.config import find_default_config_files; root = os.path.dirname(next(find_default_config_files())); sys.path[:0] = [os.path.join(root, d) for d in ("src", "src/simulate", "src/analyze", "src/measure")]'
 
 # Use multiple processes to speed up Pylint. Specifying 0 will auto-detect the
 # number of processors available to use, and will cap the count on Windows to

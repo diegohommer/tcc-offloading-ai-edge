@@ -9,17 +9,28 @@ line_length = 100
 known_first_party = [
     "analyze",
     "cascade",
+    "check_beta_windows",
+    "check_confidence",
+    "collect_answers",
     "energy",
     "frontier",
     "gsm8k",
-    "load_modes",
+    "households",
     "measure",
+    "measure_gpu_energy",
     "olt_energy",
     "olt_server",
-    "households",
+    "prepare_load_traces",
     "routing",
     "simulate",
+    "summarize_study",
+    "tier_energy",
 ]
 force_sort_within_sections = false
 order_by_type = false
 skip_glob = ["**/.venv*/**"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+pythonpath = ["src", "src/simulate", "src/analyze", "src/measure"]
+testpaths = ["tests"]
