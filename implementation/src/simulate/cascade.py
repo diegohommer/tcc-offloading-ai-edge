@@ -9,6 +9,7 @@ the households learn from it.
 from __future__ import annotations
 
 import collections
+import heapq
 import random
 import statistics as st
 import sys
@@ -21,6 +22,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
 from energy.three_tier import TIERS
 from olt_load import BURSTGPT
+from olt_server import OltServer
 from routing import Learned, on_arrival, on_escalation, TOP, Window
 
 # ==========================================
@@ -61,43 +63,34 @@ class RunSetup:
     Attributes:
         answers: answers[question][tier], that tier's recorded answer (correct, confidence,
             prompt and generated tokens, bytes).
-        stream: [(question, time in hours, household)], time-ordered (build_stream).
-        batches: The OLT batch each query would meet, 1 + Poisson(load).
-        loads: The OLT's true offered load at each query's arrival.
+        stream: [(question, time in hours, household)], time-ordered.
+        curve: The OLT's measured batch curve (energy.three_tier.OltCurve).
         prices: True energy rates (olt_energy.Energy).
         static_rates: The pre-calibrated OLT rates of static_day, stale_low/high, static_hour.
         settings: The run's settings (simulate.py's parsed arguments).
-        olt_reports: The OLT's report at each query, for piggyback (--report window).
         schedule_key: Maps a time to static_hour's table key (day type, hour).
-        broadcasts: The latest broadcast at each query, for broadcast.
     """
 
     answers: dict
     stream: list
-    batches: list
-    loads: list
+    curve: object
     prices: object
     static_rates: dict
     settings: object
-    olt_reports: list | None = None
     schedule_key: Callable | None = None
-    broadcasts: list | None = None
 
 
 # ==========================================
 # One run
 # ==========================================
-def believed_olt_rate(
-    policy: str, setup: RunSetup, n: int, hour: float, load: float, learned: Learned
-):
+def believed_olt_rate(policy: str, setup: RunSetup, server, hour: float, learned: Learned):
     """Return what a policy believes the OLT costs now: the one place the policies differ.
 
     Args:
         policy: One of POLICIES (not a fixed chain).
         setup: The run's setup.
-        n: Index of the query in the stream.
+        server: The OLT, for the policies that can see it.
         hour: The query's arrival time, in hours.
-        load: The OLT's true load at that time.
         learned: The household's knowledge (for piggyback).
 
     Returns:
@@ -108,19 +101,24 @@ def believed_olt_rate(
     if policy == "static_hour":
         return setup.static_rates["static_hour"][setup.schedule_key(hour)]
     if policy == "oracle":
-        return setup.prices.expected_olt(load)
+        return setup.prices.rates("olt", max(server.batch, 1))  # the rate this instant
     if policy == "broadcast":
         # the ONU relays it to the household's devices over the LAN, taken as free and instant
-        return setup.broadcasts[n]
+        return server.reported_rate()
     return learned.rates.get("olt")  # piggyback
 
 
 def run(setup: RunSetup, beta: float, policy: str):
     """Serve every query of the stream under one policy and one RecServe beta.
 
-    Energy is charged at the true rates and the batch each query met at the OLT. Latency
-    (compute seconds) and the bytes crossing the PON are measured without affecting any
-    decision.
+    Queries are walked in arrival order, but one that escalates does not reach the OLT at
+    once: it spends seconds being answered by the tiers below first. Those are held in
+    `waiting` and handed over at the moment they truly arrive, so the batch a query meets is
+    made of whoever is genuinely mid-answer beside it.
+
+    The OLT's cost is therefore not drawn from anything. It is whatever the households' own
+    escalated queries make it, which means a policy that sends more that way also makes the
+    OLT cheaper per query. That feedback is real, and it is left in.
 
     Args:
         setup: Everything the run needs (RunSetup).
@@ -131,7 +129,7 @@ def run(setup: RunSetup, beta: float, policy: str):
         (metrics over the whole stream, per-hour detail).
     """
     s, prices = setup.settings, setup.prices
-    # RecServe's thresholds: one per tier, shared by every household (the tier is shared)
+    top = TIERS[TOP]
     windows = {t: Window(s.window) for t in TIERS}
     households: dict[int, dict[str, Learned]] = {}
     pool = (
@@ -139,24 +137,112 @@ def run(setup: RunSetup, beta: float, policy: str):
         if s.shared_stats
         else None
     )
+    server = OltServer(setup.curve, prices, s.report_window * 60)
+
     energy = correct = forwarded = skipped = confidence_delivered = comm_bytes = pon_bytes = 0.0
     rate_errors, latencies = [], []
     answered_at = collections.Counter()
-    hourly = [[0.0, 0, 0, 0, 0] for _ in range(24)]  # joules, queries, answered at user/onu/olt
+    hourly = [[0.0, 0, 0, 0, 0] for _ in range(24)]
+    waiting: list = []  # heap of (second it reaches the OLT, query id)
+    flight: dict = {}  # query id -> what a query carries while the OLT holds it
+    next_id = 0
 
-    for n, ((question, hour, household), batch, load) in enumerate(
-        zip(setup.stream, setup.batches, setup.loads)
-    ):
-        learners = households.get(household)
-        if learners is None:
-            learners = households[household] = {
+    def learners_of(household: int) -> dict:
+        """Return a household's knowledge, creating it the first time it asks."""
+        if household not in households:
+            households[household] = {
                 t: Learned(s.alpha, s.warmup, s.rate_alpha, pool[t] if pool else None)
                 for t in TIERS[:TOP]
             }
-        prompt_tokens = setup.answers[question]["user"]["tp"]
-        packet: dict[str, tuple[float, float, int]] = {}  # rides back down: rates, answer length
-        spent = took = 0.0  # joules and seconds this query costs
-        here = 0  # index of the tier the query is at (0 = the phone)
+        return households[household]
+
+    def settle(q, hour, household, tier, spent, took, packet, hops):
+        """Record a finished query and let its answer travel back down.
+
+        Args:
+            q: The question asked.
+            hour: Its arrival time, in hours.
+            household: Who asked it.
+            tier: The tier whose answer was kept.
+            spent: Joules the query cost.
+            took: Seconds it took, queueing at the OLT included.
+            packet: {tier: (J/prompt token, J/generated token, tokens)} riding back down.
+            hops: Tiers the answer travelled back down through.
+        """
+        nonlocal energy, correct, confidence_delivered, comm_bytes, pon_bytes
+        answer = setup.answers[q][tier]
+        correct += answer["correct"]
+        confidence_delivered += answer["conf"]
+        qb = setup.answers[q]["user"]["qb"]
+        # RecServe's communication burden: the input goes up and the output comes down once
+        # per hop, 2(i-1)(|x|+|y|). Skipping a tier saves inference, not bytes.
+        comm_bytes += 2 * hops * (qb + answer["ab"])
+        # What crosses the shared PON fibre: question up, answer down, once, for every query
+        # the OLT answers.
+        pon_bytes += (qb + answer["ab"]) if tier == top else 0
+        energy += spent
+        latencies.append(took)
+        answered_at[tier] += 1
+        row = hourly[int(hour) % 24]
+        row[0] += spent
+        row[1] += 1
+        row[2 + TIERS.index(tier)] += 1
+        # Every deciding tier at or below where it was produced reads the packet for itself
+        # and the tiers above it. The ONU relays everything above the user, so it hears
+        # reports even for queries whose inference it skipped.
+        for own, learner in learners_of(household).items():
+            if TIERS.index(own) <= TIERS.index(tier):
+                learner.absorb(
+                    {u: v for u, v in packet.items() if TIERS.index(u) >= TIERS.index(own)}, tier
+                )
+
+    def land(completions):
+        """Settle every query the OLT has just finished.
+
+        Args:
+            completions: [(query id, wall clock, decode joules)] as the server returns them.
+        """
+        for qid, done_at, decode_j in completions:
+            f = flight.pop(qid)
+            tg = setup.answers[f["q"]][top]["tg"]
+            f["packet"][top] = (f["reported"][0], decode_j / tg if tg else 0.0, tg)
+            settle(
+                f["q"],
+                f["hour"],
+                f["household"],
+                top,
+                f["spent"] + f["prefill_j"] + decode_j,
+                f["took"] + (done_at - f["reached"]),
+                f["packet"],
+                f["hops"],
+            )
+
+    def hand_over(at: float, qid: int) -> None:
+        """Put one query into the OLT at the moment it gets there.
+
+        Args:
+            at: Wall clock it reaches the OLT, in seconds.
+            qid: The query's id.
+        """
+        land(server.advance(at))
+        f = flight[qid]
+        f["prefill_j"] = server.admit(qid, f["prompt_tokens"], setup.answers[f["q"]][top]["tg"], at)
+        f["reported"] = prices.rates(top, max(server.batch, 1))
+
+    for q, hour, household in setup.stream:
+        now = hour * 3600
+
+        # --- Hand over everyone who has genuinely reached the OLT by now ---
+        while waiting and waiting[0][0] <= now:
+            hand_over(*heapq.heappop(waiting))
+        land(server.advance(now))
+
+        # --- Walk the query up until it is answered, or until it leaves for the OLT ---
+        learners = learners_of(household)
+        prompt_tokens = setup.answers[q]["user"]["tp"]
+        packet: dict[str, tuple[float, float, float]] = {}
+        spent = took = 0.0
+        here = hops = 0
         rates = None
         while True:
             tier = TIERS[here]
@@ -172,10 +258,11 @@ def run(setup: RunSetup, beta: float, policy: str):
                 else:
                     rates = {u: learned.rates[u] for u in TIERS[here:]}
                 if policy != "piggyback":
-                    rates["olt"] = believed_olt_rate(policy, setup, n, hour, load, learned)
+                    rates["olt"] = believed_olt_rate(policy, setup, server, hour, learned)
                 if policy in ("piggyback", "broadcast") and rates["olt"] is not None:
-                    true_generated = prices.expected_olt(load)[1]
-                    rate_errors.append(abs(rates["olt"][1] - true_generated) / true_generated)
+                    true_dec = prices.rates(top, max(server.batch, 1))[1]
+                    if true_dec:
+                        rate_errors.append(abs(rates["olt"][1] - true_dec) / true_dec)
                 decide = rates["olt"] is not None  # piggyback: not heard the OLT yet
 
             # --- On arrival: run here, or forward to a cheaper tier above? ---
@@ -186,33 +273,36 @@ def run(setup: RunSetup, beta: float, policy: str):
                     here = target
                     continue
 
-            # --- The tier answers: replay its recorded answer, charge the true energy ---
-            answer = setup.answers[question][tier]
-            j_prompt, j_generated = prices.rates(tier, batch)
+            # --- The OLT answers in its own time, so the query leaves the walk here ---
+            if here == TOP:
+                flight[next_id] = {
+                    "q": q,
+                    "hour": hour,
+                    "household": household,
+                    "prompt_tokens": prompt_tokens,
+                    "spent": spent,
+                    "took": took,
+                    "packet": packet,
+                    "hops": hops,
+                    "reached": now + took,
+                }
+                heapq.heappush(waiting, (now + took, next_id))
+                next_id += 1
+                break
+
+            # --- A tier below answers at once: replay it, charge the true energy ---
+            answer = setup.answers[q][tier]
+            j_prompt, j_generated = prices.rates(tier, 1)
             spent += j_prompt * answer["tp"] + j_generated * answer["tg"]
-            took += prices.seconds(tier, batch, answer["tp"], answer["tg"])
-            reported = (
-                setup.olt_reports[n]
-                if setup.olt_reports and tier == "olt"
-                else (j_prompt, j_generated)
-            )
-            packet[tier] = (*reported, answer["tg"])
+            took += prices.seconds(tier, 1, answer["tp"], answer["tg"])
+            packet[tier] = (j_prompt, j_generated, answer["tg"])
 
             # --- RecServe's test: escalate below the beta-quantile of recent confidences ---
             window = windows[tier]
-            escalate = here < TOP and len(window) > 1 and answer["conf"] < window.quantile(beta)
+            escalate = len(window) > 1 and answer["conf"] < window.quantile(beta)
             window.add(answer["conf"])
             if not escalate:
-                correct += answer["correct"]
-                confidence_delivered += answer["conf"]  # of the answer the user actually gets
-                question_bytes = setup.answers[question]["user"]["qb"]
-                # RecServe's communication burden: the input goes up and the output comes down
-                # once per hop, 2(i-1)(|x|+|y|). Skipping a tier saves inference, not bytes.
-                comm_bytes += 2 * here * (question_bytes + answer["ab"])
-                # What crosses the shared PON fibre: question up, answer down, once, for
-                # every query the OLT answers.
-                pon_bytes += (question_bytes + answer["ab"]) if here == TOP else 0
-                answered_at[tier] += 1
+                settle(q, hour, household, tier, spent, took, packet, hops)
                 break
 
             # --- On escalation: the next tier up, or a cheaper later one? ---
@@ -222,26 +312,13 @@ def run(setup: RunSetup, beta: float, policy: str):
             if policy == "recserve_no_onu":
                 target = TOP
             skipped += target > here + 1
+            hops += 1
             here = target
 
-        # --- Account for the query ---
-        energy += spent
-        latencies.append(took)
-        row = hourly[int(hour) % 24]
-        row[0] += spent
-        row[1] += 1
-        row[2 + TIERS.index(tier)] += 1
-
-        # --- The answer travels back down ---
-        # Every deciding tier at or below where it was produced reads the packet for itself
-        # and the tiers above it. The ONU relays everything above the user, so it hears
-        # reports even for queries whose inference it skipped.
-        for own_tier, learner in learners.items():
-            if TIERS.index(own_tier) <= TIERS.index(tier):
-                learner.absorb(
-                    {u: v for u, v in packet.items() if TIERS.index(u) >= TIERS.index(own_tier)},
-                    tier,
-                )
+    # --- Nobody else is coming: let the OLT take and finish what is left ---
+    while waiting:
+        hand_over(*heapq.heappop(waiting))
+    land(server.drain())
 
     total = len(setup.stream)
     metrics = {
@@ -255,6 +332,7 @@ def run(setup: RunSetup, beta: float, policy: str):
         "forwarded_on_arrival": forwarded / total,
         "skipped_on_escalation": skipped / total,
         "olt_rate_error": st.mean(rate_errors) if rate_errors else float("nan"),
+        "mean_olt_batch": server.mean_batch,
         **{f"final_{t}": answered_at[t] / total for t in TIERS},
     }
     per_hour = [

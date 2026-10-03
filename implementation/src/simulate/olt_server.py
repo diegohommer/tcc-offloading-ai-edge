@@ -19,6 +19,7 @@ happened in between.
 
 from __future__ import annotations
 
+import collections
 import heapq
 
 MAX_BATCH = 64
@@ -61,8 +62,14 @@ class OltServer:
         self._joined: dict[int, float] = {}
         """Virtual clock at which each active query joined."""
 
-        self._recent: list[tuple[float, float, float]] = []
+        self._recent: collections.deque = collections.deque()
         """(wall clock, generated tokens, joules) of recent work, for what the OLT reports."""
+
+        self._recent_tokens = self._recent_joules = 0.0
+        """Running totals over that window, so reporting costs nothing per query."""
+
+        self._busy_s = self._batch_s = 0.0
+        """Seconds the OLT spent generating, and those weighted by the batch it then held."""
 
     # ==========================================
     # The batch right now
@@ -168,11 +175,22 @@ class OltServer:
     # ==========================================
     def _track(self, dt: float, tokens: float, joules: float) -> None:
         """Record work done, and forget what has aged out of the report window."""
+        self._busy_s += dt
+        self._batch_s += dt * self.batch
         if tokens > 0:
             self._recent.append((self.t + dt, tokens, joules))
+            self._recent_tokens += tokens
+            self._recent_joules += joules
         cut = self.t + dt - self.window
         while self._recent and self._recent[0][0] < cut:
-            self._recent.pop(0)
+            _, old_tokens, old_joules = self._recent.popleft()
+            self._recent_tokens -= old_tokens
+            self._recent_joules -= old_joules
+
+    @property
+    def mean_batch(self) -> float:
+        """Return the mean batch the OLT held while it was generating, weighted by time."""
+        return self._batch_s / self._busy_s if self._busy_s > 0 else 0.0
 
     def reported_rate(self) -> tuple[float, float] | None:
         """Return the OLT's mean (J per prompt token, J per generated token) over its window.
@@ -183,7 +201,6 @@ class OltServer:
         Returns:
             The mean rates, or None when the window holds no work yet.
         """
-        tokens = sum(r[1] for r in self._recent)
-        if tokens <= 0:
+        if self._recent_tokens <= 0:
             return None
-        return self._rates(self.batch)[0], sum(r[2] for r in self._recent) / tokens
+        return self._rates(self.batch)[0], self._recent_joules / self._recent_tokens
