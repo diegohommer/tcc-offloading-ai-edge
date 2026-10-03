@@ -190,19 +190,20 @@ class OltCurve:
     # Rates and times
     # ==========================================
     def marginal_rates(self, batch: float) -> tuple[float, float]:
-        """Return the energy one more query adds, per token, when it makes the batch this size.
+        """Return each sequence's share, per token, of what a batch this size adds above idle.
 
-        The first query adds only the energy above idle (the net rates at batch 1). A later
-        one joins steps that run anyway, and the card sits at its power limit, so it adds
-        only the step time it causes: the slope of the batch's total energy per step against
-        batch size, fitted by least squares (energy_tests.md §8.3).
+        The first query adds the net-of-idle rate; each later one adds the slope of the
+        batch's energy against batch size (energy_tests.md §8.3). A batch of n adds
+        net + (n - 1) x slope, shared equally.
 
         Args:
-            batch: The batch size the query makes.
+            batch: Sequences in the batch.
         """
-        if batch <= 1:
-            return self.pf1_net, self.dec1_net
-        return self.pf_slope, self.dec_slope
+        size = max(batch, 1)
+        return (
+            (self.pf1_net + (size - 1) * self.pf_slope) / size,
+            (self.dec1_net + (size - 1) * self.dec_slope) / size,
+        )
 
     def _at(self, ys: list[float], batch: float) -> float:
         """Return ys interpolated log-log at this batch size, clamped to the measured range."""

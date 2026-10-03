@@ -1,8 +1,8 @@
 # Settings of the simulator, src/simulate/simulate.py.
 #
 # The simulator takes every default from this file. A command-line flag
-# overrides one value for one run (e.g. --households 40, --load-trace
-# conversation), and --config points at another file. Every flag has an entry
+# overrides one value for one run (e.g. --subscribers 5000, --accounting
+# average), and --config points at another file. Every flag has an entry
 # here and the simulator refuses to start if one is missing or unknown, so this
 # file is the complete list. Each run's JSON records the values it used.
 #
@@ -67,15 +67,15 @@ policy:
   # published), recserve_no_onu (RecServe without the ONU), static_day (one OLT
   # rate for the whole day), static_hour (one per hour: the timetable), broadcast
   # (the OLT's rate broadcast on the PON to every ONU: the proposal), oracle (the
-  # true rate), piggyback (the OLT's rate on the household's own answers only),
-  # stale_low / stale_high (static_day set at the wrong load). recserve is
+  # broadcast with no delay), piggyback (the OLT's rate on the household's own answers only),
+  # stale_low / stale_high (static_day observed on the wrong population). recserve is
   # required: savings are read against it.
   policies: [recserve, recserve_no_onu, static_day, static_hour, broadcast, oracle, piggyback, stale_low, stale_high]
   # Relative margin before leaving the default route: take the cheaper route only
   # if it is at least this fraction cheaper. [choice: 0 = no margin]
   delta: 0.0
-  # stale_low and stale_high assume this many times less and more load than
-  # they meet. [choice]
+  # stale_low and stale_high observe static_day on a population this many
+  # times smaller and larger than the one they meet. [choice]
   stale_factor: 4.0
 
 learning:

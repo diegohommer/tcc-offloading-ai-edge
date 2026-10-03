@@ -275,7 +275,6 @@ def check_combinations(policies) -> bool:
     """Check that the settings can go together.
 
     Args:
-        s: The parsed settings.
         policies: The policies to run.
 
     Returns:
@@ -307,16 +306,15 @@ def build_prices(s):
 # ==========================================
 # One OLT peak load
 # ==========================================
-def prepare_population(subs, s, answers, curve, prices):
-    """Build the stream one OLT size runs on, and the timetable it ships with.
+def prepare_population(subscribers, settings, answers, curve, prices):
+    """Build the stream one population runs on, and the tables the static policies ship with.
 
-    Two streams come out of the same population: the calibration days, which only exist so
-    the static tables have a month to be observed over, and the test days that follow. The
-    seeds differ so the two are not the same month twice.
+    The calibration days only exist so the static tables have a month to be observed over;
+    the test days follow them, on a different seed so they are not the same month twice.
 
     Args:
-        subs: Households on the OLT.
-        s: The parsed settings.
+        subscribers: Households on the OLT.
+        settings: The parsed settings.
         answers: answers[question][tier].
         curve: The OLT's measured curve.
         prices: True energy rates.
@@ -324,32 +322,52 @@ def prepare_population(subs, s, answers, curve, prices):
     Returns:
         (the RunSetup every policy at this size shares, the Households that made it).
     """
-    homes = Households(subs, s.users_per_home, s.per_user_day)
+    homes = Households(subscribers, settings.users_per_home, settings.per_user_day)
     questions = sorted(answers)
 
     def schedule_key(hour):
         """Return static_hour's cell for a time: (0 weekday / 1 weekend, hour of day)."""
         return (0 if homes.weekday(int(hour // 24)) else 1, int(hour) % 24)
 
-    watched = RunSetup(
-        answers=answers,
-        stream=homes.stream(questions, s.calibration_days, 0, s.seed),
-        curve=curve,
-        prices=prices,
-        static_rates={},
-        settings=s,
-        schedule_key=schedule_key,
-    )
-    # One table is observed and then shipped, whatever beta the operator later runs at, so
-    # the calibration happens once at the middle of the sweep rather than per beta.
-    betas = sorted(float(b) for b in s.betas.split(","))
+    def observed_tables(population):
+        """Return the static tables observed over the calibration days of this population."""
+        watched = RunSetup(
+            answers=answers,
+            stream=population.stream(questions, settings.calibration_days, 0, settings.seed),
+            curve=curve,
+            prices=prices,
+            static_rates={},
+            settings=settings,
+            schedule_key=schedule_key,
+        )
+        return calibrate(watched, middle_beta)
+
+    # --- The tables: observed once, at the middle of the beta sweep ---
+    betas = sorted(float(beta) for beta in settings.betas.split(","))
+    middle_beta = betas[len(betas) // 2]
+    static_rates = observed_tables(homes)
+    # the stale pair ship static_day as observed on a population stale_factor off the real one
+    for name, scale in (
+        ("stale_low", 1 / settings.stale_factor),
+        ("stale_high", settings.stale_factor),
+    ):
+        if name in settings.policies.split(","):
+            other = Households(
+                max(round(subscribers * scale), 1),
+                settings.users_per_home,
+                settings.per_user_day,
+            )
+            static_rates[name] = observed_tables(other).get("static_day")
+
     setup = RunSetup(
         answers=answers,
-        stream=homes.stream(questions, s.test_days, s.calibration_days, s.seed + 1),
+        stream=homes.stream(
+            questions, settings.test_days, settings.calibration_days, settings.seed + 1
+        ),
         curve=curve,
         prices=prices,
-        static_rates=calibrate(watched, betas[len(betas) // 2]),
-        settings=s,
+        static_rates=static_rates,
+        settings=settings,
         schedule_key=schedule_key,
     )
     return setup, homes
@@ -426,13 +444,15 @@ def print_tables(rows, betas, sizes, policies, frontiers, targets) -> None:
     # --- Every row ---
     print(
         f"\n{'homes':>7} {'beta':>5} {'policy':>10} {'acc':>7} {'J/query':>8} {'saving':>7} {'fwd':>6} "
-        f"{'skip':>6} {'rate err':>8} | " + " ".join(f"{t:>6}" for t in TIERS)
+        f"{'skip':>6} {'rate err':>8} {'batch':>6} {'queued':>6} | "
+        + " ".join(f"{t:>6}" for t in TIERS)
     )
     for r in rows:
         print(
             f"{r['subscribers']:7d} {r['beta']:5.1f} {r['policy']:>10} {r['accuracy']:7.4f} "
             f"{r['J_per_query']:8.1f} {r['saving_same_accuracy']:7.1%} {r['forwarded_on_arrival']:6.1%} "
-            f"{r['skipped_on_escalation']:6.1%} {r['olt_rate_error']:8.1%} | "
+            f"{r['skipped_on_escalation']:6.1%} {r['olt_rate_error']:8.1%} "
+            f"{r['mean_olt_batch']:6.1f} {r['olt_queued']:6.1%} | "
             + " ".join(f"{r['final_' + t]:6.1%}" for t in TIERS)
         )
         if r["policy"] == "oracle" and r["beta"] == betas[-1]:

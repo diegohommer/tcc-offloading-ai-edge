@@ -15,7 +15,8 @@ known_first_party = [
     "load_modes",
     "measure",
     "olt_energy",
-    "olt_load",
+    "olt_server",
+    "households",
     "routing",
     "simulate",
 ]

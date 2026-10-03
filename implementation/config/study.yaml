@@ -20,8 +20,8 @@ energy:
 policy:
   # RecServe; RecServe without the ONU (control); the OLT's cost from a table set in
   # advance, one rate per day (static_day) or per hour (static_hour, the timetable);
-  # the OLT's cost broadcast on the PON (broadcast: the proposal); the oracle (upper
-  # bound on any live signal); broadcast fed only by the household's own answers
+  # the OLT's cost broadcast on the PON (broadcast: the proposal); the oracle (the
+  # broadcast with no delay); broadcast fed only by the household's own answers
   # (piggyback: ablation).
   policies: [recserve, recserve_no_onu, static_day, static_hour, broadcast, oracle, piggyback]
 

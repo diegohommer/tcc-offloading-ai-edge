@@ -1,20 +1,12 @@
 """The OLT serving its queries the way a real LLM server does: continuous batching.
 
-A query starts generating as soon as it arrives and leaves when it is done, so the batch is
-whoever happens to be mid-answer. Nothing is imposed from outside: the batch is what the
-households' own escalated queries make it. This is Orca's iteration-level scheduling, which
-is what vLLM and SGLang run today; we drive it from the OLT's measured curve the way Vidur
-drives a simulated cluster from a profile.
+A query joins the running batch as soon as a slot is free and leaves when its answer is
+done, as Orca's iteration-level scheduling does in vLLM and SGLang. Speed and energy follow
+the batch moment by moment, read off the OLT's measured curve.
 
-Energy follows the batch moment by moment. A query that starts alone pays the lonely rate
-until company arrives, then pays less. Charging one batch size for a whole answer, as a
-static model does, cannot show that.
-
-Cost is kept off the hot path with a virtual token clock. Every active sequence advances at
-the same tokens-per-second, so one counter tracks the progress they share and a second
-accumulates the joules a token has cost since the run began. A sequence's decode energy is
-then the difference between that accumulator when it left and when it joined, whatever
-happened in between.
+Every active sequence advances at the same tokens per second, so one virtual clock tracks
+their shared progress and a second accumulates what one sequence's tokens have cost. A
+query's decode energy is that accumulator when it leaves minus its value when it joined.
 """
 
 from __future__ import annotations
@@ -23,16 +15,17 @@ import collections
 import heapq
 
 MAX_BATCH = 64
-"""Largest batch the OLT curve was measured at; beyond it the rates hold at 64's."""
+"""Largest batch the OLT's curve was measured at, and so its number of slots."""
 
 
 class OltServer:
     """One OLT serving its PON's escalated queries with continuous batching.
 
     Attributes:
-        t: Wall clock, in seconds.
-        served: Queries finished so far.
-        admitted: Queries that have entered the server.
+        clock: Wall clock, in seconds.
+        admitted: Queries that reached the OLT.
+        queued: Queries among them that found every slot busy and waited.
+        last_broadcast: The rates the OLT last put on the PON, or None before its first send.
     """
 
     # ==========================================
@@ -44,35 +37,36 @@ class OltServer:
         Args:
             curve: The OLT's measured batch curve (energy.three_tier.OltCurve).
             prices: True energy rates (olt_energy.Energy).
-            report_window_s: Seconds the OLT averages over for what it reports.
+            report_window_s: Seconds of recent work the OLT averages over when it reports.
         """
-        self.curve, self.prices, self.window = curve, prices, report_window_s
-        self.t = 0.0
-        self.served = self.admitted = 0
+        self.curve, self.prices, self.report_window_s = curve, prices, report_window_s
+        self.clock = 0.0
+        self.admitted = self.queued = 0
+        self.last_broadcast = None
 
-        self._p = 0.0
-        """Virtual clock: tokens every active sequence has produced since the run began."""
+        self._progress = 0.0
+        """Virtual clock: tokens every active sequence has generated since the run began."""
 
-        self._e = 0.0
-        """Joules one generated token has cost, accumulated over that virtual clock."""
+        self._token_joules = 0.0
+        """Joules one sequence's generated tokens have cost along that virtual clock."""
 
-        self._done: list[tuple[float, int]] = []
-        """Heap of (virtual clock at which it finishes, query id)."""
+        self._finishing: list[tuple[float, int]] = []
+        """Heap of (virtual clock at which the query finishes, query id)."""
 
-        self._joined: dict[int, float] = {}
-        """Virtual clock at which each active query joined."""
+        self._active: dict[int, tuple[float, float]] = {}
+        """Query id -> (accumulated token joules when it joined, joules of its prefill)."""
+
+        self._waiting: collections.deque = collections.deque()
+        """(query id, prompt tokens, generated tokens) waiting for a slot, in arrival order."""
 
         self._recent: collections.deque = collections.deque()
-        """(wall clock, generated tokens, joules) of recent work, for what the OLT reports."""
+        """(clock, prompt tokens, prompt joules, generated tokens, generated joules) of recent work."""
 
-        self._recent_tokens = self._recent_joules = 0.0
-        """Running totals over that window, so reporting costs nothing per query."""
+        self._recent_totals = [0.0, 0.0, 0.0, 0.0]
+        """Sums of the four quantities over the report window."""
 
         self._busy_s = self._batch_s = 0.0
-        """Seconds the OLT spent generating, and those weighted by the batch it then held."""
-
-        self._sent_at, self._sent = -1e18, None
-        """When the OLT last put its rate on the PON, and what it said."""
+        """Seconds spent generating, and those weighted by the batch held."""
 
     # ==========================================
     # The batch right now
@@ -80,149 +74,136 @@ class OltServer:
     @property
     def batch(self) -> int:
         """Return how many sequences are generating."""
-        return len(self._joined)
+        return len(self._active)
 
-    def _rates(self, n: int) -> tuple[float, float]:
-        """Return (J per prompt token, J per generated token) at a batch of n.
+    @property
+    def mean_batch(self) -> float:
+        """Return the mean batch the OLT held while generating, weighted by time."""
+        return self._batch_s / self._busy_s if self._busy_s > 0 else 0.0
 
-        Args:
-            n: Sequences generating together.
-        """
-        return self.prices.olt(min(max(n, 1), MAX_BATCH))
+    def _rates(self, batch: int) -> tuple[float, float]:
+        """Return (J per prompt token, J per generated token) at this batch size."""
+        return self.prices.olt(min(max(batch, 1), MAX_BATCH))
 
-    def _speed(self, n: int) -> float:
-        """Return the tokens per second one sequence gets in a batch of n.
-
-        Args:
-            n: Sequences generating together.
-        """
-        b = min(max(n, 1), MAX_BATCH)
-        return self.curve._at(self.curve.tps, b) / b  # pylint: disable=protected-access
+    def _speed(self, batch: int) -> float:
+        """Return the tokens per second one sequence gets at this batch size."""
+        size = min(max(batch, 1), MAX_BATCH)
+        return self.curve._at(self.curve.tps, size) / size  # pylint: disable=protected-access
 
     # ==========================================
-    # Running time forward
+    # Serving
     # ==========================================
-    def advance(self, target_t: float) -> list[tuple[int, float, float]]:
+    def admit(self, query: int, prompt_tokens: float, generated_tokens: float) -> None:
+        """Take in a query reaching the OLT now; it waits for a slot if all are busy.
+
+        The caller advances the server to the query's arrival first, so no completion
+        before it is lost.
+
+        Args:
+            query: The query's id.
+            prompt_tokens: Its prompt length.
+            generated_tokens: How many tokens its answer runs to.
+        """
+        self.admitted += 1
+        if self.batch < MAX_BATCH and not self._waiting:
+            self._start(query, prompt_tokens, generated_tokens)
+        else:
+            self.queued += 1
+            self._waiting.append((query, prompt_tokens, generated_tokens))
+
+    def advance(self, until: float) -> list[tuple[int, float, float, float]]:
         """Run the server up to a wall-clock time, finishing whatever finishes on the way.
 
         Args:
-            target_t: Wall clock to advance to, in seconds.
+            until: Wall clock to advance to, in seconds.
 
         Returns:
-            [(query id, wall clock it finished, joules it spent decoding)] for each query
-            that completed, in the order they completed.
+            [(query id, clock it finished, prefill joules, decode joules)], in finishing order.
         """
         finished = []
-        while self._done and self.t < target_t:
-            n = self.batch
-            speed = self._speed(n)
-            j_token = self._rates(n)[1]
+        while self._finishing and self.clock < until:
+            batch = self.batch
+            speed = self._speed(batch)
+            joules_per_token = self._rates(batch)[1]
 
-            # --- How far the next completion is, in the clock the batch shares ---
-            p_next = self._done[0][0]
-            dt = (p_next - self._p) / speed
-            if self.t + dt > target_t:  # nobody finishes before the target: part-step there
-                step = (target_t - self.t) * speed
-                self._track(target_t - self.t, step * n, step * n * j_token)
-                self._p += step
-                self._e += step * j_token
-                self.t = target_t
-                return finished
+            # --- Generate up to the next completion, or up to `until` if that comes first ---
+            to_next = self._finishing[0][0] - self._progress
+            if self.clock + to_next / speed > until:
+                self._generate((until - self.clock) * speed, until - self.clock, joules_per_token)
+                self.clock = until
+                break
+            self._generate(to_next, to_next / speed, joules_per_token)
+            self._progress = self._finishing[0][0]  # exact, so the heap comparison below holds
 
-            self._track(dt, (p_next - self._p) * n, (p_next - self._p) * n * j_token)
-            self._e += (p_next - self._p) * j_token
-            self._p = p_next
-            self.t += dt
+            # --- Everyone whose answer is done leaves, and the queue takes their slots ---
+            while self._finishing and self._finishing[0][0] <= self._progress:
+                _, query = heapq.heappop(self._finishing)
+                joined_at, prefill_joules = self._active.pop(query)
+                finished.append((query, self.clock, prefill_joules, self._token_joules - joined_at))
+            while self._waiting and self.batch < MAX_BATCH:
+                self._start(*self._waiting.popleft())
 
-            # --- Everyone whose clock ran out leaves together ---
-            while self._done and self._done[0][0] <= self._p + 1e-9:
-                _, qid = heapq.heappop(self._done)
-                finished.append((qid, self.t, self._e - self._joined.pop(qid)))
-                self.served += 1
-
-        self.t = max(self.t, target_t)
+        self.clock = max(self.clock, until)
+        self._forget_old()
         return finished
 
-    def admit(self, qid: int, prompt_tokens: float, gen_tokens: float, at_t: float) -> float:
-        """Take one query in, and return the joules its prefill cost.
+    def drain(self) -> list[tuple[int, float, float, float]]:
+        """Finish everything still generating or waiting, and return what completed."""
+        finished = []
+        while self._finishing:
+            finished += self.advance(self.clock + 3600)
+        return finished
 
-        The prefill is charged at the batch the query meets on arrival and treated as
-        instant: the curve measures a batch's prefill as one pass, and chunking it across
-        decode steps, as vLLM can, is below what the curve resolves.
+    def _start(self, query: int, prompt_tokens: float, generated_tokens: float) -> None:
+        """Give a query a slot: its prefill runs at once, at the batch it makes."""
+        prefill_joules = self._rates(self.batch + 1)[0] * prompt_tokens
+        self._active[query] = (self._token_joules, prefill_joules)
+        heapq.heappush(self._finishing, (self._progress + generated_tokens, query))
+        self._record(prompt_tokens, prefill_joules, 0.0, 0.0)
 
-        Args:
-            qid: The query's id.
-            prompt_tokens: Its prompt length.
-            gen_tokens: How many tokens its answer runs to.
-            at_t: Wall clock it reaches the OLT.
-
-        Returns:
-            Joules spent on its prefill.
-        """
-        self.advance(at_t)
-        j_prompt = self._rates(self.batch + 1)[0]
-        self._joined[qid] = self._e
-        heapq.heappush(self._done, (self._p + gen_tokens, qid))
-        self.admitted += 1
-        return j_prompt * prompt_tokens
-
-    def drain(self) -> list[tuple[int, float, float]]:
-        """Finish everything still generating, and return what completed."""
-        out = []
-        while self._done:
-            out += self.advance(self.t + 3600)
-        return out
+    def _generate(self, tokens_each: float, seconds: float, joules_per_token: float) -> None:
+        """Let every active sequence generate the same number of tokens."""
+        batch = self.batch
+        self._busy_s += seconds
+        self._batch_s += seconds * batch
+        self._progress += tokens_each
+        self._token_joules += tokens_each * joules_per_token
+        self.clock += seconds
+        self._record(0.0, 0.0, tokens_each * batch, tokens_each * batch * joules_per_token)
 
     # ==========================================
     # What the OLT can tell the PON
     # ==========================================
-    def _track(self, dt: float, tokens: float, joules: float) -> None:
-        """Record work done, and forget what has aged out of the report window."""
-        self._busy_s += dt
-        self._batch_s += dt * self.batch
-        if tokens > 0:
-            self._recent.append((self.t + dt, tokens, joules))
-            self._recent_tokens += tokens
-            self._recent_joules += joules
-        cut = self.t + dt - self.window
-        while self._recent and self._recent[0][0] < cut:
-            _, old_tokens, old_joules = self._recent.popleft()
-            self._recent_tokens -= old_tokens
-            self._recent_joules -= old_joules
-
-    @property
-    def mean_batch(self) -> float:
-        """Return the mean batch the OLT held while it was generating, weighted by time."""
-        return self._batch_s / self._busy_s if self._busy_s > 0 else 0.0
-
-    def reported_rate(self) -> tuple[float, float] | None:
+    def reported_rate(self) -> tuple[float, float]:
         """Return the OLT's mean (J per prompt token, J per generated token) over its window.
 
-        This is what the OLT broadcasts on the PON, and what rides back on an answer. It is
-        backward-looking by construction: it averages work already done.
-
-        Returns:
-            The mean rates, or None when the window holds no work yet.
+        It averages work already done. With nothing in the window the OLT is idle, and it
+        reports what a query alone would pay.
         """
-        if self._recent_tokens <= 0:
-            return None
-        return self._rates(self.batch)[0], self._recent_joules / self._recent_tokens
+        self._forget_old()
+        prompt_tokens, prompt_joules, generated_tokens, generated_joules = self._recent_totals
+        lone_prompt, lone_generated = self._rates(1)
+        return (
+            prompt_joules / prompt_tokens if prompt_tokens > 0 else lone_prompt,
+            generated_joules / generated_tokens if generated_tokens > 0 else lone_generated,
+        )
 
-    def broadcast(self, now: float, interval_s: float):
-        """Return what the OLT last put on the PON, resent only every interval_s.
+    def send_broadcast(self) -> None:
+        """Put the current report on the PON, where households hear it until the next send."""
+        self.last_broadcast = self.reported_rate()
 
-        The rate itself is the window mean, so what a household hears is that mean as of the
-        last send: stale by up to one interval. reported_rate() is the same quantity without
-        that staleness, which is the most any live signal could carry.
+    def _record(self, *work: float) -> None:
+        """Add work done now to the report window."""
+        self._recent.append((self.clock, *work))
+        for index, amount in enumerate(work):
+            self._recent_totals[index] += amount
 
-        Args:
-            now: Wall clock of the query deciding, in seconds.
-            interval_s: Seconds between sends on the PON's downstream channel.
-
-        Returns:
-            The rates last sent, or None before the OLT has anything to say.
-        """
-        if now - self._sent_at >= interval_s:
-            self._sent = self.reported_rate()
-            self._sent_at = now
-        return self._sent
+    def _forget_old(self) -> None:
+        """Drop work older than the report window."""
+        cutoff = self.clock - self.report_window_s
+        while self._recent and self._recent[0][0] < cutoff:
+            _, *work = self._recent.popleft()
+            for index, amount in enumerate(work):
+                self._recent_totals[index] -= amount
+        if not self._recent:  # clear rounding residue
+            self._recent_totals = [0.0, 0.0, 0.0, 0.0]
