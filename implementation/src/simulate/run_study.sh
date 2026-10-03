@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The case study (energy_tests.md §8.6): every run behind the thesis's simulation
+# The case study (energy_tests.md §9): every run behind the thesis's simulation
 # results, config/study.yaml, each over the subscriber counts it lists and seeds 7-9.
 #   main          the study's settings                                       x 3 seeds
 #   sensitivity   one change each: average accounting; a 2x or 5x cheaper ONU; the
@@ -20,7 +20,7 @@ cd "$(dirname "$0")/../.."                        # implementation/
 OUT=results/study
 mkdir -p "$OUT"
 PY=${PYTHON:-.venv/bin/python}
-[ -f data/load_traces/burstgpt_sessions.json ] || "$PY" src/simulate/prepare_load_traces.py --sessions
+[ -f data/load_traces/burstgpt_sessions.json ] || "$PY" src/simulate/prepare_load_traces.py
 INHIBIT=()
 command -v systemd-inhibit > /dev/null && INHIBIT=(systemd-inhibit --what=idle:sleep:handle-lid-switch \
   --mode=block --who="tcc study" --why="simulation runs")

@@ -83,7 +83,7 @@ def main() -> int:
     }
     print_header(s, sources, answers, factor, accuracy, fixed)
 
-    # --- Every OLT peak load, beta and policy ---
+    # --- Every population, beta and policy ---
     rows, hourly, configs, frontiers = [], [], [], []
     for subs in sizes:
         setup, homes = prepare_population(subs, s, answers, curve, prices)
@@ -304,7 +304,7 @@ def build_prices(s):
 
 
 # ==========================================
-# One OLT peak load
+# One population
 # ==========================================
 def prepare_population(subscribers, settings, answers, curve, prices):
     """Build the stream one population runs on, and the tables the static policies ship with.

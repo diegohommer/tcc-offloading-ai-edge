@@ -1,10 +1,9 @@
-"""What an OLT query really costs, and what the OLT can tell the tiers below."""
+"""What a query truly costs at each tier, and how long it takes."""
 
 # pylint: disable=wrong-import-position
 
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
@@ -36,7 +35,6 @@ class Energy:
         """
         self.curve, self.pub, self.speeds = curve, pub, speeds
         self.olt = curve.marginal_rates if accounting == "marginal" else curve.rates
-        self._cache: dict = {}
 
     # ==========================================
     # Rates and times
@@ -67,29 +65,6 @@ class Energy:
         """
         if tier == "olt":
             return self.curve.service_s(batch, gen_tokens)
-        v = self.speeds[tier]
-        return (prompt_tokens / v["pf"] if v["pf"] else 0.0) + gen_tokens / v["dec"]
-
-    def expected_olt(self, load: float) -> tuple[float, float]:
-        """Return the OLT's expected rates at a load, over the batch an arrival meets (1 + Poisson(load)).
-
-        Args:
-            load: The OLT's offered load, in queries in service.
-        """
-        key = round(load, 2)
-        if key not in self._cache:
-            mean_load = max(key, 0.0)
-            kmax = int(mean_load + 8 * math.sqrt(mean_load) + 10)
-            pf = dec = 0.0
-            for k in range(kmax + 1):
-                # Poisson(load) probability of k others in service; an empty OLT means batch 1
-                w = (
-                    float(k == 0)
-                    if mean_load == 0
-                    else math.exp(k * math.log(mean_load) - mean_load - math.lgamma(k + 1))
-                )
-                a, b = self.olt(1 + k)
-                pf += w * a
-                dec += w * b
-            self._cache[key] = (pf, dec)
-        return self._cache[key]
+        speed = self.speeds[tier]
+        prefill_s = prompt_tokens / speed["pf"] if speed["pf"] else 0.0
+        return prefill_s + gen_tokens / speed["dec"]

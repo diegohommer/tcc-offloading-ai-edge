@@ -14,7 +14,7 @@ def iso_accuracy(rows: list[dict]) -> None:
     """Add, to each row, RecServe's J/query at the same accuracy and the saving against it.
 
     Args:
-        rows: One peak load's result rows, every policy and beta; updated in place with
+        rows: One population's result rows, every policy and beta; updated in place with
             J_recserve_same_accuracy and saving_same_accuracy (NaN outside RecServe's range).
     """
     step = sorted((r["accuracy"], r["J_per_query"]) for r in rows if r["policy"] == "recserve")
@@ -38,7 +38,7 @@ def frontier(rows: list[dict], targets: list[float]) -> dict:
     target below the policy's range gets its least accurate point, one above gets None.
 
     Args:
-        rows: One policy's result rows at one peak load.
+        rows: One policy's result rows for one population.
         targets: The accuracies to read the frontier at.
 
     Returns:

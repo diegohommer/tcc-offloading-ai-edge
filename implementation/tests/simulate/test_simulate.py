@@ -58,7 +58,7 @@ def test_read_settings_rejects_an_unknown_setting(monkeypatch, tmp_path):
     """A setting with no flag behind it is reported rather than ignored."""
     config = tmp_path / "bad.yaml"
     config.write_text(
-        f"extends: {ROOT / 'config' / 'simulation.yaml'}\ntraffic:\n  surge_factor: 2\n"
+        f"extends: {ROOT / 'config' / 'simulation.yaml'}\ntraffic:\n  made_up_setting: 2\n"
     )
     assert _read_settings_from(monkeypatch, "--config", str(config)) is None
 

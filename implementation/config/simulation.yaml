@@ -87,7 +87,7 @@ learning:
   # from its packets: roughly its last 20 answers. [choice]
   alpha: 0.05
   # EWMA weight for the OLT energy rates in the packets; null = same as alpha.
-  # 0.3 was the best of the few values tried with window reports (§8.3). [choice]
+  # [choice]
   rate_alpha: null
   # Pool answer lengths and escalation rates across households: they describe the
   # questions, not the household (the operator can aggregate them), so a household
@@ -98,7 +98,7 @@ learning:
 report:
   # What the OLT's packet carries. query = the rate this query's batch ran at.
   # window = the OLT's mean over its own recent traffic, far less noisy under
-  # marginal accounting (§8.3). [choice]
+  # marginal accounting. [choice]
   report: query
   # Minutes the OLT averages over, for report: window and for its broadcast. [choice]
   report_window: 5.0
@@ -112,6 +112,6 @@ output:
   acc_targets: [0.60, 0.65, 0.70, 0.75, 0.80, 0.85]
   # Leave the per-hour routing detail out of the JSON (~75% of the file).
   no_hourly: false
-  # Random seed: questions drawn, arrivals, OLT batches, drift. [choice: the
+  # Random seed: the households' conversations and the questions they ask. [choice: the
   # results use 7, 8 and 9]
   seed: 7

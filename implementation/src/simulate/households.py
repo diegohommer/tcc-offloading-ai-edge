@@ -4,7 +4,7 @@ A household does not send queries at a steady rate through the day. Someone open
 conversation, asks a few things a couple of minutes apart, and leaves. That clumping is what
 the OLT's batching window sees, so the stream is built one conversation at a time, resampling
 the shapes measured in BurstGPT (data/load_traces/burstgpt_sessions.json, written by
-prepare_load_traces.py --sessions).
+prepare_load_traces.py).
 
 How much a household sends is not BurstGPT's to say: it has no user id and never states how
 many people it serves. That rate comes from ChatGPT's own consumer figures instead

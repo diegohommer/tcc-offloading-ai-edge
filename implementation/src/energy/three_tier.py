@@ -193,7 +193,7 @@ class OltCurve:
         """Return each sequence's share, per token, of what a batch this size adds above idle.
 
         The first query adds the net-of-idle rate; each later one adds the slope of the
-        batch's energy against batch size (energy_tests.md §8.3). A batch of n adds
+        batch's energy against batch size (energy_tests.md §8.4). A batch of n adds
         net + (n - 1) x slope, shared equally.
 
         Args:
