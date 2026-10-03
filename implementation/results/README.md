@@ -26,23 +26,20 @@ cheaper, the marginal cost, and the answers table (energy_tests.md §3, §4, §7
 
 | File | What | Written by |
 |---|---|---|
-| `study_<scenario>_seed<n>.csv` | one row per (OLT peak load, RecServe beta, policy): accuracy, J per query, latency, PON traffic, where queries ended up | `src/simulate/run_study.sh` → `simulate.py` |
-| `study_<scenario>_seed<n>.json` | the same, plus each policy's accuracy–energy frontier, the run's settings and its surge events | same |
+| `study_<scenario>_seed<n>.csv` | one row per (households on the OLT, RecServe beta, policy): accuracy, J per query, latency, PON traffic, the OLT's mean batch, where queries ended up | `src/simulate/run_study.sh` → `simulate.py` |
+| `study_<scenario>_seed<n>.json` | the same, plus each policy's accuracy–energy frontier and the run's settings | same |
 | `study_<scenario>_seed<n>.txt` | the run's printed output | same |
 | `SUMMARY.md` | **the case study's tables**: savings at equal accuracy, mean over seeds 7, 8, 9 | `src/analyze/summarize_study.py` |
 
-Scenarios (each run three times, seeds 7, 8 and 9):
+Scenarios (each run three times, seeds 7, 8 and 9, over the household counts in `config/study.yaml`):
 
-- `main_surge1`: BurstGPT's conversation traffic as recorded (predictable).
-- `main_surge1.5` … `main_surge5`: the same with unforeseen surges and dips of that size (unpredictable).
-- `alltraffic`: BurstGPT's API-inclusive traffic (real bursts).
-- Sensitivity runs, each changing one setting at surge factors 1 and 3:
-  - `average_`: average accounting;
-  - `onu0.5_`, `onu0.2_`: a 2× or 5× cheaper ONU;
-  - `olt1.07_`, `olt1.75_`: the OLT's energy ×1.07 (a site PUE of 1.65) or ×1.75 (about where a busy OLT stops beating the phone);
-  - `flat_`: the households' queries flat over the day, independent of the OLT's load;
-  - `hh<households>x<queries a day>_`: other household sizes;
-  - `perhousehold_`: question statistics learned per household.
+- `main`: the study's settings.
+- Sensitivity runs, each changing one setting:
+  - `average`: average accounting;
+  - `onu0.5`, `onu0.2`: a 2× or 5× cheaper ONU;
+  - `olt1.07`, `olt1.75`: the OLT's energy ×1.07 (a site PUE of 1.65) or ×1.75;
+  - `users2`: two active LLM users per household;
+  - `perhousehold`: question statistics learned per household.
 
 ## `adhoc/` (not committed)
 
