@@ -60,14 +60,20 @@ energy_tests.md            methods, measurements, decisions and their sources
 thesis/latex/              the thesis (synced with Overleaf, see CLAUDE.md)
 implementation/
   config/                  energy_sources.yaml (published figures), simulation.yaml, study.yaml
-  data/load_traces/        conversation shapes measured in BurstGPT
+  data/load_traces/        conversation shapes measured in BurstGPT [1] (prepare_load_traces.py)
   src/measure/             runs on Modal GPUs: the OLT's energy curve, every tier's answers
   src/energy/three_tier.py the energy model: tier rates, the OLT curve, the boundary conversion
   src/simulate/            the simulator (entry point simulate.py) and run_study.sh
   src/analyze/             tables and checks
   tests/                   pytest, one file per module
-  results/                 measurements, tier tables and the case study
+  results/
+    measurements/          the OLT's energy sweeps (run3 is the reference) and every tier's
+                           1,319 GSM8K answers with their logprobs, with the terminal logs
+    tier_energy.md         tier-level tables, written by src/analyze/tier_energy.py
+    study/                 the case study's runs and SUMMARY.md, written by run_study.sh
 ```
+
+Every file under `results/` is written by a script, never by hand.
 
 ## Running
 
@@ -89,3 +95,9 @@ of the same name. One-off runs write to `results/adhoc/`.
 The measurements cost GPU time and are already in `results/measurements/`. To redo
 them: `modal run src/measure/measure_gpu_energy.py` and `modal run
 src/measure/collect_answers.py`.
+
+The thesis builds with `latexmk -pdf tcc.tex` in `thesis/latex/` (class `infufrgs`,
+options `[cic,dipl,english]`, ABNT author-date citations).
+
+[1] Wang et al. *BurstGPT: A Real-world Workload Dataset to Optimize LLM Serving Systems.*
+KDD 2025. https://github.com/HPMLL/BurstGPT (CC BY 4.0).

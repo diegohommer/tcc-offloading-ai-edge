@@ -226,7 +226,7 @@ implementation/results/adhoc/
 # (overrides the global *.log rule above)
 !implementation/results/measurements/*.log
 
-# LaTeX build artifacts (regenerate with latexmk/pdflatex, see thesis/latex/README.md)
+# LaTeX build artifacts (regenerate with latexmk -pdf tcc.tex)
 thesis/latex/*.aux
 thesis/latex/*.log
 thesis/latex/*.toc
