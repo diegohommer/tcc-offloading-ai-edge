@@ -60,10 +60,10 @@ class OltServer:
         """(query id, prompt tokens, generated tokens) waiting for a slot, in arrival order."""
 
         self._recent: collections.deque = collections.deque()
-        """(clock, prompt tokens, prompt joules, generated tokens, generated joules) of recent work."""
+        """(clock, busy seconds, prompt tokens, prompt J, generated tokens, generated J) of recent work."""
 
-        self._recent_totals = [0.0, 0.0, 0.0, 0.0]
-        """Sums of the four quantities over the report window."""
+        self._recent_totals = [0.0] * 5
+        """Sums of the five quantities over the report window."""
 
         self._busy_s = self._batch_s = 0.0
         """Seconds spent generating, and those weighted by the batch held."""
@@ -159,7 +159,7 @@ class OltServer:
         prefill_joules = self._rates(self.batch + 1)[0] * prompt_tokens
         self._active[query] = (self._token_joules, prefill_joules)
         heapq.heappush(self._finishing, (self._progress + generated_tokens, query))
-        self._record(prompt_tokens, prefill_joules, 0.0, 0.0)
+        self._record(0.0, prompt_tokens, prefill_joules, 0.0, 0.0)
 
     def _generate(self, tokens_each: float, seconds: float, joules_per_token: float) -> None:
         """Let every active sequence generate the same number of tokens."""
@@ -169,19 +169,34 @@ class OltServer:
         self._progress += tokens_each
         self._token_joules += tokens_each * joules_per_token
         self.clock += seconds
-        self._record(0.0, 0.0, tokens_each * batch, tokens_each * batch * joules_per_token)
+        self._record(seconds, 0.0, 0.0, tokens_each * batch, tokens_each * batch * joules_per_token)
 
     # ==========================================
     # What the OLT can tell the PON
     # ==========================================
     def reported_rate(self) -> tuple[float, float]:
-        """Return the OLT's mean (J per prompt token, J per generated token) over its window.
+        """Return what the OLT tells the PON a query costs, from its last report window.
 
-        It averages work already done. With nothing in the window the OLT is idle, and it
-        reports what a query alone would pay.
+        Under marginal accounting it is what one more query would add: the slope while the
+        OLT was busy, the net-of-idle rate while it was idle, weighted by how much of the
+        window it spent busy. Under average accounting it is the mean cost per token of the
+        work done, or a lone query's rate when there was none.
+
+        Returns:
+            (J per prompt token, J per generated token).
         """
         self._forget_old()
-        prompt_tokens, prompt_joules, generated_tokens, generated_joules = self._recent_totals
+        busy_s, prompt_tokens, prompt_joules, generated_tokens, generated_joules = (
+            self._recent_totals
+        )
+        if self.prices.accounting == "marginal":
+            window = min(self.report_window_s, self.clock) or self.report_window_s
+            busy = min(busy_s / window, 1.0)
+            idle_rates, busy_rates = self.prices.added_rates(0), self.prices.added_rates(1)
+            return tuple(
+                busy * when_busy + (1 - busy) * when_idle
+                for when_idle, when_busy in zip(idle_rates, busy_rates)
+            )
         lone_prompt, lone_generated = self._rates(1)
         return (
             prompt_joules / prompt_tokens if prompt_tokens > 0 else lone_prompt,
@@ -206,4 +221,4 @@ class OltServer:
             for index, amount in enumerate(work):
                 self._recent_totals[index] -= amount
         if not self._recent:  # clear rounding residue
-            self._recent_totals = [0.0, 0.0, 0.0, 0.0]
+            self._recent_totals = [0.0] * 5

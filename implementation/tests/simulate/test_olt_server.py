@@ -24,6 +24,8 @@ class ConstantPowerCurve:  # pylint: disable=too-few-public-methods
 class ConstantPowerPrices:  # pylint: disable=too-few-public-methods
     """A card drawing 10 W whatever the batch: 1 / batch J per generated token."""
 
+    accounting = "average"
+
     @staticmethod
     def olt(batch):
         """Return (J per prompt token, J per generated token)."""
@@ -130,7 +132,7 @@ def test_drain_charges_queries_exactly_what_the_olt_spent(accounting, request):
         server.admit(query, rng.randint(50, 150), rng.randint(1, 500))
     completions += server.drain()
     assert len(completions) == 400
-    _, prompt_joules, _, generated_joules = server._recent_totals
+    _, _, prompt_joules, _, generated_joules = server._recent_totals
     assert sum(prefill for _, _, prefill, _ in completions) == pytest.approx(prompt_joules)
     assert sum(decode for _, _, _, decode in completions) == pytest.approx(generated_joules)
 
@@ -173,3 +175,29 @@ def test_send_broadcast_holds_the_report_until_the_next_send(toy_server):
     toy_server.advance(9.0)
     assert toy_server.last_broadcast[1] == pytest.approx(1.0)
     assert toy_server.reported_rate()[1] < 1.0
+
+
+def test_reported_rate_under_marginal_accounting_is_what_one_more_query_adds(
+    marginal_curve, marginal_prices
+):
+    """Busy for the whole window, the OLT reports the slope; idle, the net-of-idle rate."""
+    server = OltServer(marginal_curve, marginal_prices, report_window_s=10.0)
+    server.advance(100.0)
+    assert server.reported_rate() == pytest.approx(marginal_prices.added_rates(0))
+    for query in range(4):
+        server.admit(query, 100, 10_000)
+    server.advance(120.0)
+    assert server.reported_rate() == pytest.approx(marginal_prices.added_rates(1))
+
+
+def test_reported_rate_under_marginal_accounting_weights_by_busy_time(
+    marginal_curve, marginal_prices
+):
+    """Busy for half the window, the OLT reports halfway between the slope and the net rate."""
+    server = OltServer(marginal_curve, marginal_prices, report_window_s=10.0)
+    server.advance(100.0)
+    per_sequence = marginal_curve._at(marginal_curve.tps, 1)
+    server.admit(0, 0, 5.0 * per_sequence)  # generates for exactly 5 s
+    server.advance(110.0)
+    idle, busy = marginal_prices.added_rates(0), marginal_prices.added_rates(1)
+    assert server.reported_rate()[1] == pytest.approx((idle[1] + busy[1]) / 2)

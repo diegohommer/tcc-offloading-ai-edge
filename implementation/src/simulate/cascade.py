@@ -33,9 +33,9 @@ from routing import Learned, on_arrival, on_escalation, TOP, Window
 #   recserve_no_onu  RecServe on phone -> OLT (control: is a saving just from dropping the ONU?)
 #   static_day       one fixed OLT rate for the whole day, observed in advance
 #   static_hour      one OLT rate per hour of the day, weekday or weekend (a timetable)
-#   broadcast        the OLT's 5-minute mean, broadcast on the PON to every ONU (the proposal)
+#   broadcast        the OLT's 5-minute report, broadcast on the PON to every ONU (the proposal)
 #   oracle           the same mean with no broadcast delay
-#   piggyback        the OLT's 5-minute mean, heard only on the household's own answers
+#   piggyback        the same report, heard only on the household's own answers
 #   stale_low/high   static_day observed on a population 1/4 or 4x the real one
 POLICIES = (
     "recserve",
@@ -202,19 +202,24 @@ def run(setup: RunSetup, beta: float, policy: str):
         for query_id, done_at, prefill_joules, decode_joules in completions:
             query = in_flight.pop(query_id)
             answer = setup.answers[query["question"]][top]
-            paid = (
-                prefill_joules / answer["tp"] if answer["tp"] else 0.0,
-                decode_joules / answer["tg"] if answer["tg"] else 0.0,
-            )
-            if query["belief"] is not None and paid[1] > 0:
-                rate_errors.append(abs(query["belief"] - paid[1]) / paid[1])
+            # What this query cost the network per token: its share of the batches it ran
+            # in under average accounting, what it added under marginal accounting.
+            if prices.accounting == "marginal":
+                cost = prices.added_rates(query["running"])
+            else:
+                cost = (
+                    prefill_joules / answer["tp"] if answer["tp"] else 0.0,
+                    decode_joules / answer["tg"] if answer["tg"] else 0.0,
+                )
+            if query["belief"] is not None:
+                rate_errors.append(abs(query["belief"] - query["fresh"]) / query["fresh"])
             cell = seen.setdefault(setup.schedule_key(query["hour"]), [0.0, 0.0, 0])
-            cell[0] += paid[0]
-            cell[1] += paid[1]
+            cell[0] += cost[0]
+            cell[1] += cost[1]
             cell[2] += 1
-            # The packet carries what this answer paid, or the OLT's recent mean, which is
-            # far steadier under marginal accounting.
-            reported = server.reported_rate() if settings.report == "window" else paid
+            # The packet carries this query's cost, or the OLT's report over its window,
+            # which is far steadier under marginal accounting.
+            reported = server.reported_rate() if settings.report == "window" else cost
             query["packet"][top] = (*reported, answer["tg"])
             settle(
                 query["question"],
@@ -231,7 +236,10 @@ def run(setup: RunSetup, beta: float, policy: str):
         while arrivals and arrivals[0][0] <= until:
             reached, query_id = heapq.heappop(arrivals)
             land(server.advance(reached))
-            answer = setup.answers[in_flight[query_id]["question"]][top]
+            query = in_flight[query_id]
+            answer = setup.answers[query["question"]][top]
+            query["running"] = server.batch
+            query["fresh"] = server.reported_rate()[1]  # what the OLT itself says on arrival
             server.admit(query_id, answer["tp"], answer["tg"])
         land(server.advance(until))
 
@@ -349,7 +357,8 @@ def run(setup: RunSetup, beta: float, policy: str):
         "J_per_query": energy / total,
         "forwarded_on_arrival": forwarded / total,
         "skipped_on_escalation": skipped / total,
-        # how far the OLT rate a query was routed on was from what it then paid
+        # how far the OLT rate a query was routed on was from the OLT's own report when
+        # the query reached it: how stale or wrong the policy's information was
         "olt_rate_error": statistics.mean(rate_errors) if rate_errors else float("nan"),
         "mean_olt_batch": server.mean_batch,
         "olt_queued": server.queued / server.admitted if server.admitted else 0.0,

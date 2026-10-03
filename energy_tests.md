@@ -195,10 +195,9 @@ after the seconds the tiers below spent on it, so the batch it meets is whoever 
 genuinely running then. The tests check this against hand-worked cases and check that the
 joules charged to queries sum to what the OLT spent.
 
-The OLT reports its mean cost per token over its last 5 minutes of work, or what a lone
-query would pay when it has been idle that long. `broadcast` hears that report as sent on
-the PON every 10 s; `oracle` reads it with no delay; `piggyback` hears it only on its own
-household's answers.
+The OLT reports what a query costs, from its last 5 minutes (§8.4 says what that is under
+each accounting). `broadcast` hears the report as sent on the PON every 10 s; `oracle`
+reads it with no delay; `piggyback` hears it only on its own household's answers.
 
 ### 8.4 Energy accounting
 
@@ -211,6 +210,13 @@ household's answers.
   first query on an idle OLT costs about 790 J. The ONU drops its idle draw (§5); the phone
   is unchanged.
 
+What the OLT reports, and what packets and the static tables carry, follows the
+accounting. Under average accounting it is the mean cost per token of its recent work, the
+share a query pays. Under marginal accounting it is what one more query would add: the
+slope while the OLT is busy, the net-of-idle rate while it is idle, weighted by the share
+of the last 5 minutes it spent busy. Routing on the average instead would make a busy OLT
+look tens of times dearer than joining it really is.
+
 The study uses marginal accounting, the energy a routing decision changes, with average
 accounting as a sensitivity run.
 
@@ -219,7 +225,8 @@ accounting as a sensitivity run.
 Each policy is run across RecServe's beta from 0.1 to 0.9, which traces an accuracy–energy
 curve. Policies are compared by the energy they need to reach the same accuracy, read off
 each curve's Pareto points. Every run also reports latency, the bytes crossing the PON,
-and how far the OLT cost a query was routed on was from what it then paid.
+and how far the OLT cost a query was routed on was from what the OLT itself reported when
+the query reached it.
 
 ## 9. The case study
 

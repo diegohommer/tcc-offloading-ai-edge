@@ -96,9 +96,9 @@ learning:
   shared_stats: false
 
 report:
-  # What the OLT's packet carries. query = the rate this query's batch ran at.
-  # window = the OLT's mean over its own recent traffic, far less noisy under
-  # marginal accounting. [choice]
+  # What the OLT's packet carries. query = what this query cost (its share, or
+  # under marginal accounting what it added). window = the OLT's report over its
+  # recent work, far less noisy under marginal accounting. [choice]
   report: query
   # Minutes the OLT averages over, for report: window and for its broadcast. [choice]
   report_window: 5.0

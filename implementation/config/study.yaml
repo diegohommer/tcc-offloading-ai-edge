@@ -34,7 +34,7 @@ learning:
   rate_alpha: 0.3
 
 report:
-  # The OLT reports its own 5-minute mean, on answers (piggyback) and in its
+  # The OLT reports over its last 5 minutes, on answers (piggyback) and in its
   # broadcast alike. [choice]
   report: window
 

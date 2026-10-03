@@ -48,9 +48,9 @@ The policies differ only in where they get the OLT's cost from:
 | `recserve_no_onu` | not used: phone, then OLT | control: is a saving just dropping the ONU? |
 | `static_day` | one rate for the day, observed over a month of RecServe | configuration |
 | `static_hour` | one rate per hour, weekday or weekend | timetable |
-| `broadcast` | the OLT's 5-minute mean, sent on the PON every 10 s | the proposal |
+| `broadcast` | the OLT's report over its last 5 minutes, sent on the PON every 10 s | the proposal |
 | `oracle` | the same mean with no broadcast delay | reference |
-| `piggyback` | the 5-minute mean, heard only on the household's own answers | ablation |
+| `piggyback` | the same report, heard only on the household's own answers | ablation |
 | `stale_low`, `stale_high` | `static_day` observed on a population 4x smaller or larger | stale configuration |
 
 ## Layout

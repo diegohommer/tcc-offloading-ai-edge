@@ -33,7 +33,7 @@ class Energy:
             accounting: "average" or "marginal".
             speeds: The phone's and ONU's tokens per second (published_speeds), for seconds().
         """
-        self.curve, self.pub, self.speeds = curve, pub, speeds
+        self.curve, self.pub, self.speeds, self.accounting = curve, pub, speeds, accounting
         self.olt = curve.marginal_rates if accounting == "marginal" else curve.rates
 
     # ==========================================
@@ -49,6 +49,22 @@ class Energy:
         if tier == "olt":
             return self.olt(batch)
         return self.pub[tier]["pf"], self.pub[tier]["dec"]
+
+    def added_rates(self, running: int) -> tuple[float, float]:
+        """Return what one more OLT query costs per token, joining `running` sequences.
+
+        Under marginal accounting that is what the network's energy goes up by: the
+        net-of-idle rate on an idle OLT, the slope of the batch's energy on a busy one.
+        Under average accounting it is the query's share of the batch it makes.
+
+        Args:
+            running: Sequences already generating when the query joins.
+        """
+        if self.accounting != "marginal":
+            return self.olt(running + 1)
+        if running == 0:
+            return self.curve.pf1_net, self.curve.dec1_net
+        return self.curve.pf_slope, self.curve.dec_slope
 
     def seconds(self, tier: str, batch: int, prompt_tokens: float, gen_tokens: float) -> float:
         """Return how long a tier takes to answer: compute time only (network time is milliseconds).

@@ -37,3 +37,16 @@ def test_seconds_on_the_onu_counts_generated_tokens_only(prices):
 def test_seconds_at_the_olt_depends_on_the_batch(curve, prices):
     """At the OLT a sequence's speed is its share of the batch's throughput."""
     assert prices.seconds("olt", 8, 100, 300) == pytest.approx(curve.service_s(8, 300))
+
+
+def test_added_rates_under_marginal_accounting_is_net_when_idle_and_slope_when_busy(
+    marginal_curve, marginal_prices
+):
+    """One more query adds the net-of-idle rate to an idle OLT and the slope to a busy one."""
+    assert marginal_prices.added_rates(0) == (marginal_curve.pf1_net, marginal_curve.dec1_net)
+    assert marginal_prices.added_rates(5) == (marginal_curve.pf_slope, marginal_curve.dec_slope)
+
+
+def test_added_rates_under_average_accounting_is_the_share_of_the_batch_it_makes(curve, prices):
+    """Under average accounting a query pays its share of the batch it joins."""
+    assert prices.added_rates(3) == curve.rates(4)

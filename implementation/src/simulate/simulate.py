@@ -180,7 +180,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add(
         "--report",
         choices=("query", "window"),
-        help="the OLT packet's rate: this batch's, or its recent mean",
+        help="the OLT packet's rate: this query's cost, or the OLT's recent report",
     )
     add("--report-window", type=float, help="minutes the OLT averages over (--report window)")
     add(
