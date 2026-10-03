@@ -324,7 +324,13 @@ def main() -> int:
         }
 
     # --- Write and summarize ---
-    with open(OUT / "drift_fit.json", "w", encoding="utf-8") as f:
+    # Without --azure the Azure fit is not recomputed, so keep whatever is already on disk
+    # rather than dropping a section this run never looked at.
+    path = OUT / "drift_fit.json"
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            result = {**json.load(f), **result}
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=1)
     for src, r in result.items():
         for col, v in r.items():
