@@ -71,6 +71,9 @@ class OltServer:
         self._busy_s = self._batch_s = 0.0
         """Seconds the OLT spent generating, and those weighted by the batch it then held."""
 
+        self._sent_at, self._sent = -1e18, None
+        """When the OLT last put its rate on the PON, and what it said."""
+
     # ==========================================
     # The batch right now
     # ==========================================
@@ -204,3 +207,22 @@ class OltServer:
         if self._recent_tokens <= 0:
             return None
         return self._rates(self.batch)[0], self._recent_joules / self._recent_tokens
+
+    def broadcast(self, now: float, interval_s: float):
+        """Return what the OLT last put on the PON, resent only every interval_s.
+
+        The rate itself is the window mean, so what a household hears is that mean as of the
+        last send: stale by up to one interval. reported_rate() is the same quantity without
+        that staleness, which is the most any live signal could carry.
+
+        Args:
+            now: Wall clock of the query deciding, in seconds.
+            interval_s: Seconds between sends on the PON's downstream channel.
+
+        Returns:
+            The rates last sent, or None before the OLT has anything to say.
+        """
+        if now - self._sent_at >= interval_s:
+            self._sent = self.reported_rate()
+            self._sent_at = now
+        return self._sent

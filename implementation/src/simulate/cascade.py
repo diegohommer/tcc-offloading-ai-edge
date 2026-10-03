@@ -101,10 +101,14 @@ def believed_olt_rate(policy: str, setup: RunSetup, server, hour: float, learned
     if policy == "static_hour":
         return setup.static_rates["static_hour"][setup.schedule_key(hour)]
     if policy == "oracle":
-        return setup.prices.rates("olt", max(server.batch, 1))  # the rate this instant
-    if policy == "broadcast":
-        # the ONU relays it to the household's devices over the LAN, taken as free and instant
+        # the window mean with no staleness: the most a live signal could carry. Reading the
+        # batch of this instant instead would be worse than useless, since a query joins the
+        # OLT seconds later and generates for nine more, with others arriving throughout.
         return server.reported_rate()
+    if policy == "broadcast":
+        # the same mean, but only as fresh as the OLT's last send; the ONU relays it to the
+        # household's devices over the LAN, taken as free and instant
+        return server.broadcast(hour * 3600, setup.settings.broadcast_interval_s)
     return learned.rates.get("olt")  # piggyback
 
 
@@ -156,7 +160,7 @@ def run(setup: RunSetup, beta: float, policy: str):
             }
         return households[household]
 
-    def settle(q, hour, household, tier, spent, took, packet, hops):
+    def settle(q, hour, household, tier, spent, took, packet):
         """Record a finished query and let its answer travel back down.
 
         Args:
@@ -167,7 +171,6 @@ def run(setup: RunSetup, beta: float, policy: str):
             spent: Joules the query cost.
             took: Seconds it took, queueing at the OLT included.
             packet: {tier: (J/prompt token, J/generated token, tokens)} riding back down.
-            hops: Tiers the answer travelled back down through.
         """
         nonlocal energy, correct, confidence_delivered, comm_bytes, pon_bytes
         answer = setup.answers[q][tier]
@@ -176,7 +179,7 @@ def run(setup: RunSetup, beta: float, policy: str):
         qb = setup.answers[q]["user"]["qb"]
         # RecServe's communication burden: the input goes up and the output comes down once
         # per hop, 2(i-1)(|x|+|y|). Skipping a tier saves inference, not bytes.
-        comm_bytes += 2 * hops * (qb + answer["ab"])
+        comm_bytes += 2 * TIERS.index(tier) * (qb + answer["ab"])
         # What crosses the shared PON fibre: question up, answer down, once, for every query
         # the OLT answers.
         pon_bytes += (qb + answer["ab"]) if tier == top else 0
@@ -205,7 +208,11 @@ def run(setup: RunSetup, beta: float, policy: str):
         for qid, done_at, decode_j in completions:
             f = flight.pop(qid)
             tg = setup.answers[f["q"]][top]["tg"]
-            f["packet"][top] = (f["reported"][0], decode_j / tg if tg else 0.0, tg)
+            own = (f["reported"][0], decode_j / tg if tg else 0.0, tg)
+            # The packet carries either what this query's own answer cost, or the OLT's mean
+            # over its recent traffic, which is far steadier under marginal accounting.
+            windowed = server.reported_rate() if s.report == "window" else None
+            f["packet"][top] = (*windowed, tg) if windowed else own
             settle(
                 f["q"],
                 f["hour"],
@@ -214,7 +221,6 @@ def run(setup: RunSetup, beta: float, policy: str):
                 f["spent"] + f["prefill_j"] + decode_j,
                 f["took"] + (done_at - f["reached"]),
                 f["packet"],
-                f["hops"],
             )
 
     def hand_over(at: float, qid: int) -> None:
@@ -242,7 +248,7 @@ def run(setup: RunSetup, beta: float, policy: str):
         prompt_tokens = setup.answers[q]["user"]["tp"]
         packet: dict[str, tuple[float, float, float]] = {}
         spent = took = 0.0
-        here = hops = 0
+        here = 0
         rates = None
         while True:
             tier = TIERS[here]
@@ -283,7 +289,6 @@ def run(setup: RunSetup, beta: float, policy: str):
                     "spent": spent,
                     "took": took,
                     "packet": packet,
-                    "hops": hops,
                     "reached": now + took,
                 }
                 heapq.heappush(waiting, (now + took, next_id))
@@ -302,7 +307,7 @@ def run(setup: RunSetup, beta: float, policy: str):
             escalate = len(window) > 1 and answer["conf"] < window.quantile(beta)
             window.add(answer["conf"])
             if not escalate:
-                settle(q, hour, household, tier, spent, took, packet, hops)
+                settle(q, hour, household, tier, spent, took, packet)
                 break
 
             # --- On escalation: the next tier up, or a cheaper later one? ---
@@ -312,7 +317,6 @@ def run(setup: RunSetup, beta: float, policy: str):
             if policy == "recserve_no_onu":
                 target = TOP
             skipped += target > here + 1
-            hops += 1
             here = target
 
     # --- Nobody else is coming: let the OLT take and finish what is left ---
