@@ -93,8 +93,10 @@ Every setting is explained in `config/simulation.yaml` and can be overridden by 
 of the same name. One-off runs write to `results/adhoc/`.
 
 The measurements cost GPU time and are already in `results/measurements/`. To redo
-them: `modal run src/measure/measure_gpu_energy.py` and `modal run
-src/measure/collect_answers.py`.
+them: `modal run src/measure/measure_gpu_energy_static.py` (the OLT's energy curve over
+static batches) and `modal run src/measure/collect_answers.py` (every tier's answers).
+`measure_gpu_energy_continuous.py` measures the same GPU under continuous batching, to
+check the simulator's batching against real hardware.
 
 The thesis builds with `latexmk -pdf tcc.tex` in `thesis/latex/` (class `infufrgs`,
 options `[cic,dipl,english]`, ABNT author-date citations).

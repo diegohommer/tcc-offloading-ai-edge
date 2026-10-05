@@ -61,7 +61,7 @@ MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "512"))
 MAX_MODEL_LEN = int(os.environ.get("MAX_MODEL_LEN", "2048"))
 GPU_SPEC = os.environ.get("GPU", "L4:1")
 
-# Identical to measure_gpu_energy.py's image, so Modal reuses the cached build.
+# Identical to measure_gpu_energy_static.py's image, so Modal reuses the cached build.
 VLLM_VERSION = "0.21.0"
 vllm_image = (
     modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
@@ -87,7 +87,7 @@ app = modal.App("tcc-collect-answers")
 def collect(tier: str, spec: dict, prompts: list[str], max_tokens: int, max_model_len: int) -> dict:
     """Answer every prompt with one tier's model, on a Modal GPU.
 
-    Configuration travels as arguments only (see measure_gpu_energy.py): module-level
+    Configuration travels as arguments only (see measure_gpu_energy_static.py): module-level
     settings are re-read inside the container and would not carry the caller's values.
 
     Args:

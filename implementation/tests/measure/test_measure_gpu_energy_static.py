@@ -5,7 +5,7 @@ import math
 import pytest
 
 from collect_answers import confidence
-from measure_gpu_energy import add_per_query, median_row, summarize_trial
+from measure_gpu_energy_static import add_per_query, median_row, summarize_trial
 
 
 def test_summarize_trial_splits_prefill_from_decode():

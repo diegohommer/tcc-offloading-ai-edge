@@ -1,7 +1,7 @@
 # Energy figures for the tiers NOT measured by this project, and the factors that
 # put every tier on one boundary. Read by src/energy/three_tier.py, the only code
 # that prices energy; the OLT's own figures are first-party, in
-# results/measurements/gpu_energy_*.json (src/measure/measure_gpu_energy.py).
+# results/measurements/gpu_energy_*.json (src/measure/measure_gpu_energy_static.py).
 #
 # Every number below was checked against its paper's text (energy_tests.md §5-§7).
 #

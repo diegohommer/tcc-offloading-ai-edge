@@ -128,7 +128,7 @@ def olt_factor(which: str = "system", accounting: str = "average") -> float:
 # ==========================================
 # OLT measurements
 # ==========================================
-# The OLT sweeps (measure/measure_gpu_energy.py), in the order they were run. Run 1's
+# The OLT sweeps (measure/measure_gpu_energy_static.py), in the order they were run. Run 1's
 # prefill figures are unreliable (the energy counter's resolution, energy_tests.md §3.4);
 # its decode figures replicate the others.
 OLT_RUN_FILES = {

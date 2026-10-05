@@ -1,13 +1,15 @@
 """Measure the OLT's energy per token against batch size, on a rented GPU through NVML.
 
-The OLT is the only tier measured first-hand. Per batch size it reports prefill energy per
-prompt token, decode energy per generated token, and the average and marginal energy per
-query, each gross and net of idle power. Writes
+The OLT is the only tier measured first-hand. Every sequence of a batch starts together
+(measure_gpu_energy_continuous.py measures continuous batching). Per batch size it reports
+prefill energy per prompt token, decode energy per generated token, and the average and
+marginal energy per query, each gross and net of idle power. Writes
 results/measurements/gpu_energy_<model>_<gpu>_<UTC>.json.
 
 Usage:
-    modal run src/measure/measure_gpu_energy.py   # Qwen2.5-7B, fp8, one L4 (~15 min)
-    MODEL=google/gemma-2-9b-it GPU=L4:1 QUANTIZATION=fp8 modal run src/measure/measure_gpu_energy.py
+    modal run src/measure/measure_gpu_energy_static.py   # Qwen2.5-7B, fp8, one L4 (~15 min)
+    MODEL=google/gemma-2-9b-it GPU=L4:1 QUANTIZATION=fp8 \
+        modal run src/measure/measure_gpu_energy_static.py
 """
 
 import json
