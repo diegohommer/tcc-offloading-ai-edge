@@ -130,6 +130,30 @@ and the simulator is rerun on the continuous curve. A 5-minute smoke run (concur
 8, one load) only checked the pipeline: 2.473 J per generated token at concurrency 1 against
 the sweep's 2.465, and 0.322 against 0.316 at 8.
 
+**Outcome (full run, 2026-10-05; `results/continuous_batching.md`): neither criterion is
+met as written.**
+
+- *Criterion 1 fails at load 16 under marginal accounting.* The simulator overstates net
+  energy by 13.5–14.2% there, and by 6.3–7.1% at load 8. Every other comparison passes,
+  at every load and seed: gross energy within +1.0% to +2.1%, mean latency within −1.8% to
+  −0.2%, net energy within +1.9% to +3.6% at loads 1–4.
+- *Criterion 2 fails on its clock test at concurrency 4, 32, 48 and 64.* The three energy
+  windows of every level agree within 0.73%, and the card stayed at its 72 W limit and
+  76–77 °C. The clock check read one instant at each window's edge, and an L4 at its power
+  limit moves its clock continuously to stay under it, so a single reading of 975–1,230 MHz
+  is power management, not throttling. The clock test was the wrong instrument; the
+  energy windows show the measurement was steady.
+
+*Found after the data, and labelled as such:*
+
+- Continuous batching costs what the static sweep says. Compared like for like (the sweep's
+  decode energy plus its prefill energy at the window's mix of prompt and generated tokens),
+  every concurrency from 1 to 64 is within −1.4% to +3.2%.
+- The marginal failure comes from the straight-line marginal model (net + (n − 1) × slope),
+  not from batching. Reading the net energy off the measured curve at each batch size
+  instead, the replay is within +1.4% to +3.0% at every load and seed. The straight line
+  overcharges a busy OLT, increasingly with load, so it errs against the proposal.
+
 ## 4. Answers
 
 All three tiers answered GSM8K's 1,319 test questions, zero-shot, at temperature 0, up to

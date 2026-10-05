@@ -167,19 +167,27 @@ def main() -> int:
             clocks
         ) >= 0.95 * max(clocks)
         steady &= within and no_drop
+        # the static sweep's decode figure excludes prefill; a continuous window's energy
+        # includes the prefill of every request that joined, so add it at the window's mix
         reference = static.get(row["concurrency"])
+        expected = (
+            reference["decode_J_per_output_token"]
+            + reference["prefill_J_per_input_token"]
+            * row["prompt_tokens"]
+            / row["generated_tokens"]
+            if reference
+            else None
+        )
         rows.append(
             [
                 row["concurrency"],
                 f"{row['mean_in_flight']:.2f}",
                 f"{row['tokens_per_s']:.0f}",
                 f"{row['J_per_generated_token']:.4f} [{min(trials):.4f}–{max(trials):.4f}]",
-                f"{reference['decode_J_per_output_token']:.4f}" if reference else "–",
-                (
-                    f"{row['J_per_generated_token'] / reference['decode_J_per_output_token'] - 1:+.1%}"
-                    if reference
-                    else "–"
-                ),
+                f"{expected:.4f}" if expected else "–",
+                f"{row['J_per_generated_token'] / expected - 1:+.1%}" if expected else "–",
+                f"{max(trials) / min(trials) - 1:.2%}",
+                " / ".join(str(clock) for clock in clocks if clock is not None) or "–",
                 f"{row['mean_power_W']:.0f}",
                 f"{row.get('max_temperature_C', float('nan')):.0f}",
                 "yes" if within and no_drop else "**no**",
@@ -192,8 +200,10 @@ def main() -> int:
             "Measured in flight",
             "Tokens/s",
             "J/generated token [windows]",
-            "Static sweep",
+            "Static sweep, prefill included",
             "Difference",
+            "Window spread",
+            "SM clock MHz",
             "Power W",
             "Max °C",
             "Steady",
