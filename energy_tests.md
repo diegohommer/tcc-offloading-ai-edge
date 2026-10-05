@@ -116,6 +116,14 @@ GSM8K questions at their recorded answer lengths:
 2. *The measurement is steady.* At every fixed concurrency, the reported median lies within
    the range of its three windows, and the GPU's SM clock does not drop between windows.
 
+*Amendment, 2026-10-05, before the full run's data:* the net comparison of criterion 1
+takes both sides against the idle power of the card that was measured. As first written,
+the measured side subtracted that card's idle (35.6 W in the smoke run) and the simulator
+its net rates from the sweep's card (30.5 W), so the two sides subtracted different
+baselines. The gross curve does not depend on the card, since the L4 runs at its power
+limit, so the simulator's net rates are rebuilt from the same gross curve minus the
+measured card's idle. The as-written figure is reported beside it.
+
 Fixed-concurrency energy per token is also reported against the static sweep at the same
 batch size, for the record. If criterion 1 fails at some load, that is reported as found,
 and the simulator is rerun on the continuous curve. A 5-minute smoke run (concurrency 1 and

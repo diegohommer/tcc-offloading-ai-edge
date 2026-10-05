@@ -11,6 +11,7 @@ known_first_party = [
     "cascade",
     "check_beta_windows",
     "check_confidence",
+    "check_continuous_batching",
     "collect_answers",
     "energy",
     "frontier",
