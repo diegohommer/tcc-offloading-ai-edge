@@ -93,6 +93,35 @@ its GPU card alone, as most benchmarks do, the ONU crossover would fall at 2.6.
   once and 0 J twice: the counter steps in about 0.1 s of energy. Repeating the pass until
   it spans 3 s fixed it. Decode passes last 10–14 s and were never affected.
 
+### 3.5 Continuous batching: validation, criterion fixed before the data
+
+The sweep times static batches, while the simulator runs the OLT with continuous batching
+(§8.3). `src/measure/measure_gpu_energy_continuous.py` measures the same GPU, engine,
+precision and settings the way a live OLT runs, on vLLM's async engine with the OLT's own
+GSM8K questions at their recorded answer lengths:
+
+- **Fixed concurrency**: 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48 and 64 requests always in
+  flight; after a 30 s warm-up, three back-to-back 90 s windows, median reported.
+- **Poisson arrivals**: loads of 1, 2, 4, 8 and 16 requests in flight on average, three
+  arrival seeds each, 5 minutes of arrivals; every request's arrival, finish and tokens.
+
+**Criterion, written on 2026-10-05 before the full run:**
+
+1. *The simulator reproduces the GPU.* Each Poisson run's measured arrivals are replayed
+   through the simulator's OLT, with the static curve at the card boundary. Its predicted
+   energy is within ±10% of the energy measured over the run, and its mean request latency
+   (finish minus arrival) within ±10% of the measured mean, at every load. Energy is
+   compared net of the run's own idle power under marginal accounting (net + (n − 1) ×
+   slope per step, the study's model), and gross under average accounting.
+2. *The measurement is steady.* At every fixed concurrency, the reported median lies within
+   the range of its three windows, and the GPU's SM clock does not drop between windows.
+
+Fixed-concurrency energy per token is also reported against the static sweep at the same
+batch size, for the record. If criterion 1 fails at some load, that is reported as found,
+and the simulator is rerun on the continuous curve. A 5-minute smoke run (concurrency 1 and
+8, one load) only checked the pipeline: 2.473 J per generated token at concurrency 1 against
+the sweep's 2.465, and 0.322 against 0.316 at 8.
+
 ## 4. Answers
 
 All three tiers answered GSM8K's 1,319 test questions, zero-shot, at temperature 0, up to
