@@ -1,9 +1,12 @@
 """Tests for turning a continuous-batching run's timings into energy figures."""
 
+import math
+
 import pytest
 
 from measure_gpu_energy_continuous import (
     mean_in_flight,
+    median_of_windows,
     poisson_arrivals,
     SERVICE_S,
     summarize_window,
@@ -31,6 +34,11 @@ def test_mean_in_flight_weights_requests_by_their_time_in_the_window():
     assert mean_in_flight([(0.0, 20.0), (5.0, 10.0)], start=5.0, end=15.0) == pytest.approx(1.5)
 
 
+def test_mean_in_flight_counts_a_request_still_running_at_the_window_end():
+    """A request that has not finished is in flight up to the end of the window."""
+    assert mean_in_flight([(0.0, math.inf), (0.0, 5.0)], start=0.0, end=10.0) == pytest.approx(1.5)
+
+
 def test_window_tokens_counts_only_events_inside_the_window():
     """Tokens streamed before the window opens or after it closes are left out."""
     events = [(1.0, 100, 0), (2.0, 0, 5), (3.0, 0, 7), (9.0, 0, 4)]
@@ -53,3 +61,16 @@ def test_summarize_window_divides_energy_by_the_tokens_generated():
     assert row["J_per_generated_token"] == pytest.approx(0.5)
     assert row["J_per_generated_token_net"] == pytest.approx((100.0 - 20.0) / 200)
     assert row["mean_power_W"] == pytest.approx(50.0)
+
+
+def test_median_of_windows_takes_the_median_and_keeps_every_window():
+    """Each field is the median across a level's windows; every window's J/token is kept."""
+    trials = [
+        {"concurrency": 4, "J_per_generated_token": value, "tokens_per_s": speed}
+        for value, speed in ((0.7, 110.0), (0.6, 115.0), (0.65, 112.0))
+    ]
+    row = median_of_windows(4, trials)
+    assert row["concurrency"] == 4
+    assert row["J_per_generated_token"] == pytest.approx(0.65)
+    assert row["tokens_per_s"] == pytest.approx(112.0)
+    assert row["trials_J_per_generated_token"] == [0.7, 0.6, 0.65]

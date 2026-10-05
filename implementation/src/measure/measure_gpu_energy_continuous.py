@@ -12,8 +12,10 @@ Usage:
 """
 
 import json
+import math
 import os
 import random
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -42,6 +44,8 @@ WARMUP_S = float(os.environ.get("WARMUP_S", "10" if SMOKE else "30"))
 WINDOW_S = float(os.environ.get("WINDOW_S", "20" if SMOKE else "90"))
 LOADS = [float(load) for load in os.environ.get("LOADS", "2" if SMOKE else "1,2,4,8,16").split(",")]
 POISSON_S = float(os.environ.get("POISSON_S", "40" if SMOKE else "300"))
+REPEATS = int(os.environ.get("REPEATS", "1" if SMOKE else "3"))
+"""Back-to-back windows per concurrency level, and arrival seeds per Poisson load."""
 SEED = int(os.environ.get("SEED", "7"))
 
 SERVICE_S = 8.7
@@ -91,7 +95,7 @@ def mean_in_flight(spans: list, start: float, end: float) -> float:
     """Return the time-weighted number of requests in flight between start and end.
 
     Args:
-        spans: [(submitted, finished)] per request, in seconds.
+        spans: [(submitted, finished)] per request, in seconds; inf for one still running.
         start: Window start.
         end: Window end.
     """
@@ -151,6 +155,21 @@ def summarize_window(
     }
 
 
+def median_of_windows(level: int, trials: list[dict]) -> dict:
+    """Return one row per concurrency level: the median of every field across its windows.
+
+    Args:
+        level: The requests kept in flight.
+        trials: The level's summarize_window results.
+    """
+    row = {"concurrency": level}
+    for key in trials[0]:
+        if key != "concurrency":
+            row[key] = statistics.median(trial[key] for trial in trials)
+    row["trials_J_per_generated_token"] = [trial["J_per_generated_token"] for trial in trials]
+    return row
+
+
 # ==========================================
 # The measurement, on the rented GPU
 # ==========================================
@@ -160,9 +179,13 @@ def summarize_window(
 #   * the OLT's own GSM8K questions in its chat template, each generating exactly the
 #     tokens the OLT answered it with (ignore_eos), so lengths are real and repeatable
 #   * fixed concurrency: a new request starts the moment one finishes; energy and tokens
-#     are read over a steady-state window after a warm-up, as ML.ENERGY measures
-#   * Poisson loads: arrival, finish and tokens of every request, and the energy from
-#     first arrival to last finish, so the simulator can replay the same arrivals
+#     are read over steady-state windows after a warm-up, as ML.ENERGY measures, and the
+#     median of the windows reported with every window kept
+#   * Poisson loads, each at several arrival seeds: arrival, finish and tokens of every
+#     request, and the energy from first arrival to last finish, so the simulator can
+#     replay the same arrivals
+#   * the GPU's temperature and SM clock read at every window's edges, to show it did not
+#     throttle; its UUID, driver and power limit recorded
 #   * the same counter, boundary, precision and prefix-caching setting as the static sweep
 
 
@@ -180,7 +203,8 @@ def measure(
     concurrency: list[int],
     warmup_s: float,
     window_s: float,
-    poisson_loads: list[tuple[float, list]],
+    repeats: int,
+    poisson_loads: list[tuple[float, int, list]],
     model_name: str,
     quantization: str | None,
     max_model_len: int,
@@ -195,8 +219,9 @@ def measure(
         requests: [{"prompt", "generated_tokens"}]: the OLT's questions and answer lengths.
         concurrency: The numbers of requests to keep in flight.
         warmup_s: Seconds each level runs before its window opens.
-        window_s: Seconds each level is measured over.
-        poisson_loads: [(target load, arrivals)], arrivals as poisson_arrivals() returns them.
+        window_s: Seconds each measured window lasts.
+        repeats: Back-to-back windows measured per level.
+        poisson_loads: [(target load, seed, arrivals)], arrivals as poisson_arrivals() returns.
         model_name: The Hugging Face model.
         quantization: vLLM's quantization, or None for bf16.
         max_model_len: vLLM's context length.
@@ -219,11 +244,21 @@ def measure(
     pynvml.nvmlInit()
     handle = pynvml.nvmlDeviceGetHandleByIndex(0)
     gpu_name = pynvml.nvmlDeviceGetName(handle)
-    gpu_name = gpu_name.decode() if isinstance(gpu_name, bytes) else gpu_name
 
     def energy_joules() -> float:
         """Return the GPU's cumulative energy counter, in joules."""
         return pynvml.nvmlDeviceGetTotalEnergyConsumption(handle) / 1000.0
+
+    def gpu_state() -> tuple[int, int]:
+        """Return the GPU's (temperature in C, SM clock in MHz) right now."""
+        return (
+            pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU),
+            pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM),
+        )
+
+    def text(value) -> str:
+        """Return an NVML string as text, whichever type the binding gives."""
+        return value.decode() if isinstance(value, bytes) else value
 
     # --- Prompts, in the chat template the OLT answered them in ---
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -265,7 +300,7 @@ def measure(
         return submitted, time.perf_counter(), prompt_tokens, generated
 
     async def fixed_concurrency(engine, level: int, idle_watts: float) -> dict:
-        """Keep `level` requests in flight, and measure a window after the warm-up.
+        """Keep `level` requests in flight, and measure back-to-back windows after the warm-up.
 
         Args:
             engine: The running engine.
@@ -273,7 +308,7 @@ def measure(
             idle_watts: The GPU's idle power with the model loaded.
 
         Returns:
-            The level's row (summarize_window).
+            The level's row (median_of_windows), every window kept under "trials".
         """
         order = list(range(len(requests)))
         random.Random(level).shuffle(order)
@@ -281,30 +316,46 @@ def measure(
         events, spans = [], []
 
         async def worker():
-            """Send requests one after another, for as long as the level runs."""
+            """Send requests one after another, for as long as the level runs.
+
+            A request's span is opened when it is sent, so one still running when a window
+            closes counts as in flight up to that moment.
+            """
             while True:
-                sent, done, _, _ = await stream(engine, next(queue), events)
-                spans.append((sent, done))
+                span = [time.perf_counter(), math.inf]
+                spans.append(span)
+                span[1] = (await stream(engine, next(queue), events))[1]
 
         workers = [asyncio.create_task(worker()) for _ in range(level)]
         await asyncio.sleep(warmup_s)
-        start, energy_start = time.perf_counter(), energy_joules()
-        await asyncio.sleep(window_s)
-        end, energy_end = time.perf_counter(), energy_joules()
+        trials = []
+        for _ in range(repeats):
+            state_start = gpu_state()
+            start, energy_start = time.perf_counter(), energy_joules()
+            await asyncio.sleep(window_s)
+            end, energy_end = time.perf_counter(), energy_joules()
+            state_end = gpu_state()
+            trial = summarize_window(
+                level, events, spans, (start, end), energy_end - energy_start, idle_watts
+            )
+            trial["max_temperature_C"] = max(state_start[0], state_end[0])
+            trial["min_sm_clock_MHz"] = min(state_start[1], state_end[1])
+            trials.append(trial)
         for task in workers:
             task.cancel()
         await asyncio.gather(*workers, return_exceptions=True)
         await asyncio.sleep(2.0)  # let the cancelled requests leave the engine
-        return summarize_window(
-            level, events, spans, (start, end), energy_end - energy_start, idle_watts
-        )
+        row = median_of_windows(level, trials)
+        row["trials"] = trials
+        return row
 
-    async def poisson(engine, load: float, arrivals: list, idle_watts: float) -> dict:
+    async def poisson(engine, load: float, seed: int, arrivals: list, idle_watts: float) -> dict:
         """Send every request at its arrival time; record each one and the run's energy.
 
         Args:
             engine: The running engine.
             load: The target number of requests in flight.
+            seed: The seed the arrivals were drawn with.
             arrivals: [(seconds after the start, request index)].
             idle_watts: The GPU's idle power with the model loaded.
 
@@ -326,16 +377,20 @@ def measure(
                 "generated_tokens": generated,
             }
 
-        energy_start = energy_joules()
+        state_start, energy_start = gpu_state(), energy_joules()
         records = await asyncio.gather(*(arrive(offset, index) for offset, index in arrivals))
         seconds, joules = time.perf_counter() - launched, energy_joules() - energy_start
+        state_end = gpu_state()
         spans = [(record["arrival_s"], record["finish_s"]) for record in records]
         return {
             "target_load": load,
+            "seed": seed,
             "seconds": seconds,
             "joules": joules,
             "joules_net": joules - idle_watts * seconds,
             "mean_in_flight": round(mean_in_flight(spans, 0.0, seconds), 3),
+            "max_temperature_C": max(state_start[0], state_end[0]),
+            "min_sm_clock_MHz": min(state_start[1], state_end[1]),
             "requests": records,
         }
 
@@ -373,18 +428,20 @@ def measure(
             rows.append(row)
             print(
                 f"  N={level:>3}: in flight {row['mean_in_flight']:.2f}, "
-                f"{row['tokens_per_s']:.0f} tok/s, {row['J_per_generated_token']:.4f} J/out-tok, "
-                f"{row['mean_power_W']:.0f} W",
+                f"{row['tokens_per_s']:.0f} tok/s, {row['J_per_generated_token']:.4f} J/out-tok "
+                f"[{min(row['trials_J_per_generated_token']):.4f}-"
+                f"{max(row['trials_J_per_generated_token']):.4f}], {row['mean_power_W']:.0f} W, "
+                f"{row['max_temperature_C']:.0f} C",
                 flush=True,
             )
 
         # --- Poisson loads ---
         runs = []
-        for load, arrivals in poisson_loads:
-            result = await poisson(engine, load, arrivals, idle_watts)
+        for load, seed, arrivals in poisson_loads:
+            result = await poisson(engine, load, seed, arrivals, idle_watts)
             runs.append(result)
             print(
-                f"  load {load:g}: {len(arrivals)} requests, in flight "
+                f"  load {load:g} seed {seed}: {len(arrivals)} requests, in flight "
                 f"{result['mean_in_flight']:.2f}, {result['joules']:.0f} J over "
                 f"{result['seconds']:.0f} s",
                 flush=True,
@@ -395,10 +452,16 @@ def measure(
         return {"idle_power_W": round(idle_watts, 2), "fixed": rows, "poisson": runs}
 
     report = asyncio.run(run())
+    gpu_uuid = text(pynvml.nvmlDeviceGetUUID(handle))
+    driver = text(pynvml.nvmlSystemGetDriverVersion())
+    power_limit = pynvml.nvmlDeviceGetEnforcedPowerLimit(handle) / 1000.0
     pynvml.nvmlShutdown()
     return {
         "model": model_name,
-        "gpu": gpu_name,
+        "gpu": text(gpu_name),
+        "gpu_uuid": gpu_uuid,
+        "driver_version": driver,
+        "power_limit_W": power_limit,
         "vllm_version": VLLM_VERSION,
         "precision": quantization or "bf16 (vLLM default for this checkpoint)",
         "max_model_len": max_model_len,
@@ -415,6 +478,7 @@ def measure(
         ),
         "warmup_s": warmup_s,
         "window_s": window_s,
+        "repeats": repeats,
         **report,
     }
 
@@ -449,13 +513,14 @@ def main():
                         }
                     )
     poisson_loads = [
-        (load, poisson_arrivals(load, POISSON_S, len(requests), SEED + index))
+        (load, seed, poisson_arrivals(load, POISSON_S, len(requests), seed))
         for index, load in enumerate(LOADS)
+        for seed in range(SEED + 100 * index, SEED + 100 * index + REPEATS)
     ]
     print(
         f"{MODEL_NAME} on {GPU_SPEC}, {QUANTIZATION or 'bf16'}: {len(requests)} requests, "
-        f"concurrency {CONCURRENCY}, Poisson loads {LOADS} over {POISSON_S:g} s"
-        + (" (smoke)" if SMOKE else "")
+        f"concurrency {CONCURRENCY} x {REPEATS} windows, Poisson loads {LOADS} x {REPEATS} "
+        f"seeds over {POISSON_S:g} s" + (" (smoke)" if SMOKE else "")
     )
 
     report = measure.remote(
@@ -463,6 +528,7 @@ def main():
         CONCURRENCY,
         WARMUP_S,
         WINDOW_S,
+        REPEATS,
         poisson_loads,
         MODEL_NAME,
         QUANTIZATION,
@@ -489,17 +555,22 @@ def main():
     print(f"\nwrote {out}")
     print(f"idle {report['idle_power_W']} W on {report['gpu']}\n")
     print(
-        f"{'N':>4} {'in flight':>10} {'tok/s':>7} {'J/out-tok':>10} {'net J/out-tok':>14} {'W':>5}"
+        f"{'N':>4} {'in flight':>10} {'tok/s':>7} {'J/out-tok':>10} {'spread':>15} "
+        f"{'net J/out-tok':>14} {'W':>5} {'max C':>6}"
     )
     for row in report["fixed"]:
+        spread = row["trials_J_per_generated_token"]
         print(
             f"{row['concurrency']:>4} {row['mean_in_flight']:>10.2f} {row['tokens_per_s']:>7.0f} "
-            f"{row['J_per_generated_token']:>10.4f} {row['J_per_generated_token_net']:>14.4f} "
-            f"{row['mean_power_W']:>5.0f}"
+            f"{row['J_per_generated_token']:>10.4f} {min(spread):>7.4f}-{max(spread):<7.4f} "
+            f"{row['J_per_generated_token_net']:>14.4f} {row['mean_power_W']:>5.0f} "
+            f"{row['max_temperature_C']:>6.0f}"
         )
-    print(f"\n{'load':>5} {'requests':>9} {'in flight':>10} {'seconds':>8} {'joules':>9}")
+    print(
+        f"\n{'load':>5} {'seed':>5} {'requests':>9} {'in flight':>10} {'seconds':>8} {'joules':>9}"
+    )
     for run in report["poisson"]:
         print(
-            f"{run['target_load']:>5g} {len(run['requests']):>9} {run['mean_in_flight']:>10.2f} "
-            f"{run['seconds']:>8.0f} {run['joules']:>9.0f}"
+            f"{run['target_load']:>5g} {run['seed']:>5} {len(run['requests']):>9} "
+            f"{run['mean_in_flight']:>10.2f} {run['seconds']:>8.0f} {run['joules']:>9.0f}"
         )
