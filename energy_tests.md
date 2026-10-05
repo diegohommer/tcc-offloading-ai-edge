@@ -154,6 +154,12 @@ met as written.**
   instead, the replay is within +1.4% to +3.0% at every load and seed. The straight line
   overcharges a busy OLT, increasingly with load, so it errs against the proposal.
 
+**The fix, and the check rerun on the same data.** The simulator now charges a batch the
+net energy measured at its size (§8.4), as the remedy above provides. Rerun on the same
+fifteen Poisson runs, criterion 1 is met at every load and seed: net energy within +1.4% to
++3.0%, gross within +1.0% to +2.1%, mean latency within −1.8% to −0.2%. Criterion 2 stays
+not met by its clock test, as written.
+
 ## 4. Answers
 
 All three tiers answered GSM8K's 1,319 test questions, zero-shot, at temperature 0, up to
@@ -264,19 +270,20 @@ reads it with no delay; `piggyback` hears it only on its own household's answers
 
 - **Average**: a query pays its share of the batch's energy, the measured J per token at
   that batch, as Google's per-prompt accounting does [13].
-- **Marginal**: only what queries add to the network. A batch of n adds the net-of-idle
-  rate for its first sequence plus, for each other one, the slope of the batch's energy
-  against its size, fitted over batches 1–64: net + (n − 1) × slope per step, shared
-  equally. On a busy OLT one more query adds about 9 J at the whole-system boundary; the
-  first query on an idle OLT costs about 790 J. The ONU drops its idle draw (§5); the phone
-  is unchanged.
+- **Marginal**: only what queries add to the network. A batch of n draws the net-of-idle
+  energy the sweep measured at that size, shared equally, which matches the GPU under
+  continuous batching within 3% (§3.5). The first query on an idle OLT costs about 790 J
+  at the whole-system boundary. The ONU drops its idle draw (§5); the phone is unchanged.
 
 What the OLT reports, and what packets and the static tables carry, follows the
 accounting. Under average accounting it is the mean cost per token of its recent work, the
 share a query pays. Under marginal accounting it is what one more query would add: the
 slope while the OLT is busy, the net-of-idle rate while it is idle, weighted by the share
-of the last 5 minutes it spent busy. Routing on the average instead would make a busy OLT
-look tens of times dearer than joining it really is.
+of the last 5 minutes it spent busy. The slope is the least-squares slope of the batch's
+energy against its size over batches 1–64, about 9 J for a query on a busy OLT: a smooth
+estimate, where differences between adjacent measured batches are too noisy to route on.
+Routing on the average instead would make a busy OLT look tens of times dearer than joining
+it really is.
 
 The study uses marginal accounting, the energy a routing decision changes, with average
 accounting as a sensitivity run.

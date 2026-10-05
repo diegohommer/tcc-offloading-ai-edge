@@ -75,8 +75,8 @@ olt_boundary:
     Under marginal accounting (a query pays only what it adds, energy_tests.md
     §8.4) no tier is charged for being on: the idle-machines share is dropped
     ((accelerators + host) / accelerators x PUE = x 2.20), the OLT's card
-    figure is its net-of-idle rate at batch 1 and the batch-energy slope above
-    it, and the ONU loses its idle draw (onu.idle_W).
+    figure is its net-of-idle rate at each batch size, and the ONU loses its
+    idle draw (onu.idle_W).
   caveat: >
     Google's shares come from large multi-accelerator hosts. A central-office
     server holding a single 72 W L4 may spend a larger share on its host.

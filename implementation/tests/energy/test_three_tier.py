@@ -71,16 +71,18 @@ def test_olt_curve_service_time_is_tokens_over_per_sequence_speed(curve):
     assert curve.service_s(8, 300) == pytest.approx(300 / per_sequence)
 
 
-def test_marginal_rates_add_net_plus_slope_per_extra_sequence(marginal_curve):
-    """A batch of n adds net + (n - 1) x slope per step, shared equally."""
-    for batch in (1, 2, 5, 64):
-        prompt, generated = marginal_curve.marginal_rates(batch)
-        assert prompt * batch == pytest.approx(
-            marginal_curve.pf1_net + (batch - 1) * marginal_curve.pf_slope
+def test_marginal_rates_are_the_measured_net_rates_at_each_batch(marginal_curve):
+    """At a measured batch size each sequence pays the net-of-idle rate measured there."""
+    for index, batch in enumerate(marginal_curve.b):
+        assert marginal_curve.marginal_rates(batch) == pytest.approx(
+            (marginal_curve.pf_net[index], marginal_curve.dec_net[index])
         )
-        assert generated * batch == pytest.approx(
-            marginal_curve.dec1_net + (batch - 1) * marginal_curve.dec_slope
-        )
+
+
+def test_marginal_rates_between_batches_interpolate_the_net_curve(marginal_curve):
+    """Between measured batches the net rate lies between its two neighbours."""
+    low, high = marginal_curve.marginal_rates(4)[1], marginal_curve.marginal_rates(6)[1]
+    assert min(low, high) <= marginal_curve.marginal_rates(5)[1] <= max(low, high)
 
 
 def test_marginal_rates_never_exceed_average_rates(curve, marginal_curve):

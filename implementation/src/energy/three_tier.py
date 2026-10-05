@@ -181,8 +181,9 @@ class OltCurve:
         self.pf = [r["prefill_J_per_input_token"] * factor for r in rows]
         self.dec = [r["decode_J_per_output_token"] * factor for r in rows]
         self.tps = [r["tokens_per_s"] for r in rows]
-        self.pf1_net = rows[0]["prefill_J_per_input_token_net"] * factor
-        self.dec1_net = rows[0]["decode_J_per_output_token_net"] * factor
+        self.pf_net = [r["prefill_J_per_input_token_net"] * factor for r in rows]
+        self.dec_net = [r["decode_J_per_output_token_net"] * factor for r in rows]
+        self.pf1_net, self.dec1_net = self.pf_net[0], self.dec_net[0]
         self.pf_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.pf)])
         self.dec_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.dec)])
 
@@ -190,20 +191,15 @@ class OltCurve:
     # Rates and times
     # ==========================================
     def marginal_rates(self, batch: float) -> tuple[float, float]:
-        """Return each sequence's share, per token, of what a batch this size adds above idle.
+        """Return each sequence's share, per token, of what a batch this size draws above idle.
 
-        The first query adds the net-of-idle rate; each later one adds the slope of the
-        batch's energy against batch size (energy_tests.md §8.4). A batch of n adds
-        net + (n - 1) x slope, shared equally.
+        Read off the measured net-of-idle curve, so a batch of n draws n times this per
+        step, as the GPU did (energy_tests.md §3.5, §8.4).
 
         Args:
             batch: Sequences in the batch.
         """
-        size = max(batch, 1)
-        return (
-            (self.pf1_net + (size - 1) * self.pf_slope) / size,
-            (self.dec1_net + (size - 1) * self.dec_slope) / size,
-        )
+        return self._at(self.pf_net, batch), self._at(self.dec_net, batch)
 
     def _at(self, ys: list[float], batch: float) -> float:
         """Return ys interpolated log-log at this batch size, clamped to the measured range."""
