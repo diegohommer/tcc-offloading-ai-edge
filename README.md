@@ -85,6 +85,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python src/simulate/simulate.py --config config/study.yaml \
     --subscribers 10000 --policies recserve,static_hour,broadcast   # one run
 bash src/simulate/run_study.sh 6                              # the case study
+.venv/bin/modal run src/simulate/run_study_modal.py          # ... or on Modal, every run at once
 .venv/bin/python src/analyze/summarize_study.py               # its tables
 .venv/bin/python src/analyze/tier_energy.py                   # tier tables
 ```

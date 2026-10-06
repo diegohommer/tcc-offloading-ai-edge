@@ -24,6 +24,7 @@ known_first_party = [
     "olt_server",
     "prepare_load_traces",
     "routing",
+    "run_study_modal",
     "simulate",
     "summarize_study",
     "tier_energy",

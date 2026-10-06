@@ -12,6 +12,8 @@
 # nothing suspends the laptop: neither idle time (GNOME's and logind's) nor closing
 # the lid.
 #   bash src/simulate/run_study.sh [parallel jobs] [cores]   # e.g. 6 jobs pinned to cores 4-9
+#   bash src/simulate/run_study.sh --list                    # print the runs and exit
+# On Modal instead, every run in parallel: modal run src/simulate/run_study_modal.py
 # Jobs run at the lowest CPU priority; with [cores] they are also confined to those
 # cores (taskset), so the rest of the machine stays free. On this laptop (Core 5
 # 120U) cores 0-3 are the performance threads and 4-11 the efficiency cores. A
@@ -20,6 +22,24 @@
 # Then: python src/analyze/summarize_study.py -> results/study/SUMMARY.md
 set -euo pipefail
 cd "$(dirname "$0")/../.."                        # implementation/
+
+# One line per run: tag, seed, then the flags it changes. run_study_modal.py reads it too.
+jobs() {
+  for seed in 7 8 9; do
+    echo "main $seed"
+    echo "burst_week $seed --burst-sigma 0.235 --burst-hours 3.18"
+    echo "burst_all $seed --burst-sigma 0.457 --burst-hours 12.3"
+    echo "average $seed --accounting average"
+    echo "onu0.5 $seed --onu-scale 0.5"
+    echo "onu0.2 $seed --onu-scale 0.2"
+    echo "olt1.07 $seed --olt-scale 1.0714"
+    echo "olt1.75 $seed --olt-scale 1.75"
+    echo "users2 $seed --users-per-home 2"
+    echo "perhousehold $seed --no-shared-stats"
+  done
+}
+[ "${1:-}" = "--list" ] && { jobs; exit 0; }
+
 OUT=results/study
 mkdir -p "$OUT"
 PY=${PYTHON:-.venv/bin/python}
@@ -54,21 +74,6 @@ if [ -n "$ZONE" ]; then
   guard & GUARD=$!
   trap 'kill $GUARD 2>/dev/null; pkill -CONT -f "$SIMS" || true' EXIT
 fi
-
-jobs() {
-  for seed in 7 8 9; do
-    echo "main $seed"
-    echo "burst_week $seed --burst-sigma 0.235 --burst-hours 3.18"
-    echo "burst_all $seed --burst-sigma 0.457 --burst-hours 12.3"
-    echo "average $seed --accounting average"
-    echo "onu0.5 $seed --onu-scale 0.5"
-    echo "onu0.2 $seed --onu-scale 0.2"
-    echo "olt1.07 $seed --olt-scale 1.0714"
-    echo "olt1.75 $seed --olt-scale 1.75"
-    echo "users2 $seed --users-per-home 2"
-    echo "perhousehold $seed --no-shared-stats"
-  done
-}
 
 PIN=()
 [ -n "${2:-}" ] && PIN=(taskset -c "$2")
