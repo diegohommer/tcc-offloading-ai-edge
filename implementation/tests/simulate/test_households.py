@@ -2,6 +2,7 @@
 
 # pylint: disable=redefined-outer-name
 
+import numpy as np
 import pytest
 
 from households import Households, load_sessions
@@ -85,3 +86,46 @@ def test_households_default_to_the_measured_conversations():
     stats = load_sessions()
     assert stats["requests_per_session_mean"] >= 1
     assert Households(100, 1.0, 3.6).stream(QUESTIONS, 1, 0, seed=1)
+
+
+def test_load_factor_without_drift_leaves_the_stream_unchanged(pair_stats):
+    """At sigma 0 the factor is 1 everywhere, and the stream is the one drawn before."""
+    plain = Households(500, 1.0, 4.0, pair_stats)
+    drifting = Households(500, 1.0, 4.0, pair_stats, burst_sigma=0.0, burst_hours=6.0)
+    assert np.all(drifting.load_factor(48, seed=1) == 1.0)
+    assert drifting.stream(QUESTIONS, 2, 0, seed=1) == plain.stream(QUESTIONS, 2, 0, seed=1)
+
+
+def test_load_factor_has_mean_one_and_the_set_spread():
+    """Over a long run the factor averages 1, and its log has the set standard deviation."""
+    homes = Households(1, 1.0, 1.0, burst_sigma=0.4, burst_hours=6.0)
+    factor = homes.load_factor(200_000, seed=3)
+    assert factor.mean() == pytest.approx(1.0, abs=0.03)
+    assert np.log(factor).std() == pytest.approx(0.4, rel=0.05)
+
+
+def test_load_factor_departures_last_about_the_set_time():
+    """Consecutive hours correlate as exp(-1 / burst_hours)."""
+    homes = Households(1, 1.0, 1.0, burst_sigma=0.4, burst_hours=6.0)
+    drift = np.log(homes.load_factor(200_000, seed=5))
+    lag_one = np.corrcoef(drift[:-1], drift[1:])[0, 1]
+    assert lag_one == pytest.approx(np.exp(-1 / 6.0), abs=0.01)
+
+
+def test_stream_with_drift_keeps_the_volume_but_not_the_shape_of_each_day(pair_stats):
+    """Drift moves load between hours and days, while the month's total stays the same."""
+    plain = Households(2000, 1.0, 4.0, pair_stats)
+    drifting = Households(2000, 1.0, 4.0, pair_stats, burst_sigma=0.45, burst_hours=12.0)
+    plain_stream = plain.stream(QUESTIONS, 28, 0, seed=2)
+    drifting_stream = drifting.stream(QUESTIONS, 28, 0, seed=2)
+    assert len(drifting_stream) == pytest.approx(len(plain_stream), rel=0.1)
+
+    weekdays = [day for day in range(28) if plain.weekday(day)]
+
+    def departures(stream):
+        """Each weekday hour's messages over that hour's weekday average."""
+        hours = np.array([hour for _, hour, _ in stream])
+        counts = np.bincount(hours.astype(int), minlength=28 * 24)[: 28 * 24].reshape(28, 24)
+        return (counts[weekdays] / counts[weekdays].mean(axis=0)).ravel()
+
+    assert departures(drifting_stream).std() > 3 * departures(plain_stream).std()

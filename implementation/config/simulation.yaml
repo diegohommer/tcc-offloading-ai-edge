@@ -41,6 +41,15 @@ traffic:
   # 2.5 billion messages a day over more than 700 million weekly users. BurstGPT's
   # campus trace gives about 4 independently. [source: Chatterji et al.]
   per_user_day: 3.6
+  # How far the whole population's load drifts from the timetable (log-sd of a
+  # shared factor with mean 1), and how long a departure lasts (correlation
+  # time, hours). 0 = every day follows the average day, plus counting noise.
+  # BurstGPT's conversation starts, against one hour x weekday/weekend timetable:
+  # sigma 0.457 over 12.3 h; with each week's level taken out (surges within a
+  # week only): sigma 0.235 over 3.18 h (data/load_traces/burstgpt_sessions.json,
+  # "drift"). [swept: data]
+  burst_sigma: 0.0
+  burst_hours: 12.3
   # Days simulated, and the days before them the timetable is observed over. A month
   # is what an operator would have watched before shipping a table. [choice]
   test_days: 28

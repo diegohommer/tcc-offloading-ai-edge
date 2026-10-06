@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the shape of a conversation in BurstGPT, for the household generator.
+"""Measure the shape of a conversation in BurstGPT, and how its load drifts.
 
 Writes data/load_traces/burstgpt_sessions.json. Downloads BurstGPT_3.csv (232 MB) once
 into implementation/.cache/load_traces/.
@@ -35,13 +35,68 @@ It reproduces BurstGPT's own hourly message curve: resampled bursts give a corre
 ICDF_POINTS = 2000
 """Points of each stored inverse CDF, taken at bin midpoints."""
 
+BUSY_HOUR = 20.0
+"""Expected bursts an hour from which a cell is used to measure drift: quieter hours are
+mostly counting noise."""
+
+WEEK_DAYS = 7
+"""Days each week's overall level is averaged over, to set slow growth apart from surges."""
+
+
+def drift_around_timetable(counts: np.ndarray, weekend: np.ndarray, level_days: int) -> dict:
+    """Measure how far and for how long load departs from an hour-of-day timetable.
+
+    The load is read as a timetable times a log-normal factor with mean 1, and the factor's
+    log-sd (sigma) and correlation time are measured net of Poisson counting noise:
+    E[(count / expected - 1)^2] = (exp(sigma^2) - 1) + 1 / expected.
+
+    Args:
+        counts: Bursts opened, one row per day, one column per hour.
+        weekend: Whether each day is a weekend day.
+        level_days: 0 to keep one timetable for the whole trace, or the days each week's
+            level is averaged over, so that slow growth is not counted as drift.
+
+    Returns:
+        {"sigma": log-sd of the factor, "hours": its correlation time}, both None when the
+        trace has too few busy hours, or too little drift, to measure.
+    """
+    expected = np.zeros_like(counts)
+    for weekend_day in (False, True):
+        rows = weekend == weekend_day
+        if rows.any():
+            expected[rows] = counts[rows].mean(axis=0)
+    if level_days:
+        daily = counts.sum(axis=1) / np.maximum(expected.sum(axis=1), 1e-9)
+        level = pd.Series(daily).rolling(level_days, center=True, min_periods=1).mean()
+        expected = expected * level.to_numpy()[:, None]
+
+    # --- Size: the factor's variance, net of counting noise ---
+    busy = (expected >= BUSY_HOUR).ravel()
+    pairs = busy[:-1] & busy[1:]
+    excess = (counts / np.maximum(expected, 1e-9) - 1).ravel()
+    noise = 1 / np.maximum(expected, 1e-9).ravel()
+    factor_variance = np.mean(excess[busy] ** 2 - noise[busy]) if pairs.any() else 0.0
+    if factor_variance <= 0:
+        return {"sigma": None, "hours": None}
+    sigma_squared = np.log1p(factor_variance)
+
+    # --- Duration: correlation of consecutive busy hours, carried to the log scale ---
+    factor_correlation = np.mean(excess[:-1][pairs] * excess[1:][pairs]) / factor_variance
+    log_correlation = np.log1p(factor_correlation * np.expm1(sigma_squared)) / sigma_squared
+    return {
+        "sigma": round(float(np.sqrt(sigma_squared)), 3),
+        "hours": round(float(-1 / np.log(log_correlation)), 2),
+    }
+
 
 def burstgpt_sessions(trace: pd.DataFrame) -> dict:
-    """Measure how bursts of conversation are shaped.
+    """Measure how bursts of conversation are shaped, and how their load drifts.
 
     A session is one conversation, the closest the trace comes to a user. Four shapes are
     kept: how many requests a burst holds, the pause between two of them (both as inverse
-    CDFs), and how many bursts open in each hour of a weekday and of a weekend day.
+    CDFs), and how many bursts open in each hour of a weekday and of a weekend day. The
+    drift of those openings around a timetable is measured twice: against one timetable for
+    the whole trace, and with each week's level taken out.
 
     Args:
         trace: BurstGPT rows with Timestamp, Session ID and Log Type.
@@ -75,6 +130,16 @@ def burstgpt_sessions(trace: pd.DataFrame) -> dict:
         counts = np.bincount(hour[rows], minlength=24).astype(float) / days_of_type
         starts_by_hour[day_type] = [round(count, 3) for count in counts]
 
+    # --- How far, and for how long, the load departs from the timetable ---
+    whole_days = int(day.max())
+    per_hour = np.bincount(day * 24 + hour, minlength=(whole_days + 1) * 24)
+    per_hour = per_hour[: whole_days * 24].reshape(whole_days, 24).astype(float)
+    weekend_day = np.isin(np.arange(whole_days) % 7, weekend)
+    drift = {
+        "all": drift_around_timetable(per_hour, weekend_day, 0),
+        "within_week": drift_around_timetable(per_hour, weekend_day, WEEK_DAYS),
+    }
+
     quantiles = (np.arange(ICDF_POINTS) + 0.5) / ICDF_POINTS
     return {
         "source": BURSTGPT_URL,
@@ -92,6 +157,7 @@ def burstgpt_sessions(trace: pd.DataFrame) -> dict:
         "think_time_s_icdf": [round(float(value), 1) for value in think_time.quantile(quantiles)],
         "weekend_days_mod7": weekend,
         "starts_by_hour": starts_by_hour,
+        "drift": drift,
     }
 
 
@@ -113,6 +179,8 @@ def main() -> int:
         f"{stats['sessions']:,} conversations over {stats['span_days']} days, "
         f"{stats['sessions_per_day']}/day, {stats['requests_per_session_mean']} requests each"
     )
+    for name, fit in stats["drift"].items():
+        print(f"drift around the timetable ({name}): sigma {fit['sigma']}, {fit['hours']} h")
     return 0
 
 

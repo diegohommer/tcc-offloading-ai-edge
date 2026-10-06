@@ -43,7 +43,18 @@ COMPARE = [
 ]
 """(policy, baseline) pairs in the full tables: the saving of the first over the second."""
 
-ORDER = ["main", "average", "onu0.5", "onu0.2", "olt1.07", "olt1.75", "users2", "perhousehold"]
+ORDER = [
+    "main",
+    "burst_week",
+    "burst_all",
+    "average",
+    "onu0.5",
+    "onu0.2",
+    "olt1.07",
+    "olt1.75",
+    "users2",
+    "perhousehold",
+]
 """Scenarios in run_study.sh's order."""
 
 COLUMNS = ("accuracy", "latency_s_mean", "pon_MB_per_1k_queries", "comm_MB_per_1k_queries")
@@ -126,11 +137,17 @@ def describe(run):
     """Return one line saying what a scenario is."""
     args = run["args"]
     olt_scale = float(args["olt_scale"])
+    burst = float(args.get("burst_sigma", 0))
     return (
         f"{args['accounting']} accounting; ONU {run['fixed_J_per_query']['onu']:.0f} J; "
         + (f"OLT energy x{olt_scale:g}; " if olt_scale != 1 else "")
         + f"{args['users_per_home']} active user(s) x {args['per_user_day']} messages/day per household; "
         + f"question statistics {'shared' if args['shared_stats'] == 'True' else 'per household'}"
+        + (
+            f"; load drifting sigma {burst:g} over {float(args['burst_hours']):g} h"
+            if burst
+            else ""
+        )
     )
 
 

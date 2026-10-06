@@ -8,7 +8,8 @@ prepare_load_traces.py).
 
 How much a household sends is not BurstGPT's to say: it has no user id and never states how
 many people it serves. That rate comes from ChatGPT's own consumer figures instead
-(config/traffic_sources.yaml).
+(config/simulation.yaml). A shared, slowly drifting factor can make whole hours busier or
+quieter than the timetable, as BurstGPT's own load does around its average day.
 """
 
 from __future__ import annotations
@@ -28,8 +29,8 @@ def load_sessions(path: Path = SESSIONS) -> dict:
     Args:
         path: The prepared session statistics.
     """
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    with open(path, encoding="utf-8") as file:
+        return json.load(file)
 
 
 class Households:
@@ -41,12 +42,22 @@ class Households:
         per_user_day: Messages one active user sends a day.
         messages_per_day: What the whole population sends a day.
         sessions_per_day: How many conversations that is, at the measured length.
+        burst_sigma: Log-sd of the factor the whole population's load drifts by (0: none).
+        burst_hours: How long a departure from the timetable lasts (correlation time).
     """
 
     # ==========================================
     # Initialization
     # ==========================================
-    def __init__(self, count: int, users: float, per_user_day: float, stats: dict | None = None):
+    def __init__(
+        self,
+        count: int,
+        users: float,
+        per_user_day: float,
+        stats: dict | None = None,
+        burst_sigma: float = 0.0,
+        burst_hours: float = 12.0,
+    ):
         """Size the population.
 
         Args:
@@ -54,9 +65,12 @@ class Households:
             users: Weekly-active LLM users per household.
             per_user_day: Messages one active user sends a day.
             stats: The measured conversation shapes (load_sessions() by default).
+            burst_sigma: Log-sd of the drifting load factor (0: the timetable, plus noise).
+            burst_hours: Its correlation time, in hours.
         """
         self.stats = stats or load_sessions()
         self.count, self.users, self.per_user_day = count, users, per_user_day
+        self.burst_sigma, self.burst_hours = burst_sigma, burst_hours
         self.messages_per_day = count * users * per_user_day
         self.sessions_per_day = self.messages_per_day / self.stats["requests_per_session_mean"]
 
@@ -67,8 +81,8 @@ class Households:
 
         per_day = self.stats["sessions_per_day"]
         self._starts = {
-            name: np.array(v, dtype=float) / per_day
-            for name, v in self.stats["starts_by_hour"].items()
+            name: np.array(shape, dtype=float) / per_day
+            for name, shape in self.stats["starts_by_hour"].items()
         }
         """Bursts opening in each hour of a weekday and of a weekend day, per burst of an
         average day, so scaling by this population's own rate keeps both shapes."""
@@ -76,13 +90,39 @@ class Households:
     # ==========================================
     # The query stream
     # ==========================================
+    def load_factor(self, hours: int, seed: int) -> np.ndarray:
+        """Return how much busier or quieter than the timetable each hour of the run is.
+
+        A log-normal factor with mean 1, whose log follows an AR(1) process with log-sd
+        burst_sigma and correlation time burst_hours: a departure persists, then fades.
+        Every household shares it, as a whole city's load does. Drawn from its own random
+        stream, so a run without drift is the same run as before.
+
+        Args:
+            hours: Hours in the run.
+            seed: Random seed.
+
+        Returns:
+            One factor per hour (all 1 when burst_sigma is 0).
+        """
+        if self.burst_sigma <= 0:
+            return np.ones(hours)
+        rng = np.random.default_rng([seed, 2718])
+        persistence = np.exp(-1.0 / self.burst_hours)
+        shocks = rng.normal(0.0, self.burst_sigma * np.sqrt(1 - persistence**2), hours)
+        drift = np.empty(hours)
+        drift[0] = rng.normal(0.0, self.burst_sigma)
+        for hour in range(1, hours):
+            drift[hour] = persistence * drift[hour - 1] + shocks[hour]
+        return np.exp(drift - self.burst_sigma**2 / 2)
+
     def stream(self, questions, days: int, first_day: int, seed: int) -> list:
         """Build the time-ordered queries the households send.
 
-        Conversations open through the day following the measured hour-of-day shape. Each one
-        holds a measured number of messages, spaced by measured pauses, and belongs to one
-        household drawn at random: BurstGPT has no user id, so there is nothing to say which
-        households talk more than others.
+        Conversations open through the day following the measured hour-of-day shape, times
+        the drifting load factor. Each one holds a measured number of messages, spaced by
+        measured pauses, and belongs to one household drawn at random: BurstGPT has no user
+        id, so there is nothing to say which households talk more than others.
 
         Args:
             questions: The question indices that can be asked.
@@ -94,17 +134,17 @@ class Households:
             [(question, time in hours, household)], sorted by time.
         """
         rng = np.random.default_rng([seed, 1709])
-        qs = np.asarray(questions)
+        question_pool = np.asarray(questions)
 
         # --- How many bursts open in each hour of the run, weekday or weekend ---
+        hours = days * 24
         expected = np.concatenate(
             [
                 self.sessions_per_day
-                * self._starts["weekend" if (first_day + d) % 7 in self.weekend else "weekday"]
-                for d in range(days)
+                * self._starts["weekend" if (first_day + day) % 7 in self.weekend else "weekday"]
+                for day in range(days)
             ]
-        )
-        hours = days * 24
+        ) * self.load_factor(hours, seed)
         opened = rng.poisson(expected)
         total = int(opened.sum())
         if total == 0:
@@ -127,13 +167,13 @@ class Households:
 
         # --- One household and one question per message ---
         home = rng.integers(0, self.count, total)[which]
-        asked = qs[rng.integers(0, len(qs), messages)]
+        asked = question_pool[rng.integers(0, len(question_pool), messages)]
 
         order = np.argsort(times, kind="stable")
         return [
-            (int(asked[i]), float(times[i]), int(home[i]))
-            for i in order
-            if times[i] < (first_day + days) * 24
+            (int(asked[index]), float(times[index]), int(home[index]))
+            for index in order
+            if times[index] < (first_day + days) * 24
         ]
 
     def weekday(self, day: int) -> bool:

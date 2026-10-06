@@ -236,6 +236,18 @@ resampled from BurstGPT's conversation log [10], split into bursts at pauses ove
 minutes. How much a household sends comes from ChatGPT's consumer figures: about 3.6
 messages per weekly active user a day. Each message asks a random GSM8K question.
 
+Without more, every weekday follows the same average day and only Poisson counting noise
+departs from it (±2–4% an hour at 10,000 households), so a timetable knows almost
+everything. Real load drifts: whole hours and days run busier or quieter than the
+timetable. Each hour's rate of new conversations is therefore multiplied by a factor that
+all households share, log-normal with mean 1, whose log follows an AR(1) process with
+log-sd σ and correlation time τ: a doubly stochastic (Cox) Poisson process, so the
+month's volume stays the same. σ and τ are measured on BurstGPT's conversation starts,
+net of counting noise, over its busy hours: against one hour × weekday/weekend timetable,
+σ = 0.46 with τ = 12.3 h; with each week's level taken out, leaving surges within a week,
+σ = 0.24 with τ = 3.2 h (`prepare_load_traces.py`). The calibration month drifts too, so
+the timetable learns an average that includes the drift.
+
 ### 8.2 The cascade
 
 Every tier's recorded answer is replayed. A tier escalates when its answer's confidence is
@@ -301,9 +313,10 @@ the query reached it.
 Settings in `implementation/config/study.yaml`, runs from `src/simulate/run_study.sh`,
 tables from `src/analyze/summarize_study.py`. 1,000 to 20,000 households, three seeds, a
 month of calibration (when the static tables are observed over plain RecServe) before a
-month of test. Sensitivity runs change one setting each: average accounting, a 2× or 5×
-cheaper ONU, the OLT's energy × 1.07 or × 1.75, two active users per household, and
-question statistics learned per household.
+month of test. The main runs follow the average day; two more add BurstGPT's drift
+(§8.1), within each week only and with whole weeks departing too. Sensitivity runs change
+one setting each: average accounting, a 2× or 5× cheaper ONU, the OLT's energy × 1.07 or
+× 1.75, two active users per household, and question statistics learned per household.
 
 **Status.** To be run on the current simulator.
 

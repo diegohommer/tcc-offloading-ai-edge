@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # The case study (energy_tests.md §9): every run behind the thesis's simulation
 # results, config/study.yaml, each over the subscriber counts it lists and seeds 7-9.
-#   main          the study's settings                                       x 3 seeds
+#   main          the study's settings, every day following the average day  x 3 seeds
+#   bursts        the load drifting around the timetable as BurstGPT's does
+#                 (data/load_traces/burstgpt_sessions.json, "drift"): within each
+#                 week only, and with whole weeks departing too               x 3 seeds
 #   sensitivity   one change each: average accounting; a 2x or 5x cheaper ONU; the
 #                 OLT's energy x1.07 (Latin America's PUE, 1.65) or x1.75; two active
 #                 users per household; statistics learned per household      x 3 seeds
@@ -55,6 +58,8 @@ fi
 jobs() {
   for seed in 7 8 9; do
     echo "main $seed"
+    echo "burst_week $seed --burst-sigma 0.235 --burst-hours 3.18"
+    echo "burst_all $seed --burst-sigma 0.457 --burst-hours 12.3"
     echo "average $seed --accounting average"
     echo "onu0.5 $seed --onu-scale 0.5"
     echo "onu0.2 $seed --onu-scale 0.2"
