@@ -386,22 +386,25 @@ def run(setup: RunSetup, beta: float, policy: str):
 # ==========================================
 # What a timetable is built from
 # ==========================================
-def calibrate(setup: RunSetup, beta: float) -> dict:
+def calibrate(setup: RunSetup, beta: float, policy: str = "recserve") -> dict:
     """Return the OLT rates the static policies ship with, observed over the training days.
 
     The OLT's cost is made by the traffic sent to it, so it has to be watched. An operator
     with no energy-aware policy yet watches plain RecServe, the cascade climbing one tier
-    at a time, and ships what the OLT charged over that month.
+    at a time, and ships what the OLT charged over that month. Watching a static policy
+    instead, with setup.static_rates as its tables, shows what the OLT charges the traffic
+    that policy itself sends.
 
     Args:
         setup: A setup whose stream covers the calibration days.
         beta: RecServe's escalation quantile, the same the run will use.
+        policy: The policy watched (one of POLICIES).
 
     Returns:
         {"static_day": rates, "static_hour": {cell: rates}}, or {} if the OLT answered
         nothing.
     """
-    _, _, observed = run(setup, beta, "recserve")
+    _, _, observed = run(setup, beta, policy)
     answers = sum(count for _, _, count in observed.values())
     if not answers:
         return {}
