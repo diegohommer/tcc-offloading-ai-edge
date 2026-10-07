@@ -173,12 +173,14 @@ def merge_finished(runs: list[tuple[str, int, list[str]]], sizes: list[int], fol
     """Merge every run whose pieces are all in folder/parts/, and return the runs still missing."""
     parts, missing = folder / "parts", []
     for tag, seed, _ in runs:
-        stems = [parts / piece_name(tag, seed, size) for size in sizes]
-        if not all(stem.with_suffix(".json").exists() for stem in stems):
+        # names like study_onu0.5_... hold a dot, so suffixes are appended, never swapped
+        stems = [piece_name(tag, seed, size) for size in sizes]
+        if not all((parts / f"{stem}.json").exists() for stem in stems):
             missing.append(f"study_{tag}_seed{seed}")
             continue
         pieces = [
-            {suffix: stem.with_suffix(suffix).read_bytes() for suffix in SUFFIXES} for stem in stems
+            {suffix: (parts / f"{stem}{suffix}").read_bytes() for suffix in SUFFIXES}
+            for stem in stems
         ]
         for suffix, content in merge_pieces(pieces).items():
             (folder / f"study_{tag}_seed{seed}{suffix}").write_bytes(content)

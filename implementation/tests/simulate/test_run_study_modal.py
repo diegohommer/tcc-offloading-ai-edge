@@ -4,7 +4,14 @@ import json
 import subprocess
 import sys
 
-from run_study_modal import IMPLEMENTATION, merge_pieces, study_jobs, study_sizes
+from run_study_modal import (
+    IMPLEMENTATION,
+    merge_finished,
+    merge_pieces,
+    piece_name,
+    study_jobs,
+    study_sizes,
+)
 
 SHORT = ["--test-days", "1", "--calibration-days", "1", "--betas", "0.5,0.9"]
 """A run short enough for a test."""
@@ -48,3 +55,15 @@ def test_merge_pieces_equals_the_run_made_whole(tmp_path):
     for key in ("rows", "frontiers", "configs", "accuracy", "fixed_J_per_query"):
         assert merged_report[key] == whole_report[key]
     assert merged_report["args"]["subscribers"] == "300,600"
+
+
+def test_merge_finished_handles_tags_with_a_dot(tmp_path):
+    """A tag like onu0.5 holds a dot that must not be taken for a file extension."""
+    parts = tmp_path / "parts"
+    parts.mkdir()
+    for size, subscribers in ((300, "300"), (600, "600")):
+        piece = _simulate(tmp_path, f"piece{size}", subscribers)
+        for suffix, content in piece.items():
+            (parts / f"{piece_name('onu0.5', 7, size)}{suffix}").write_bytes(content)
+    assert not merge_finished([("onu0.5", 7, [])], [300, 600], tmp_path)
+    assert (tmp_path / "study_onu0.5_seed7.json").exists()
