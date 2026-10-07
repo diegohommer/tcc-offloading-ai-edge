@@ -10,11 +10,16 @@ Launch detached, so the study keeps running if this machine sleeps or disconnect
 collect whatever has finished at any time:
     modal run --detach src/simulate/run_study_modal.py
     modal run src/simulate/run_study_modal.py --collect
+    modal run --detach src/simulate/run_study_modal.py --self-calibration --only main
+        # static_day and static_hour relearned under themselves, split by beta and
+        # spliced into the runs already in results/study/
     modal run --detach src/simulate/run_study_modal.py --only main --label smoke \\
         --extra "--test-days 1 --calibration-days 1" --out /tmp/smoke   # a short check
 Then: python src/analyze/summarize_study.py -> results/study/SUMMARY.md
 """
 
+import csv
+import io
 import json
 import subprocess
 import sys
@@ -78,13 +83,77 @@ def merge_pieces(pieces: list[dict]) -> dict:
         str(config["subscribers"]) for config in merged["configs"]
     )
     tables = [piece[".csv"].splitlines(keepends=True) for piece in pieces]
-    csv = b"".join([tables[0][0]] + [line for table in tables for line in table[1:]])
+    merged_table = b"".join([tables[0][0]] + [line for table in tables for line in table[1:]])
     printout = b"\n".join(piece[".txt"] for piece in pieces)
     return {
-        ".csv": csv,
+        ".csv": merged_table,
         ".json": json.dumps(merged, indent=1).encode(),
         ".txt": printout,
     }
+
+
+STATIC = ("static_day", "static_hour")
+"""The policies whose tables self-calibration relearns."""
+
+
+def beta_part(beta: float) -> str:
+    """Return the name suffix of one beta's piece."""
+    return f"_b{beta:g}"
+
+
+def rows_csv(rows: list[dict]) -> bytes:
+    """Return result rows as simulate.py writes its CSV."""
+    table = io.StringIO(newline="")
+    writer = csv.DictWriter(table, fieldnames=list(rows[0]))
+    writer.writeheader()
+    writer.writerows(rows)
+    return table.getvalue().encode()
+
+
+def splice_static(report: dict, new_rows: list[dict]) -> dict:
+    """Replace a run's static_day and static_hour rows, and recompute its comparisons.
+
+    Every other policy's rows stay as they were: they do not use the tables. The savings
+    against RecServe and every policy's frontier are recomputed, per household count.
+
+    Args:
+        report: One run's JSON.
+        new_rows: The static policies' rows, relearned under themselves.
+
+    Returns:
+        The report, changed in place.
+    """
+    sys.path.insert(0, str(IMPLEMENTATION / "src" / "simulate"))
+    from frontier import frontier, iso_accuracy  # pylint: disable=import-outside-toplevel
+
+    replacement = {
+        (row["subscribers"], row["beta"], row["policy"]): row
+        for row in new_rows
+        if row["policy"] in STATIC
+    }
+    rows = [
+        replacement.get((row["subscribers"], row["beta"], row["policy"]), row)
+        for row in report["rows"]
+    ]
+    targets = [float(target) for target in report["args"]["acc_targets"].split(",")]
+    policies = list(dict.fromkeys(row["policy"] for row in rows))
+    frontiers = []
+    for subscribers in dict.fromkeys(row["subscribers"] for row in rows):
+        block = [row for row in rows if row["subscribers"] == subscribers]
+        iso_accuracy(block)
+        frontiers += [
+            {
+                "subscribers": subscribers,
+                "policy": policy,
+                "J_at_accuracy": frontier(
+                    [row for row in block if row["policy"] == policy], targets
+                ),
+            }
+            for policy in policies
+        ]
+    report["rows"], report["frontiers"] = rows, frontiers
+    report["args"]["calibration"] = "self"
+    return report
 
 
 # ==========================================
@@ -97,7 +166,9 @@ def merge_pieces(pieces: list[dict]) -> dict:
     timeout=24 * 60 * 60,
     volumes={VOLUME: results_volume},
 )
-def simulate_piece(tag: str, seed: int, flags: list[str], subscribers: int, label: str) -> dict:
+def simulate_piece(
+    tag: str, seed: int, flags: list[str], subscribers: int, label: str, part: str = ""
+) -> dict:
     """Run simulate.py for one household count of one run, and keep what it wrote.
 
     Args:
@@ -106,11 +177,12 @@ def simulate_piece(tag: str, seed: int, flags: list[str], subscribers: int, labe
         flags: The settings this scenario changes.
         subscribers: The household count of this piece.
         label: The volume folder the piece is kept in.
+        part: Appended to the piece's name, for a piece split further (by beta).
 
     Returns:
         {"name", "returncode", "files": {suffix: bytes}}, bytes so files land as written.
     """
-    name = piece_name(tag, seed, subscribers)
+    name = piece_name(tag, seed, subscribers) + part
     out = Path("/tmp/study") / f"{name}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     command = [
@@ -187,9 +259,48 @@ def merge_finished(runs: list[tuple[str, int, list[str]]], sizes: list[int], fol
     return missing
 
 
+def study_betas() -> list[float]:
+    """Return the betas config/study.yaml sweeps."""
+    sys.path.insert(0, str(IMPLEMENTATION / "src" / "simulate"))
+    from simulate import load_config  # pylint: disable=import-outside-toplevel
+
+    config = load_config(IMPLEMENTATION / "config" / "study.yaml")
+    return [float(beta) for beta in config["betas"].split(",")]
+
+
+def splice_finished(runs: list, sizes: list[int], betas: list[float], folder: Path) -> list:
+    """Splice the relearned static rows into every run whose pieces are all in, and return the rest."""
+    parts, missing = folder / "parts_self", []
+    for tag, seed, _ in runs:
+        name = f"study_{tag}_seed{seed}"
+        stems = [piece_name(tag, seed, size) + beta_part(beta) for size in sizes for beta in betas]
+        if not all((parts / f"{stem}.json").exists() for stem in stems):
+            missing.append(name)
+            continue
+        new_rows = [
+            row
+            for stem in stems
+            for row in json.loads((parts / f"{stem}.json").read_bytes())["rows"]
+        ]
+        report = splice_static(json.loads((folder / f"{name}.json").read_bytes()), new_rows)
+        (folder / f"{name}.json").write_bytes(json.dumps(report, indent=1).encode())
+        (folder / f"{name}.csv").write_bytes(rows_csv(report["rows"]))
+        with open(folder / f"{name}.txt", "a", encoding="utf-8") as printout:
+            printout.write(
+                "\nstatic_day and static_hour replaced by tables relearned under themselves "
+                "(--calibration self), split by beta; comparisons recomputed.\n"
+            )
+    return missing
+
+
 @app.local_entrypoint()
 def main(
-    only: str = "", extra: str = "", out: str = "", label: str = "study", collect: bool = False
+    only: str = "",
+    extra: str = "",
+    out: str = "",
+    label: str = "study",
+    collect: bool = False,
+    self_calibration: bool = False,
 ):
     """Launch every piece not yet collected, or collect what the volume holds, then merge.
 
@@ -199,9 +310,13 @@ def main(
         out: Folder to write to instead of results/study/.
         label: The volume folder pieces are kept in; use another for a check.
         collect: Download the finished pieces from the volume instead of launching.
+        self_calibration: Rerun only static_day and static_hour, relearned under themselves
+            and split by beta, and splice them into the runs already merged.
     """
     folder = Path(out) if out else STUDY
-    parts = folder / "parts"
+    if self_calibration and label == "study":
+        label = "self"
+    parts = folder / ("parts_self" if self_calibration else "parts")
     parts.mkdir(parents=True, exist_ok=True)
     wanted = {tag for tag in only.split(",") if tag}
     runs = [
@@ -220,12 +335,29 @@ def main(
         print(f"{len(names)} files in the volume's {label}/")
     else:
         # --- Launch every piece not yet here ---
-        jobs = [
-            (tag, seed, flags, size, label)
-            for tag, seed, flags in runs
-            for size in sizes
-            if not (parts / f"{piece_name(tag, seed, size)}.json").exists()
-        ]
+        if self_calibration:
+            relearn = ["--calibration", "self", "--policies", "recserve," + ",".join(STATIC)]
+            jobs = [
+                (
+                    tag,
+                    seed,
+                    flags + relearn + ["--betas", f"{beta:g}"],
+                    size,
+                    label,
+                    beta_part(beta),
+                )
+                for tag, seed, flags in runs
+                for size in sizes
+                for beta in study_betas()
+                if not (parts / f"{piece_name(tag, seed, size)}{beta_part(beta)}.json").exists()
+            ]
+        else:
+            jobs = [
+                (tag, seed, flags, size, label, "")
+                for tag, seed, flags in runs
+                for size in sizes
+                if not (parts / f"{piece_name(tag, seed, size)}.json").exists()
+            ]
         print(f"{len(jobs)} pieces on Modal, one container each, writing to {folder}")
         for result in simulate_piece.starmap(jobs, order_outputs=False, return_exceptions=True):
             if isinstance(result, Exception):
@@ -236,7 +368,10 @@ def main(
             status = "failed (see its .txt)" if result["returncode"] else "done"
             print(f"  {status}: {result['name']}", flush=True)
 
-    missing = merge_finished(runs, sizes, folder)
-    print(f"{len(runs) - len(missing)} of {len(runs)} runs merged into {folder}")
+    if self_calibration:
+        missing = splice_finished(runs, sizes, study_betas(), folder)
+    else:
+        missing = merge_finished(runs, sizes, folder)
+    print(f"{len(runs) - len(missing)} of {len(runs)} runs finished in {folder}")
     if missing:
         print("still missing pieces: " + ", ".join(missing))

@@ -9,6 +9,7 @@ the households learn from it.
 from __future__ import annotations
 
 import collections
+import dataclasses
 import heapq
 import math
 import statistics
@@ -68,6 +69,7 @@ class RunSetup:
         static_rates: The pre-observed OLT rates of static_day, stale_low/high, static_hour.
         settings: The run's settings (simulate.py's parsed arguments).
         schedule_key: Maps a time to static_hour's table key (day type, hour).
+        calibration: The setup of the calibration days, for tables relearned per beta.
     """
 
     answers: dict
@@ -77,6 +79,7 @@ class RunSetup:
     static_rates: dict
     settings: object
     schedule_key: Callable | None = None
+    calibration: object = None
 
 
 # ==========================================
@@ -417,3 +420,31 @@ def calibrate(setup: RunSetup, beta: float, policy: str = "recserve") -> dict:
             cell: (prompt, generated) for cell, (prompt, generated, _) in observed.items()
         },
     }
+
+
+SELF_CALIBRATION_ROUNDS = 3
+"""Times a static policy's tables are relearned from the traffic it sends itself."""
+
+
+def self_consistent_tables(setup: RunSetup, beta: float, policy: str) -> dict:
+    """Return a static policy's tables, relearned from the traffic the policy itself sends.
+
+    Tables observed under RecServe make the OLT look dearer than it is once a static policy
+    sends it more work, which it then makes cheaper. Starting from RecServe's, the tables
+    are relearned over the calibration days while running the policy with them, as an
+    operator would keep refreshing them, SELF_CALIBRATION_ROUNDS times.
+
+    Args:
+        setup: A setup whose stream covers the calibration days.
+        beta: RecServe's escalation quantile, the same the run will use.
+        policy: static_day or static_hour.
+
+    Returns:
+        {"static_day": rates, "static_hour": {cell: rates}}, as calibrate() returns them.
+    """
+    tables = calibrate(setup, beta)
+    for _ in range(SELF_CALIBRATION_ROUNDS):
+        if not tables:
+            break
+        tables = calibrate(dataclasses.replace(setup, static_rates=tables), beta, policy)
+    return tables

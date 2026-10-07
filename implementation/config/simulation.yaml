@@ -86,6 +86,12 @@ policy:
   # stale_low and stale_high observe static_day on a population this many
   # times smaller and larger than the one they meet. [choice]
   stale_factor: 4.0
+  # Where static_day and static_hour learn their tables, over the calibration
+  # days. recserve: watching plain RecServe at the middle beta, which leaves the
+  # OLT idler than a static policy does, so the OLT looks dear. self: relearned
+  # at each beta while running the static policy itself, three times, as an
+  # operator would keep refreshing them. [choice]
+  calibration: recserve
 
 learning:
   # Reports per tier a household needs before it starts deciding; until then it

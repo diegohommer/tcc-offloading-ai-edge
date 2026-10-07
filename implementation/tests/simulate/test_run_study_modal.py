@@ -5,10 +5,13 @@ import subprocess
 import sys
 
 from run_study_modal import (
+    beta_part,
     IMPLEMENTATION,
     merge_finished,
     merge_pieces,
     piece_name,
+    rows_csv,
+    splice_static,
     study_jobs,
     study_sizes,
 )
@@ -17,11 +20,11 @@ SHORT = ["--test-days", "1", "--calibration-days", "1", "--betas", "0.5,0.9"]
 """A run short enough for a test."""
 
 
-def _simulate(tmp_path, name, subscribers):
+def _simulate(tmp_path, name, subscribers, flags=()):
     """Run simulate.py on the study's settings and return its {suffix: bytes}."""
     out = tmp_path / f"{name}.csv"
     command = [sys.executable, "src/simulate/simulate.py", "--config", "config/study.yaml"]
-    command += ["--seed", "7", *SHORT, "--subscribers", subscribers, "--out", str(out)]
+    command += ["--seed", "7", *SHORT, "--subscribers", subscribers, *flags, "--out", str(out)]
     subprocess.run(command, cwd=IMPLEMENTATION, check=True, capture_output=True)
     return {suffix: out.with_suffix(suffix).read_bytes() for suffix in (".csv", ".json")} | {
         ".txt": b""
@@ -67,3 +70,21 @@ def test_merge_finished_handles_tags_with_a_dot(tmp_path):
             (parts / f"{piece_name('onu0.5', 7, size)}{suffix}").write_bytes(content)
     assert not merge_finished([("onu0.5", 7, [])], [300, 600], tmp_path)
     assert (tmp_path / "study_onu0.5_seed7.json").exists()
+
+
+def test_splice_static_equals_a_run_made_with_self_calibration(tmp_path):
+    """Static rows relearned per beta and spliced in give the run self-calibrated whole."""
+    whole = _simulate(tmp_path, "whole", "300,600", ["--calibration", "self"])
+    report = json.loads(_simulate(tmp_path, "baseline", "300,600")[".json"])
+    relearn = ["--calibration", "self", "--policies", "recserve,static_day,static_hour"]
+    new_rows = []
+    for size in ("300", "600"):
+        for beta in (0.5, 0.9):
+            stem = piece_name("main", 7, int(size)) + beta_part(beta)
+            piece = _simulate(tmp_path, stem, size, relearn + ["--betas", f"{beta:g}"])
+            new_rows += json.loads(piece[".json"])["rows"]
+    spliced = splice_static(report, new_rows)
+    whole_report = json.loads(whole[".json"])
+    assert rows_csv(spliced["rows"]) == whole[".csv"]
+    assert spliced["frontiers"] == whole_report["frontiers"]
+    assert spliced["args"]["calibration"] == "self"

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import collections
 import csv
+import dataclasses
 import json
 import statistics as st
 import sys
@@ -23,7 +24,7 @@ import numpy as np
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
-from cascade import calibrate, POLICIES, run, RunSetup
+from cascade import calibrate, POLICIES, run, RunSetup, self_consistent_tables
 from energy.three_tier import (
     load_answers,
     olt_factor,
@@ -189,6 +190,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         help="how far off the stale configs' assumed load is (x and 1/x)",
     )
     add("--delta", type=float, help="relative skip margin")
+    add(
+        "--calibration",
+        choices=("recserve", "self"),
+        help="static tables observed under RecServe, or relearned under each static policy",
+    )
     add("--window", type=int, help="RecServe's confidence history per tier")
     add("--alpha", type=float, help="EWMA weight for learned answer lengths and escalation rates")
     add("--rate-alpha", type=float, help="EWMA weight for reported energy rates (unset: --alpha)")
@@ -337,9 +343,9 @@ def prepare_population(subscribers, settings, answers, curve, prices):
         """Return static_hour's cell for a time: (0 weekday / 1 weekend, hour of day)."""
         return (0 if homes.weekday(int(hour // 24)) else 1, int(hour) % 24)
 
-    def observed_tables(population):
-        """Return the static tables observed over the calibration days of this population."""
-        watched = RunSetup(
+    def calibration_setup(population):
+        """Return the setup of this population's calibration days."""
+        return RunSetup(
             answers=answers,
             stream=population.stream(questions, settings.calibration_days, 0, settings.seed),
             curve=curve,
@@ -348,7 +354,10 @@ def prepare_population(subscribers, settings, answers, curve, prices):
             settings=settings,
             schedule_key=schedule_key,
         )
-        return calibrate(watched, middle_beta)
+
+    def observed_tables(population):
+        """Return the static tables observed over the calibration days of this population."""
+        return calibrate(calibration_setup(population), middle_beta)
 
     # --- The tables: observed once, at the middle of the beta sweep ---
     betas = sorted(float(beta) for beta in settings.betas.split(","))
@@ -379,6 +388,7 @@ def prepare_population(subscribers, settings, answers, curve, prices):
         static_rates=static_rates,
         settings=settings,
         schedule_key=schedule_key,
+        calibration=calibration_setup(homes) if settings.calibration == "self" else None,
     )
     return setup, homes
 
@@ -423,7 +433,13 @@ def run_policies(setup: RunSetup, subs, betas, policies):
     block, block_hourly = [], []
     for beta in betas:
         for policy in policies:
-            metrics, hours, _ = run(setup, beta, policy)
+            policy_setup = setup
+            if setup.settings.calibration == "self" and policy in ("static_day", "static_hour"):
+                tables = self_consistent_tables(setup.calibration, beta, policy)
+                policy_setup = dataclasses.replace(
+                    setup, static_rates={**setup.static_rates, **tables}
+                )
+            metrics, hours, _ = run(policy_setup, beta, policy)
             block.append({"subscribers": subs, "beta": beta, "policy": policy, **metrics})
             if not setup.settings.no_hourly:
                 block_hourly.append(
