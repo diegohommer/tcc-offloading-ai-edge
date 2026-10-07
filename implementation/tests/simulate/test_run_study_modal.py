@@ -5,13 +5,12 @@ import subprocess
 import sys
 
 from run_study_modal import (
+    add_self_calibrated,
     beta_part,
     IMPLEMENTATION,
     merge_finished,
     merge_pieces,
     piece_name,
-    rows_csv,
-    splice_static,
     study_jobs,
     study_sizes,
 )
@@ -72,10 +71,11 @@ def test_merge_finished_handles_tags_with_a_dot(tmp_path):
     assert (tmp_path / "study_onu0.5_seed7.json").exists()
 
 
-def test_splice_static_equals_a_run_made_with_self_calibration(tmp_path):
-    """Static rows relearned per beta and spliced in give the run self-calibrated whole."""
-    whole = _simulate(tmp_path, "whole", "300,600", ["--calibration", "self"])
-    report = json.loads(_simulate(tmp_path, "baseline", "300,600")[".json"])
+def test_add_self_calibrated_matches_a_run_made_with_self_calibration(tmp_path):
+    """Relearned static rows, added beside the originals, are those of a self-calibrated run."""
+    whole = json.loads(_simulate(tmp_path, "whole", "300,600", ["--calibration", "self"])[".json"])
+    baseline = json.loads(_simulate(tmp_path, "baseline", "300,600")[".json"])
+    original = [row for row in baseline["rows"] if row["policy"] == "static_hour"]
     relearn = ["--calibration", "self", "--policies", "recserve,static_day,static_hour"]
     new_rows = []
     for size in ("300", "600"):
@@ -83,8 +83,25 @@ def test_splice_static_equals_a_run_made_with_self_calibration(tmp_path):
             stem = piece_name("main", 7, int(size)) + beta_part(beta)
             piece = _simulate(tmp_path, stem, size, relearn + ["--betas", f"{beta:g}"])
             new_rows += json.loads(piece[".json"])["rows"]
-    spliced = splice_static(report, new_rows)
-    whole_report = json.loads(whole[".json"])
-    assert rows_csv(spliced["rows"]) == whole[".csv"]
-    assert spliced["frontiers"] == whole_report["frontiers"]
-    assert spliced["args"]["calibration"] == "self"
+    report = add_self_calibrated(add_self_calibrated(baseline, new_rows), new_rows)
+
+    def rows_of(source, policy):
+        """Return a policy's rows under the plain policy name, as JSON so NaN equals NaN."""
+        return json.dumps(
+            [
+                {**row, "policy": policy.removesuffix("_self")}
+                for row in source["rows"]
+                if row["policy"] == policy
+            ],
+            sort_keys=True,
+        )
+
+    for policy in ("static_day", "static_hour"):
+        assert rows_of(report, f"{policy}_self") == rows_of(whole, policy)
+    assert rows_of(report, "static_hour") == json.dumps(original, sort_keys=True)
+    frontiers = {(entry["subscribers"], entry["policy"]): entry for entry in report["frontiers"]}
+    for entry in whole["frontiers"]:
+        if entry["policy"] == "static_hour":
+            relearned = frontiers[(entry["subscribers"], "static_hour_self")]
+            assert relearned["J_at_accuracy"] == entry["J_at_accuracy"]
+    assert report["args"]["policies"].endswith("static_day_self,static_hour_self")

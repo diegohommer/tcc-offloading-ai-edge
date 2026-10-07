@@ -11,8 +11,8 @@ collect whatever has finished at any time:
     modal run --detach src/simulate/run_study_modal.py
     modal run src/simulate/run_study_modal.py --collect
     modal run --detach src/simulate/run_study_modal.py --self-calibration --only main
-        # static_day and static_hour relearned under themselves, split by beta and
-        # spliced into the runs already in results/study/
+        # static_day and static_hour relearned under themselves, split by beta, added to
+        # the runs already in results/study/ as static_day_self and static_hour_self
     modal run --detach src/simulate/run_study_modal.py --only main --label smoke \\
         --extra "--test-days 1 --calibration-days 1" --out /tmp/smoke   # a short check
 Then: python src/analyze/summarize_study.py -> results/study/SUMMARY.md
@@ -93,7 +93,7 @@ def merge_pieces(pieces: list[dict]) -> dict:
 
 
 STATIC = ("static_day", "static_hour")
-"""The policies whose tables self-calibration relearns."""
+"""The policies whose tables self-calibration relearns; added back as <policy>_self."""
 
 
 def beta_part(beta: float) -> str:
@@ -110,15 +110,17 @@ def rows_csv(rows: list[dict]) -> bytes:
     return table.getvalue().encode()
 
 
-def splice_static(report: dict, new_rows: list[dict]) -> dict:
-    """Replace a run's static_day and static_hour rows, and recompute its comparisons.
+def add_self_calibrated(report: dict, new_rows: list[dict]) -> dict:
+    """Add a run's static policies relearned under themselves, beside the originals.
 
-    Every other policy's rows stay as they were: they do not use the tables. The savings
-    against RecServe and every policy's frontier are recomputed, per household count.
+    The relearned rows become static_day_self and static_hour_self, next to the tables
+    learned under RecServe, so both timetables can be compared. The savings against
+    RecServe and every policy's frontier are recomputed per household count. Adding again
+    replaces what an earlier addition put there.
 
     Args:
         report: One run's JSON.
-        new_rows: The static policies' rows, relearned under themselves.
+        new_rows: The static policies' rows from runs with --calibration self.
 
     Returns:
         The report, changed in place.
@@ -126,15 +128,18 @@ def splice_static(report: dict, new_rows: list[dict]) -> dict:
     sys.path.insert(0, str(IMPLEMENTATION / "src" / "simulate"))
     from frontier import frontier, iso_accuracy  # pylint: disable=import-outside-toplevel
 
-    replacement = {
-        (row["subscribers"], row["beta"], row["policy"]): row
+    relearned = {
+        (row["subscribers"], row["beta"], row["policy"]): {**row, "policy": f"{row['policy']}_self"}
         for row in new_rows
         if row["policy"] in STATIC
     }
-    rows = [
-        replacement.get((row["subscribers"], row["beta"], row["policy"]), row)
-        for row in report["rows"]
-    ]
+    rows = []
+    for row in report["rows"]:
+        if row["policy"].endswith("_self"):
+            continue
+        rows.append(row)
+        if (row["subscribers"], row["beta"], row["policy"]) in relearned:
+            rows.append(relearned[(row["subscribers"], row["beta"], row["policy"])])
     targets = [float(target) for target in report["args"]["acc_targets"].split(",")]
     policies = list(dict.fromkeys(row["policy"] for row in rows))
     frontiers = []
@@ -152,7 +157,10 @@ def splice_static(report: dict, new_rows: list[dict]) -> dict:
             for policy in policies
         ]
     report["rows"], report["frontiers"] = rows, frontiers
-    report["args"]["calibration"] = "self"
+    listed = report["args"]["policies"].split(",")
+    report["args"]["policies"] = ",".join(
+        listed + [f"{policy}_self" for policy in STATIC if f"{policy}_self" not in listed]
+    )
     return report
 
 
@@ -269,7 +277,7 @@ def study_betas() -> list[float]:
 
 
 def splice_finished(runs: list, sizes: list[int], betas: list[float], folder: Path) -> list:
-    """Splice the relearned static rows into every run whose pieces are all in, and return the rest."""
+    """Add the relearned static rows to every run whose pieces are all in, and return the rest."""
     parts, missing = folder / "parts_self", []
     for tag, seed, _ in runs:
         name = f"study_{tag}_seed{seed}"
@@ -282,13 +290,13 @@ def splice_finished(runs: list, sizes: list[int], betas: list[float], folder: Pa
             for stem in stems
             for row in json.loads((parts / f"{stem}.json").read_bytes())["rows"]
         ]
-        report = splice_static(json.loads((folder / f"{name}.json").read_bytes()), new_rows)
+        report = add_self_calibrated(json.loads((folder / f"{name}.json").read_bytes()), new_rows)
         (folder / f"{name}.json").write_bytes(json.dumps(report, indent=1).encode())
         (folder / f"{name}.csv").write_bytes(rows_csv(report["rows"]))
         with open(folder / f"{name}.txt", "a", encoding="utf-8") as printout:
             printout.write(
-                "\nstatic_day and static_hour replaced by tables relearned under themselves "
-                "(--calibration self), split by beta; comparisons recomputed.\n"
+                "\nstatic_day_self and static_hour_self added: tables relearned under "
+                "themselves (--calibration self), split by beta; comparisons recomputed.\n"
             )
     return missing
 
@@ -310,8 +318,9 @@ def main(
         out: Folder to write to instead of results/study/.
         label: The volume folder pieces are kept in; use another for a check.
         collect: Download the finished pieces from the volume instead of launching.
-        self_calibration: Rerun only static_day and static_hour, relearned under themselves
-            and split by beta, and splice them into the runs already merged.
+        self_calibration: Run static_day and static_hour relearned under themselves, split
+            by beta, and add them to the runs already merged as static_day_self and
+            static_hour_self.
     """
     folder = Path(out) if out else STUDY
     if self_calibration and label == "study":

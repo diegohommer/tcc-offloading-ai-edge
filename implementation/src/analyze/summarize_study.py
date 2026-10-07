@@ -26,6 +26,8 @@ NAMES = {
     "recserve_no_onu": "RecServe w/o ONU",
     "static_day": "static/day",
     "static_hour": "static/hour",
+    "static_day_self": "static/day, self",
+    "static_hour_self": "static/hour, self",
     "broadcast": "broadcast",
     "piggyback": "piggyback",
     "oracle": "oracle",
@@ -38,6 +40,8 @@ COMPARE = [
     ("broadcast", "recserve"),
     ("broadcast", "static_day"),
     ("broadcast", "static_hour"),
+    ("static_hour_self", "recserve"),
+    ("broadcast", "static_hour_self"),
     ("piggyback", "static_hour"),
     ("oracle", "broadcast"),
 ]
@@ -190,7 +194,10 @@ def headline(runs, populations):
     sizes = [f"{size:,} homes" + (" †" if queued(main_runs, size) else "") for size in populations]
     lines = [f"## Headline — {describe(main_runs[0])}; 0.80 accuracy", ""]
 
-    lines += ["### Saving over RecServe: static/day / static/hour / broadcast", ""]
+    lines += [
+        "### Saving over RecServe: static/day / static/hour / static/hour, self / broadcast",
+        "",
+    ]
     lines += header(["", *sizes])
     cells = []
     for size in populations:
@@ -200,27 +207,33 @@ def headline(runs, populations):
                 percent(
                     [saving(energy.get(policy), energy["recserve"]) for energy in per_seed], False
                 )
-                for policy in ("static_day", "static_hour", "broadcast")
+                for policy in ("static_day", "static_hour", "static_hour_self", "broadcast")
             )
         )
     lines += ["| saving | " + " | ".join(cells) + " |", ""]
 
-    lines += ["### Saving over static/hour: broadcast (oracle) · piggyback", ""]
+    lines += ["### Saving over each timetable: broadcast (oracle) · piggyback", ""]
     lines += header(["", *sizes])
-    cells = []
-    for size in populations:
-        per_seed = [at(run, size, "0.80") for run in main_runs]
-        broadcast, oracle, piggyback = (
-            percent(
-                [saving(energy.get(policy), energy.get("static_hour")) for energy in per_seed],
-                False,
+    for timetable in ("static_hour", "static_hour_self"):
+        cells = []
+        for size in populations:
+            per_seed = [at(run, size, "0.80") for run in main_runs]
+            broadcast, oracle, piggyback = (
+                percent(
+                    [saving(energy.get(policy), energy.get(timetable)) for energy in per_seed],
+                    False,
+                )
+                for policy in ("broadcast", "oracle", "piggyback")
             )
-            for policy in ("broadcast", "oracle", "piggyback")
-        )
-        cells.append(f"{broadcast} ({oracle}) · {piggyback}")
-    lines += ["| saving | " + " | ".join(cells) + " |", ""]
+            cells.append(f"{broadcast} ({oracle}) · {piggyback}")
+        lines.append(f"| over {NAMES[timetable]} | " + " | ".join(cells) + " |")
+    lines += [""]
 
-    lines += ["### Every scenario: broadcast's saving over RecServe · over static/hour", ""]
+    lines += [
+        "### Every scenario: broadcast's saving over RecServe · over static/hour · over "
+        "static/hour, self",
+        "",
+    ]
     lines += header(["scenario", *(f"{size:,} homes" for size in populations)])
     for scenario in [name for name in ORDER if name in runs]:
         cells = []
@@ -229,12 +242,15 @@ def headline(runs, populations):
             over_recserve = percent(
                 [saving(energy.get("broadcast"), energy["recserve"]) for energy in per_seed], False
             )
-            over_timetable = percent(
-                [saving(energy.get("broadcast"), energy.get("static_hour")) for energy in per_seed],
-                False,
+            over_timetable, over_self = (
+                percent(
+                    [saving(energy.get("broadcast"), energy.get(timetable)) for energy in per_seed],
+                    False,
+                )
+                for timetable in ("static_hour", "static_hour_self")
             )
             cells.append(
-                f"{over_recserve} · {over_timetable}"
+                f"{over_recserve} · {over_timetable} · {over_self}"
                 + (" †" if queued(runs[scenario], size) else "")
             )
         lines.append(f"| `{scenario}` | " + " | ".join(cells) + " |")

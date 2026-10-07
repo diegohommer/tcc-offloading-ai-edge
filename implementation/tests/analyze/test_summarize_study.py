@@ -93,7 +93,7 @@ def test_main_writes_the_summary(monkeypatch, tmp_path):
     assert summarize_study.main() == 0
     summary = (tmp_path / "SUMMARY.md").read_text()
     assert summary.startswith("# Case study — summary")
-    assert "| `main` | +25.0% · - |" in summary
+    assert "| `main` | +25.0% · - · - |" in summary
 
 
 def test_main_without_runs_fails(monkeypatch, tmp_path):
