@@ -402,3 +402,5 @@ J/query at equal accuracy, each policy's own frontier (- = accuracy out of its r
   20000  0.70      134.8       94.8       89.4       59.5       64.6       64.5       90.0
   20000  0.80      164.3      101.3       90.3       83.6       69.8       69.8       91.1
 wrote results/study/parts/study_burst_week_seed9_n20000.csv and study_burst_week_seed9_n20000.json
+
+static_day_self and static_hour_self added: tables relearned under themselves (--calibration self), split by beta; comparisons recomputed.

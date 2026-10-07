@@ -402,3 +402,5 @@ J/query at equal accuracy, each policy's own frontier (- = accuracy out of its r
   20000  0.70      137.3       97.6       92.2       56.9       66.8       66.9       91.5
   20000  0.80      167.1      104.4       93.2       86.1       71.9       71.9       93.5
 wrote /tmp/study/study_main_seed9_n20000.csv and study_main_seed9_n20000.json
+
+static_day_self and static_hour_self added: tables relearned under themselves (--calibration self), split by beta; comparisons recomputed.
