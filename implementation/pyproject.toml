@@ -22,6 +22,7 @@ known_first_party = [
     "measure_gpu_energy_static",
     "olt_energy",
     "olt_server",
+    "plot_study",
     "prepare_load_traces",
     "routing",
     "run_study_modal",

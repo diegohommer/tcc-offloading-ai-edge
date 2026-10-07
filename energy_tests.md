@@ -317,8 +317,59 @@ month of test. The main runs follow the average day; two more add BurstGPT's dri
 (§8.1), within each week only and with whole weeks departing too. Sensitivity runs change
 one setting each: average accounting, a 2× or 5× cheaper ONU, the OLT's energy × 1.07 or
 × 1.75, two active users per household, and question statistics learned per household.
+Figures from `src/analyze/plot_study.py` (`implementation/results/study/figures/`).
 
-**Status.** To be run on the current simulator.
+### 9.1 Two timetables
+
+A timetable is only as good as the traffic it was learned from. Observed during a month
+of plain RecServe, the OLT is idle more often than once a static policy sends it more
+work, which it then makes cheaper. The table makes the OLT look dear and the timetable
+under-uses it. In the main, `burst_week` and `burst_all` runs the static policies are
+therefore also relearned at each beta while running themselves, three times, as an
+operator would keep refreshing a table (`--calibration self`, reported as
+`static_hour_self`). Both versions are kept. The first is a table built before
+energy-aware routing is deployed; the second is the fairest timetable, the one a live
+signal has to beat. The sensitivity runs have only the first.
+
+### 9.2 Results
+
+J per query at 0.80 accuracy, mean of three seeds, and the saving over RecServe at the same
+accuracy.
+
+| Households | RecServe | Timetable under RecServe | Timetable relearned | Broadcast |
+|---|---|---|---|---|
+| 5,000 | 300.2 J | 254.1 J (15%) | 226.2 J (25%) | 217.8 J (27%) |
+| 10,000 | 226.2 J | 159.0 J (30%) | 135.6 J (40%) | 129.8 J (43%) |
+| 20,000 | 167.2 J | 86.1 J (49%) | 76.8 J (54%) | 71.9 J (57%) |
+
+The broadcast's saving over the relearned timetable, at 0.80 accuracy:
+
+| Load | 5,000 | 10,000 | 20,000 |
+|---|---|---|---|
+| Average days (`main`) | +3.7% | +4.3% | +6.3% |
+| Drift within a week (`burst_week`) | +4.4% | +6.8% | +7.2% |
+| All of BurstGPT's drift (`burst_all`) | +9.7% | +12.7% | +11.1% |
+
+- **Routing by energy is the main saving.** Every energy-aware policy uses 25–57% less
+  energy than RecServe at the same accuracy from 5,000 households up. Below that the OLT
+  is rarely busy enough to batch, and nothing gains more than about 6%.
+- **How the OLT's cost is learned matters.** A timetable learned under RecServe gives up
+  9–10 points of that saving at 5,000 and 10,000 households. Relearned from its own
+  traffic it recovers most of them.
+- **The broadcast adds a little on top of the best timetable, more the less predictable
+  the load.** About 4–6% on average days and 10–13% with BurstGPT's drift, positive in all
+  27 seed and household combinations (+3.0% to +17.3%). The oracle, the same report with no
+  broadcast delay, is within 0.4% of the broadcast.
+- **The household's own answers are not enough.** Piggyback trails the relearned timetable
+  by 13–22% at 5,000 households and up: a household hears the OLT too rarely.
+- **Under average accounting live information is worth almost nothing.** The broadcast is
+  within 2% of the timetable learned under RecServe, since a query's share of the batch
+  changes smoothly with load.
+- **The OLT can run out of slots.** With two users per household at 20,000 households,
+  more than 1% of arrivals wait for one of its 64 slots, and the broadcast, which sends the
+  most there, trails the timetable. That cell is indicative only.
+
+`SUMMARY.md` has every scenario, both accuracy targets, latency and PON traffic.
 
 ## 10. Limitations
 

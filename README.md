@@ -87,6 +87,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 bash src/simulate/run_study.sh 6                              # the case study
 .venv/bin/modal run src/simulate/run_study_modal.py          # ... or on Modal, every run at once
 .venv/bin/python src/analyze/summarize_study.py               # its tables
+.venv/bin/python src/analyze/plot_study.py                    # its figures
 .venv/bin/python src/analyze/tier_energy.py                   # tier tables
 ```
 
