@@ -5,7 +5,7 @@ Every point of a result is a mean over the seeds 7, 8 and 9, and every saving is
 equal accuracy (simulate/frontier.py), as SUMMARY.md reports it.
 """
 
-# pylint: disable=wrong-import-position
+# pylint: disable=wrong-import-position,ungrouped-imports
 
 from __future__ import annotations
 
