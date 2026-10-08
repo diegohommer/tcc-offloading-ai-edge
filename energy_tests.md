@@ -238,15 +238,74 @@ messages per weekly active user a day. Each message asks a random GSM8K question
 
 Without more, every weekday follows the same average day and only Poisson counting noise
 departs from it (±2–4% an hour at 10,000 households), so a timetable knows almost
-everything. Real load drifts: whole hours and days run busier or quieter than the
-timetable. Each hour's rate of new conversations is therefore multiplied by a factor that
-all households share, log-normal with mean 1, whose log follows an AR(1) process with
-log-sd σ and correlation time τ: a doubly stochastic (Cox) Poisson process, so the
-month's volume stays the same. σ and τ are measured on BurstGPT's conversation starts,
-net of counting noise, over its busy hours: against one hour × weekday/weekend timetable,
-σ = 0.46 with τ = 12.3 h; with each week's level taken out, leaving surges within a week,
-σ = 0.24 with τ = 3.2 h (`prepare_load_traces.py`). The calibration month drifts too, so
-the timetable learns an average that includes the drift.
+everything. Real load drifts: some hours run busier or quieter than the timetable says.
+The study has three traffic scenarios, no drift, mild drift and strong drift, built and
+measured as below.
+
+#### 8.1.1 Measuring the drift on BurstGPT (`prepare_load_traces.py`)
+
+Input: BurstGPT_3's conversation log, 233,617 requests over 110 days. Only the time of
+each request and its session id are used.
+
+1. **Bursts.** Within a session, a pause longer than 600 s starts a new burst, so one
+   burst is one sitting at the keyboard. This gives 97,348 bursts, 2.4 requests each.
+2. **Counts.** Let $c_{d,h}$ be the bursts that open in hour $h$ (0–23) of day $d$ (0–109),
+   days counted from the first request.
+3. **Weekend.** Days are grouped by $d \bmod 7$. The two groups with the fewest bursts are
+   the weekend (groups 2 and 3, 500 and 542 bursts a day, against 957–1,122 for the
+   other five). Every other day is a weekday.
+4. **Timetable.** For each day type $t$ (weekday, weekend) and hour, the mean over the
+   days of that type is $\bar c_{t,h}$. The expected count of hour $h$ of day $d$ is
+   $e_{d,h} = \bar c_{t(d),h}$.
+5. **Weekly level (mild drift only).** Each day's total against the timetable,
+   $r_d = \sum_h c_{d,h} / \sum_h e_{d,h}$, is averaged over the 7 days centred on $d$,
+   giving the level $L_d$, and the expectation becomes $e_{d,h} \cdot L_d$. A week that
+   runs high or low as a whole is then part of the expectation, not of the drift. The
+   strong drift skips this step.
+6. **Excess.** For each hour, $x_{d,h} = c_{d,h}/e_{d,h} - 1$. Only busy hours are used
+   ($e_{d,h} \ge 20$ bursts), since in quieter hours the excess is mostly counting noise.
+7. **Size.** If the true rate is $e \cdot F$ with $E[F] = 1$ and the count is Poisson,
+   $E[x^2] = \mathrm{Var}(F) + 1/e$. So $\mathrm{Var}(F) = \mathrm{mean}(x^2 - 1/e)$ over
+   busy hours, and the log-sd of a log-normal $F$ is
+   $\sigma = \sqrt{\ln(1 + \mathrm{Var}(F))}$.
+8. **Duration.** The lag-one correlation of the factor is
+   $\rho_F = \mathrm{mean}(x_{d,h}\,x_{d,h+1}) / \mathrm{Var}(F)$ over pairs of consecutive
+   busy hours. On the log scale it is
+   $\rho = \ln(1 + \rho_F(e^{\sigma^2} - 1))/\sigma^2$, and the correlation time is
+   $\tau = -1/\ln\rho$ hours.
+
+| Scenario | Step 5 | σ | τ | One standard deviation of the factor |
+|---|---|---|---|---|
+| No drift (`main`) | – | 0 | – | ×1 |
+| Mild drift (`burst_week`) | yes | 0.235 | 3.2 h | ×0.79 to ×1.26 |
+| Strong drift (`burst_all`) | no | 0.457 | 12.3 h | ×0.63 to ×1.58 |
+
+What step 5 removes is mostly growth. BurstGPT's weekly level $L_d$ sits between 0.6 and
+0.9 for its first ten weeks and between 1.3 and 1.8 for its last five (0.59 to 1.92 over
+the whole trace), so the strong drift's larger σ and τ come largely from the service growing
+over the 110 days. The simulation does not reproduce that trend. It turns the extra
+variance into departures that last about 12 hours, as random as the mild ones.
+
+Checked against seven timetables, one per day of the week instead of weekday and weekend,
+σ barely moves: 0.458 and 13.2 h for the strong drift, 0.208 and 3.6 h for the mild one.
+The weekdays differ by about ±8% in volume, little next to the drift.
+
+#### 8.1.2 Applying it in the simulation (`households.py`)
+
+1. The expected bursts in hour $k$ of the run are the population's bursts per day times
+   the timetable's share of that hour, weekday or weekend, measured in step 4.
+2. A factor shared by all households follows
+   $z_k = \phi z_{k-1} + \varepsilon_k$, with $\phi = e^{-1/\tau}$,
+   $\varepsilon_k \sim N(0, \sigma^2(1-\phi^2))$ and $z_0 \sim N(0, \sigma^2)$, so the
+   log-factor has sd σ and fades with correlation time τ. The factor is
+   $F_k = e^{z_k - \sigma^2/2}$, whose mean is 1, so the month's volume does not change.
+3. The bursts that open in hour $k$ are Poisson with mean expected × $F_k$ (a doubly
+   stochastic, or Cox, process). Each opens at a uniform time within the hour, takes its
+   number of requests and its pauses from BurstGPT's measured distributions, and belongs
+   to a household drawn uniformly.
+
+The calibration month drifts too, so the timetable learns an average that includes the
+drift.
 
 ### 8.2 The cascade
 
@@ -314,8 +373,8 @@ Settings in `implementation/config/study.yaml`, runs from `src/simulate/run_stud
 tables from `src/analyze/summarize_study.py`. 1,000 to 20,000 households, three seeds, a
 month of calibration (when the static tables are observed over plain RecServe) before a
 month of test. The main runs follow the average day (no drift); two more add BurstGPT's drift
-(§8.1): mild drift, its variation within each week only, and strong drift, with whole weeks
-departing too. Sensitivity runs change
+(§8.1.1): mild drift, measured with each week's level taken out, and strong drift, measured
+without. Sensitivity runs change
 one setting each: average accounting, a 2× or 5× cheaper ONU, the OLT's energy × 1.07 or
 × 1.75, two active users per household, and question statistics learned per household.
 Figures from `src/analyze/plot_study.py` (`implementation/results/study/figures/`, listed with draft captions in its README.md): the traffic, the β knob, reading at equal accuracy beside each tier alone (`results/study/alone_seed*.json`), where queries are answered, the batching validation, the savings, energy as the drift grows, and RecServe's communication burden against ours. Each is drawn at the thesis's text width as a vector PDF and a 300 dpi PNG, with its numbers in `figures/data/<name>.csv`.
