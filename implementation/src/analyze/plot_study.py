@@ -230,11 +230,18 @@ def plot_beta_knob() -> Path:
         _, joules = per_beta(runs, policy, SIZE, "J_per_query")
         line(panels[0], betas, accuracy, name, color, marker)
         line(panels[1], betas, joules, name, color, marker)
-    for tier, value in (("Phone alone", 0.472), ("ONU alone", 0.688), ("OLT alone", 0.917)):
-        panels[0].axhline(value, color=MUTED, linewidth=0.8, linestyle=":")
-        panels[0].annotate(
-            tier, (0.1, value), xytext=(0, 3), textcoords="offset points", fontsize=7.5, color=MUTED
-        )
+    for policy, name in ALONE.items():
+        accuracy, joules = tier_alone(policy)
+        for axes, value, text in ((panels[0], accuracy, name), (panels[1], joules, name)):
+            axes.axhline(value, color=MUTED, linewidth=0.8, linestyle=":")
+            axes.annotate(
+                text,
+                (0.1, value),
+                xytext=(0, 3),
+                textcoords="offset points",
+                fontsize=7.5,
+                color=MUTED,
+            )
     legend(panels[1])
     figure.suptitle(
         f"No drift, {SIZE:,} households, mean of 3 seeds",
