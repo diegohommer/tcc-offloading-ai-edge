@@ -317,7 +317,7 @@ month of test. The main runs follow the average day; two more add BurstGPT's dri
 (§8.1), within each week only and with whole weeks departing too. Sensitivity runs change
 one setting each: average accounting, a 2× or 5× cheaper ONU, the OLT's energy × 1.07 or
 × 1.75, two active users per household, and question statistics learned per household.
-Figures from `src/analyze/plot_study.py` (`implementation/results/study/figures/`).
+Figures from `src/analyze/plot_study.py` (`implementation/results/study/figures/`): the traffic, the beta knob, reading at equal accuracy, where queries are answered, the batching validation, and the savings.
 
 ### 9.1 Two timetables
 
