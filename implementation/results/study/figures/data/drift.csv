@@ -1,0 +1,10 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,10000,RecServe,scenario,No drift,J_per_query_at_target,226.216,225.857,226.847
+,burst_week,10000,RecServe,scenario,Drift within a week,J_per_query_at_target,222.484,221.217,223.734
+,burst_all,10000,RecServe,scenario,All of BurstGPT's drift,J_per_query_at_target,216.235,212.631,218.542
+,main,10000,Timetable,scenario,No drift,J_per_query_at_target,135.65,135.222,136.098
+,burst_week,10000,Timetable,scenario,Drift within a week,J_per_query_at_target,132.951,131.537,135.238
+,burst_all,10000,Timetable,scenario,All of BurstGPT's drift,J_per_query_at_target,131.269,127.891,134.162
+,main,10000,Broadcast,scenario,No drift,J_per_query_at_target,129.844,129.251,130.456
+,burst_week,10000,Broadcast,scenario,Drift within a week,J_per_query_at_target,123.896,122.523,125.219
+,burst_all,10000,Broadcast,scenario,All of BurstGPT's drift,J_per_query_at_target,114.673,110.197,118.064

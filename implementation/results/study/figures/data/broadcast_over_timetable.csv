@@ -1,0 +1,16 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,,No drift,households,1000,saving_over_timetable_percent,-0.0277191,-0.177743,0.19777
+,main,,No drift,households,2000,saving_over_timetable_percent,-0.399336,-1.30778,0.554152
+,main,,No drift,households,5000,saving_over_timetable_percent,3.73968,3.02223,4.67892
+,main,,No drift,households,10000,saving_over_timetable_percent,4.27989,4.14586,4.41505
+,main,,No drift,households,20000,saving_over_timetable_percent,6.30003,5.58746,6.79275
+,burst_week,,Drift within a week,households,1000,saving_over_timetable_percent,0.705038,-0.160886,2.01516
+,burst_week,,Drift within a week,households,2000,saving_over_timetable_percent,2.20798,1.51769,3.46155
+,burst_week,,Drift within a week,households,5000,saving_over_timetable_percent,4.37788,3.1262,5.53906
+,burst_week,,Drift within a week,households,10000,saving_over_timetable_percent,6.80615,6.15756,7.40811
+,burst_week,,Drift within a week,households,20000,saving_over_timetable_percent,7.15627,7.09657,7.23229
+,burst_all,,All of BurstGPT's drift,households,1000,saving_over_timetable_percent,0.791837,0.185418,1.26713
+,burst_all,,All of BurstGPT's drift,households,2000,saving_over_timetable_percent,3.21517,0.60602,6.77906
+,burst_all,,All of BurstGPT's drift,households,5000,saving_over_timetable_percent,9.69845,7.94884,11.117
+,burst_all,,All of BurstGPT's drift,households,10000,saving_over_timetable_percent,12.6586,11.9986,13.8352
+,burst_all,,All of BurstGPT's drift,households,20000,saving_over_timetable_percent,11.0597,5.52343,17.3274

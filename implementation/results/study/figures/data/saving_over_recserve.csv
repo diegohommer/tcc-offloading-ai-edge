@@ -1,0 +1,11 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,,Timetable,households,1000,saving_over_recserve_percent,2.00532,1.83965,2.20672
+,main,,Timetable,households,2000,saving_over_recserve_percent,6.23808,6.1083,6.40392
+,main,,Timetable,households,5000,saving_over_recserve_percent,24.6471,24.0694,25.0071
+,main,,Timetable,households,10000,saving_over_recserve_percent,40.0354,39.9723,40.1296
+,main,,Timetable,households,20000,saving_over_recserve_percent,54.0973,54,54.2188
+,main,,Broadcast,households,1000,saving_over_recserve_percent,1.97795,1.73836,2.40013
+,main,,Broadcast,households,2000,saving_over_recserve_percent,5.86457,5.17989,6.6286
+,main,,Broadcast,households,5000,saving_over_recserve_percent,27.4679,27.2735,27.6222
+,main,,Broadcast,households,10000,saving_over_recserve_percent,42.6018,42.4918,42.7729
+,main,,Broadcast,households,20000,saving_over_recserve_percent,56.9896,56.7768,57.1929
