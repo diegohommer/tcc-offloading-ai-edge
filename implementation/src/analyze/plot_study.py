@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_continuous_batching import compare_run  # noqa: E402
 from energy.three_tier import olt_reference, RESULTS, STUDY  # noqa: E402
 from households import Households  # noqa: E402
+from summarize_study import at_column  # noqa: E402
 
 FIGURES = STUDY / "figures"
 """Where the figures are written."""
@@ -39,16 +40,16 @@ SIZE = 10000
 # against the surface, so every series also carries a direct label and its own marker.
 SERIES = {
     "recserve": ("RecServe", "#2a78d6", "o"),
-    "static_hour": ("Timetable, learned under RecServe", "#eb6834", "s"),
-    "static_hour_self": ("Timetable, relearned under itself", "#1baf7a", "^"),
+    "static_hour_self": ("Timetable", "#1baf7a", "^"),
     "broadcast": ("Broadcast", "#eda100", "D"),
 }
 SCENARIOS = {
-    "main": ("Average days", "#2a78d6", "o"),
+    "main": ("No drift", "#2a78d6", "o"),
     "burst_week": ("Drift within a week", "#eb6834", "s"),
     "burst_all": ("All of BurstGPT's drift", "#1baf7a", "^"),
 }
 TIERS = {"user": ("Phone", "#e87ba4"), "onu": ("ONU", "#008300"), "olt": ("OLT", "#4a3aa7")}
+BETA = "β (escalation quantile)"
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 
 
@@ -214,16 +215,16 @@ def plot_traffic() -> Path:
 # 2. The beta knob
 # ==========================================
 def plot_beta_knob() -> Path:
-    """How RecServe's beta moves accuracy and energy, for each policy."""
+    """How β moves accuracy and energy, for each policy."""
     runs = load_runs("main")
     figure, panels = new_figure(columns=2, width=11)
     style(
         panels[0],
-        "Accuracy delivered rises with beta",
-        "RecServe's beta",
+        "Accuracy delivered rises with β",
+        BETA,
         "Share of answers that are right",
     )
-    style(panels[1], "So does the energy spent", "RecServe's beta", "Energy per query (J)")
+    style(panels[1], "So does the energy spent", BETA, "Energy per query (J)")
     for policy, (name, color, marker) in SERIES.items():
         betas, accuracy = per_beta(runs, policy, SIZE, "accuracy")
         _, joules = per_beta(runs, policy, SIZE, "J_per_query")
@@ -236,7 +237,7 @@ def plot_beta_knob() -> Path:
         )
     legend(panels[1])
     figure.suptitle(
-        f"Average days, {SIZE:,} households, mean of 3 seeds",
+        f"No drift, {SIZE:,} households, mean of 3 seeds",
         x=0.01,
         ha="left",
         fontsize=9,
@@ -250,23 +251,55 @@ def plot_beta_knob() -> Path:
 # ==========================================
 READING_LABELS = {
     "recserve": (-46, 0),
-    "static_hour": (-46, 0),
-    "static_hour_self": (12, 7),
+    "static_hour_self": (-46, 6),
     "broadcast": (12, -9),
 }
 """Where each reading's value is written, so the two closest ones do not collide."""
 
+ALONE = {"user_alone": "Phone alone", "onu_alone": "ONU alone", "olt_alone": "OLT alone"}
+"""The single-tier runs (results/study/alone_seed*.json), each tier answering every query."""
+
+
+def tier_alone(policy: str) -> tuple[float, float]:
+    """Return (accuracy, J per query) of one tier answering every query, mean over the seeds."""
+    rows = [
+        row
+        for seed in SEEDS
+        for row in json.loads((STUDY / f"alone_seed{seed}.json").read_text(encoding="utf-8"))[
+            "rows"
+        ]
+        if row["policy"] == policy and row["subscribers"] == SIZE
+    ]
+    return (
+        statistics.mean(row["accuracy"] for row in rows),
+        statistics.mean(row["J_per_query"] for row in rows),
+    )
+
 
 def plot_equal_accuracy() -> Path:
-    """Energy against accuracy, and where each policy's curve crosses the 0.80 target."""
+    """Energy against accuracy, where each policy's curve crosses 0.80, and each tier alone."""
     runs = load_runs("main")
     figure, (axes,) = new_figure(width=9)
     style(
         axes,
-        f"Energy against accuracy, average days, {SIZE:,} households",
-        "Accuracy delivered (each marker one beta, 0.1 to 0.9)",
+        f"Energy against accuracy, no drift, {SIZE:,} households",
+        "Accuracy delivered (each marker one β, 0.1 to 0.9)",
         "Energy per query (J)",
     )
+    for policy, name in ALONE.items():
+        accuracy, joules = tier_alone(policy)
+        axes.plot(
+            [accuracy], [joules], marker="X", markersize=9, color=MUTED, linestyle="none", zorder=4
+        )
+        axes.annotate(
+            f"{name}, {joules:.0f} J",
+            (accuracy, joules),
+            xytext=(-6, 9),
+            textcoords="offset points",
+            ha="right" if policy == "olt_alone" else "left",
+            fontsize=8,
+            color=MUTED,
+        )
     axes.axvline(0.80, color=MUTED, linewidth=1, linestyle="--")
     axes.annotate(
         "target 0.80",
@@ -299,7 +332,7 @@ def plot_equal_accuracy() -> Path:
             fontsize=8,
             color=INK,
         )
-    axes.set_xlim(0.48, 0.95)
+    axes.set_xlim(0.44, 0.95)
     legend(axes)
     return save(figure, "equal_accuracy.png")
 
@@ -308,14 +341,14 @@ def plot_equal_accuracy() -> Path:
 # 4. Where queries are answered
 # ==========================================
 def plot_tiers() -> Path:
-    """Share of queries answered at each tier, by beta, under RecServe and the broadcast."""
+    """Share of queries answered at each tier, by β, under RecServe and the broadcast."""
     runs = load_runs("main")
     figure, panels = new_figure(columns=2, width=11, sharey=True)
     for axes, policy in zip(panels, ("recserve", "broadcast")):
         style(
             axes,
             f"{SERIES[policy][0]}: where queries are answered",
-            "RecServe's beta",
+            BETA,
             f"Share of queries, {SIZE:,} households" if policy == "recserve" else "",
         )
         bottom = None
@@ -440,32 +473,32 @@ def plot_batching_validation() -> Path:
 # 6. The results
 # ==========================================
 def plot_savings_over_recserve() -> Path:
-    """Each energy-aware policy's saving over RecServe, by population, average days."""
+    """Each energy-aware policy's saving over RecServe, by population, no drift."""
     runs = load_runs("main")
     figure, (axes,) = new_figure()
     style(
         axes,
-        "Saving over RecServe at 0.80 accuracy, average days",
+        "Saving over RecServe at 0.80 accuracy, no drift",
         "Households on the OLT",
         "Energy saved (%), mean of 3 seeds",
     )
-    offsets = {"static_hour": -8, "static_hour_self": 0, "broadcast": 8}
-    for policy in ("static_hour", "static_hour_self", "broadcast"):
+    offsets = {"static_hour_self": -5, "broadcast": 5}
+    for policy, offset in offsets.items():
         name, color, marker = SERIES[policy]
         means = [point[0] for point in savings(runs, policy, "recserve")]
         line(axes, SIZES, means, name, color, marker)
-        label_end(axes, SIZES, means, f"{means[-1]:.0f}%", color, offsets[policy])
+        label_end(axes, SIZES, means, f"{means[-1]:.0f}%", color, offset)
     households_axis(axes, right=30000)
     legend(axes)
     return save(figure, "saving_over_recserve.png")
 
 
 def plot_broadcast_over_timetable() -> Path:
-    """The broadcast's saving over the self-calibrated timetable, by population and drift."""
+    """The broadcast's saving over the timetable, by population and drift."""
     figure, (axes,) = new_figure()
     style(
         axes,
-        "Broadcast's saving over the timetable relearned under itself, 0.80 accuracy",
+        "Broadcast's saving over the timetable, 0.80 accuracy",
         "Households on the OLT",
         "Energy saved (%), mean and range of 3 seeds",
     )
@@ -494,6 +527,116 @@ def plot_broadcast_over_timetable() -> Path:
     return save(figure, "broadcast_over_timetable.png")
 
 
+def plot_drift() -> Path:
+    """Each policy's energy at 0.80 accuracy as the drift grows, at a fixed population."""
+    figure, (axes,) = new_figure(width=8.5)
+    style(
+        axes,
+        f"Energy at 0.80 accuracy as the traffic drifts, {SIZE:,} households",
+        "Drift in the traffic",
+        "Energy per query (J), mean and range of 3 seeds",
+    )
+    width = 0.26
+    for slot, (policy, (name, color, _)) in enumerate(SERIES.items()):
+        means, lows, highs = [], [], []
+        for scenario in SCENARIOS:
+            per_seed = [
+                entry["J_at_accuracy"]["0.80"]
+                for run in load_runs(scenario)
+                for entry in run["frontiers"]
+                if entry["subscribers"] == SIZE and entry["policy"] == policy
+            ]
+            means.append(statistics.mean(per_seed))
+            lows.append(means[-1] - min(per_seed))
+            highs.append(max(per_seed) - means[-1])
+        positions = np.arange(len(SCENARIOS)) + (slot - 1) * width
+        axes.bar(
+            positions,
+            means,
+            width=width,
+            color=color,
+            edgecolor=SURFACE,
+            linewidth=1,
+            yerr=[lows, highs],
+            error_kw={"ecolor": MUTED, "capsize": 3, "linewidth": 1},
+            label=name,
+        )
+        for position, value, high in zip(positions, means, highs):
+            axes.annotate(
+                f"{value:.0f}",
+                (position, value + high),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                fontsize=7.5,
+                color=INK,
+            )
+    axes.set_xticks(range(len(SCENARIOS)), [name for name, _, _ in SCENARIOS.values()])
+    axes.grid(axis="x", visible=False)
+    legend(axes, "upper right")
+    return save(figure, "drift.png")
+
+
+def plot_bandwidth() -> Path:
+    """RecServe's communication burden against our policies', next to the energy each spends."""
+    runs = load_runs("main")
+    figure, panels = new_figure(columns=2, width=11)
+    style(
+        panels[0],
+        "RecServe's communication burden",
+        "Accuracy delivered (each marker one β, 0.1 to 0.9)",
+        "MB carried between tiers per 1,000 queries",
+    )
+    for policy, (name, color, marker) in SERIES.items():
+        _, accuracy = per_beta(runs, policy, SIZE, "accuracy")
+        _, megabytes = per_beta(runs, policy, SIZE, "comm_MB_per_1k_queries")
+        line(panels[0], accuracy, megabytes, name, color, marker)
+    panels[0].axvline(0.80, color=MUTED, linewidth=1, linestyle="--")
+    legend(panels[0])
+
+    style(
+        panels[1],
+        "What each policy changes at 0.80 accuracy",
+        "",
+        "Change against RecServe (%), mean of 3 seeds",
+    )
+    panels[1].axhline(0, color=MUTED, linewidth=0.8)
+    measures = (
+        ("Energy per query", "J_per_query"),
+        ("Communication burden", "comm_MB_per_1k_queries"),
+    )
+    width = 0.36
+    for slot, policy in enumerate(("static_hour_self", "broadcast")):
+        name, color, _ = SERIES[policy]
+        changes = []
+        for _, column in measures:
+            per_seed = []
+            for run in runs:
+                values = at_column(run, SIZE, "0.80", column)
+                per_seed.append(100 * (values[policy] / values["recserve"] - 1))
+            changes.append(statistics.mean(per_seed))
+        positions = np.arange(len(measures)) + (slot - 0.5) * width
+        panels[1].bar(
+            positions, changes, width=width, color=color, edgecolor=SURFACE, linewidth=1, label=name
+        )
+        for position, value in zip(positions, changes):
+            panels[1].annotate(
+                f"{value:+.0f}%",
+                (position, value),
+                xytext=(0, 4 if value >= 0 else -4),
+                textcoords="offset points",
+                ha="center",
+                va="bottom" if value >= 0 else "top",
+                fontsize=8,
+                color=INK,
+            )
+    panels[1].set_xticks(range(len(measures)), [name for name, _ in measures])
+    panels[1].grid(axis="x", visible=False)
+    legend(panels[1], "upper left")
+    figure.suptitle(f"No drift, {SIZE:,} households", x=0.01, ha="left", fontsize=9, color=MUTED)
+    return save(figure, "bandwidth.png")
+
+
 def main() -> int:
     """Draw every figure and print where each was written.
 
@@ -511,6 +654,8 @@ def main() -> int:
         plot_batching_validation,
         plot_savings_over_recserve,
         plot_broadcast_over_timetable,
+        plot_drift,
+        plot_bandwidth,
     ):
         print(f"wrote {draw()}")
     return 0

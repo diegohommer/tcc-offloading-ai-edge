@@ -38,6 +38,7 @@ from routing import Learned, on_arrival, on_escalation, TOP, Window
 #   oracle           the same mean with no broadcast delay
 #   piggyback        the same report, heard only on the household's own answers
 #   stale_low/high   static_day observed on a population 1/4 or 4x the real one
+#   user/onu/olt_alone  one tier answers every query (reference points, no cascade)
 POLICIES = (
     "recserve",
     "recserve_no_onu",
@@ -48,8 +49,14 @@ POLICIES = (
     "piggyback",
     "broadcast",
     "oracle",
+    "user_alone",
+    "onu_alone",
+    "olt_alone",
 )
-FIXED = ("recserve", "recserve_no_onu")
+ALONE = {"user_alone": 0, "onu_alone": 1, "olt_alone": TOP}
+"""Single-tier policies, and the tier that answers every query."""
+
+FIXED = ("recserve", "recserve_no_onu", *ALONE)
 """Fixed chains: no energy information at all."""
 
 STATIC = ("static_day", "stale_low", "stale_high")
@@ -274,7 +281,7 @@ def run(setup: RunSetup, beta: float, policy: str):
         prompt_tokens = setup.answers[question]["user"]["tp"]
         packet: dict[str, tuple[float, float, float]] = {}
         spent = took = 0.0
-        here = 0
+        here = ALONE.get(policy, 0)
         rates = belief = None
         while True:
             tier = TIERS[here]
@@ -328,7 +335,9 @@ def run(setup: RunSetup, beta: float, policy: str):
 
             # --- RecServe's test: escalate below the beta-quantile of recent confidences ---
             window = windows[tier]
-            escalate = len(window) > 1 and answer["conf"] < window.quantile(beta)
+            escalate = (
+                policy not in ALONE and len(window) > 1 and answer["conf"] < window.quantile(beta)
+            )
             window.add(answer["conf"])
             if not escalate:
                 settle(question, hour, household, tier, spent, took, packet)

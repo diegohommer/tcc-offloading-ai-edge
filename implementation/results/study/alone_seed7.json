@@ -1,0 +1,222 @@
+{
+ "args": {
+  "config": "config/study.yaml",
+  "betas": "0.5",
+  "subscribers": "10000",
+  "boundary": "system",
+  "confidence": "mean",
+  "onu_scale": "1.0",
+  "olt_scale": "1.0",
+  "accounting": "marginal",
+  "report": "window",
+  "report_window": "5.0",
+  "stale_factor": "4.0",
+  "delta": "0.0",
+  "calibration": "recserve",
+  "window": "1000",
+  "alpha": "0.05",
+  "rate_alpha": "0.3",
+  "warmup": "20",
+  "users_per_home": "1.0",
+  "per_user_day": "3.6",
+  "burst_sigma": "0.0",
+  "burst_hours": "12.3",
+  "test_days": "28",
+  "calibration_days": "28",
+  "broadcast_interval_s": "10.0",
+  "shared_stats": "True",
+  "policies": "recserve,user_alone,onu_alone,olt_alone",
+  "acc_targets": "0.6,0.65,0.7,0.75,0.8,0.85",
+  "no_hourly": "True",
+  "seed": "7",
+  "out": "results/study/alone_seed7.csv"
+ },
+ "answers": [
+  "gsm8k_zeroshot_user-onu-olt_n1319_20260911T023919Z.raw.jsonl",
+  "gsm8k_zeroshot_onu_n1319_20260911T031326Z.raw.jsonl"
+ ],
+ "models": {
+  "user": "bartowski/Llama-3.2-1B-Instruct-GGUF/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+  "olt": "Qwen/Qwen2.5-7B-Instruct",
+  "onu": "Qwen/Qwen2.5-1.5B-Instruct-GGUF/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+ },
+ "olt_factor": 2.203793103448276,
+ "accuracy": {
+  "user": 0.4723275208491281,
+  "onu": 0.6876421531463229,
+  "olt": 0.9166034874905231
+ },
+ "fixed_J_per_query": {
+  "user": 15.694796057619406,
+  "onu": 90.51481530554406
+ },
+ "mean_tokens": {
+  "user": [
+   125.69598180439728,
+   184.91432903714934
+  ],
+  "onu": [
+   122.03108415466262,
+   276.0022744503412
+  ],
+  "olt": [
+   122.03108415466262,
+   251.39878695981804
+  ]
+ },
+ "configs": [
+  {
+   "subscribers": 10000,
+   "users_per_home": 1.0,
+   "messages_per_user_day": 3.6,
+   "messages_per_day": 36000.0,
+   "bursts_per_day": 15000.0,
+   "queries_simulated": 1010308,
+   "weekend_days_mod7": [
+    2,
+    3
+   ]
+  }
+ ],
+ "rows": [
+  {
+   "subscribers": 10000,
+   "beta": 0.5,
+   "policy": "recserve",
+   "accuracy": 0.6872626961283094,
+   "mean_confidence": 0.9070632679377671,
+   "comm_MB_per_1k_queries": 1.6646824512920813,
+   "pon_MB_per_1k_queries": 0.26636741567917904,
+   "latency_s_mean": 27.154270217914068,
+   "latency_s_p95": 71.70035063012521,
+   "J_per_query": 168.44403879445406,
+   "forwarded_on_arrival": 0.0,
+   "skipped_on_escalation": 0.0,
+   "olt_rate_error": NaN,
+   "mean_olt_batch": 1.8633852073524857,
+   "olt_queued": 0.0,
+   "final_user": 0.500071265396295,
+   "final_onu": 0.25015737775015146,
+   "final_olt": 0.24977135685355356,
+   "J_recserve_same_accuracy": 168.44403879445406,
+   "saving_same_accuracy": 0.0
+  },
+  {
+   "subscribers": 10000,
+   "beta": 0.5,
+   "policy": "user_alone",
+   "accuracy": 0.472912220827708,
+   "mean_confidence": 0.8667135259461435,
+   "comm_MB_per_1k_queries": 0.0,
+   "pon_MB_per_1k_queries": 0.0,
+   "latency_s_mean": 2.9967695447944154,
+   "latency_s_p95": 4.95409521534603,
+   "J_per_query": 15.687262019116739,
+   "forwarded_on_arrival": 0.0,
+   "skipped_on_escalation": 0.0,
+   "olt_rate_error": NaN,
+   "mean_olt_batch": 0.0,
+   "olt_queued": 0.0,
+   "final_user": 1.0,
+   "final_onu": 0.0,
+   "final_olt": 0.0,
+   "J_recserve_same_accuracy": NaN,
+   "saving_same_accuracy": NaN
+  },
+  {
+   "subscribers": 10000,
+   "beta": 0.5,
+   "policy": "onu_alone",
+   "accuracy": 0.6881376768272646,
+   "mean_confidence": 0.9002885143100591,
+   "comm_MB_per_1k_queries": 2.269354842285719,
+   "pon_MB_per_1k_queries": 0.0,
+   "latency_s_mean": 43.51109910462511,
+   "latency_s_p95": 69.71608832807571,
+   "J_per_query": 90.46827725822706,
+   "forwarded_on_arrival": 0.0,
+   "skipped_on_escalation": 0.0,
+   "olt_rate_error": NaN,
+   "mean_olt_batch": 0.0,
+   "olt_queued": 0.0,
+   "final_user": 0.0,
+   "final_onu": 1.0,
+   "final_olt": 0.0,
+   "J_recserve_same_accuracy": NaN,
+   "saving_same_accuracy": NaN
+  },
+  {
+   "subscribers": 10000,
+   "beta": 0.5,
+   "policy": "olt_alone",
+   "accuracy": 0.9166867925424722,
+   "mean_confidence": 0.9364586429252555,
+   "comm_MB_per_1k_queries": 4.154796790681654,
+   "pon_MB_per_1k_queries": 1.0386991976704134,
+   "latency_s_mean": 8.925463140772122,
+   "latency_s_p95": 14.173675870569422,
+   "J_per_query": 169.83251365854184,
+   "forwarded_on_arrival": 0.0,
+   "skipped_on_escalation": 0.0,
+   "olt_rate_error": NaN,
+   "mean_olt_batch": 4.860147757156382,
+   "olt_queued": 0.0,
+   "final_user": 0.0,
+   "final_onu": 0.0,
+   "final_olt": 1.0,
+   "J_recserve_same_accuracy": NaN,
+   "saving_same_accuracy": NaN
+  }
+ ],
+ "frontiers": [
+  {
+   "subscribers": 10000,
+   "policy": "recserve",
+   "J_at_accuracy": {
+    "0.60": 168.44403879445406,
+    "0.65": 168.44403879445406,
+    "0.70": null,
+    "0.75": null,
+    "0.80": null,
+    "0.85": null
+   }
+  },
+  {
+   "subscribers": 10000,
+   "policy": "user_alone",
+   "J_at_accuracy": {
+    "0.60": null,
+    "0.65": null,
+    "0.70": null,
+    "0.75": null,
+    "0.80": null,
+    "0.85": null
+   }
+  },
+  {
+   "subscribers": 10000,
+   "policy": "onu_alone",
+   "J_at_accuracy": {
+    "0.60": 90.46827725822706,
+    "0.65": 90.46827725822706,
+    "0.70": null,
+    "0.75": null,
+    "0.80": null,
+    "0.85": null
+   }
+  },
+  {
+   "subscribers": 10000,
+   "policy": "olt_alone",
+   "J_at_accuracy": {
+    "0.60": 169.83251365854184,
+    "0.65": 169.83251365854184,
+    "0.70": 169.83251365854184,
+    "0.75": 169.83251365854184,
+    "0.80": 169.83251365854184,
+    "0.85": 169.83251365854184
+   }
+  }
+ ],
+ "hourly": []
+}
