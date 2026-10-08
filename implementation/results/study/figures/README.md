@@ -11,7 +11,7 @@ point has seeds; a cell that does not apply is empty.
 
 `traffic_week.pdf` · `traffic_week.png` · `data/traffic_week.csv`
 
-Messages sent per hour over one test week by 10,000 households, in each traffic scenario. Without drift every day follows BurstGPT's average day; the drift makes whole hours busier or quieter than it, by as much as BurstGPT's own load does.
+Messages sent per hour over one test week by 10,000 households, in each traffic scenario. With no drift every day follows BurstGPT's average day. Mild drift adds BurstGPT's variation within each week, surges of about 25% lasting about 3 hours; strong drift adds all of its variation around the average day, swings of about 45 to 60% lasting about 12 hours, whole weeks included.
 
 ## beta_knob
 
@@ -47,13 +47,13 @@ Energy saved over RecServe at 0.80 accuracy, with no drift, by number of househo
 
 `broadcast_over_timetable.pdf` · `broadcast_over_timetable.png` · `data/broadcast_over_timetable.csv`
 
-Energy the broadcast saves over the timetable at 0.80 accuracy, by number of households and traffic drift. Bars: range over three seeds.
+Energy the broadcast saves over the timetable at 0.80 accuracy, by number of households, with no, mild and strong drift. Bars: range over three seeds.
 
 ## drift
 
 `drift.pdf` · `drift.png` · `data/drift.csv`
 
-Energy per query at 0.80 accuracy in each traffic scenario, 10,000 households. Bars: range over three seeds.
+Energy per query at 0.80 accuracy with no, mild and strong drift, 10,000 households. Bars: range over three seeds.
 
 ## bandwidth
 

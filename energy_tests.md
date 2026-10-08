@@ -313,8 +313,9 @@ the query reached it.
 Settings in `implementation/config/study.yaml`, runs from `src/simulate/run_study.sh`,
 tables from `src/analyze/summarize_study.py`. 1,000 to 20,000 households, three seeds, a
 month of calibration (when the static tables are observed over plain RecServe) before a
-month of test. The main runs follow the average day; two more add BurstGPT's drift
-(§8.1), within each week only and with whole weeks departing too. Sensitivity runs change
+month of test. The main runs follow the average day (no drift); two more add BurstGPT's drift
+(§8.1): mild drift, its variation within each week only, and strong drift, with whole weeks
+departing too. Sensitivity runs change
 one setting each: average accounting, a 2× or 5× cheaper ONU, the OLT's energy × 1.07 or
 × 1.75, two active users per household, and question statistics learned per household.
 Figures from `src/analyze/plot_study.py` (`implementation/results/study/figures/`, listed with draft captions in its README.md): the traffic, the β knob, reading at equal accuracy beside each tier alone (`results/study/alone_seed*.json`), where queries are answered, the batching validation, the savings, energy as the drift grows, and RecServe's communication burden against ours. Each is drawn at the thesis's text width as a vector PDF and a 300 dpi PNG, with its numbers in `figures/data/<name>.csv`.
@@ -346,9 +347,9 @@ The broadcast's saving over the relearned timetable, at 0.80 accuracy:
 
 | Load | 5,000 | 10,000 | 20,000 |
 |---|---|---|---|
-| Average days (`main`) | +3.7% | +4.3% | +6.3% |
-| Drift within a week (`burst_week`) | +4.4% | +6.8% | +7.2% |
-| All of BurstGPT's drift (`burst_all`) | +9.7% | +12.7% | +11.1% |
+| No drift (`main`) | +3.7% | +4.3% | +6.3% |
+| Mild drift (`burst_week`) | +4.4% | +6.8% | +7.2% |
+| Strong drift (`burst_all`) | +9.7% | +12.7% | +11.1% |
 
 - **Routing by energy is the main saving.** Every energy-aware policy uses 25–57% less
   energy than RecServe at the same accuracy from 5,000 households up. Below that the OLT
@@ -357,7 +358,7 @@ The broadcast's saving over the relearned timetable, at 0.80 accuracy:
   9–10 points of that saving at 5,000 and 10,000 households. Relearned from its own
   traffic it recovers most of them.
 - **The broadcast adds a little on top of the best timetable, more the less predictable
-  the load.** About 4–6% on average days and 10–13% with BurstGPT's drift, positive in all
+  the load.** About 4–6% with no drift and 10–13% with strong drift, positive in all
   27 seed and household combinations (+3.0% to +17.3%). The oracle, the same report with no
   broadcast delay, is within 0.4% of the broadcast.
 - **The household's own answers are not enough.** Piggyback trails the relearned timetable

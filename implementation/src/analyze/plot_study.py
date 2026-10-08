@@ -101,8 +101,8 @@ SERIES = {
 }
 SCENARIOS = {
     "main": ("No drift", "#2a78d6", "o"),
-    "burst_week": ("Drift within a week", "#eb6834", "s"),
-    "burst_all": ("All of BurstGPT's drift", "#1baf7a", "^"),
+    "burst_week": ("Mild drift", "#eb6834", "s"),
+    "burst_all": ("Strong drift", "#1baf7a", "^"),
 }
 TIERS = {"user": ("Phone", "#e87ba4"), "onu": ("ONU", "#008300"), "olt": ("OLT", "#4a3aa7")}
 ALONE = {"user_alone": "Phone alone", "onu_alone": "ONU alone", "olt_alone": "OLT alone"}
@@ -131,8 +131,10 @@ y is a mean over the seeds and y_low, y_high their range, when the point has see
 CAPTIONS = {
     "traffic_week": (
         "Messages sent per hour over one test week by 10,000 households, in each traffic "
-        "scenario. Without drift every day follows BurstGPT's average day; the drift "
-        "makes whole hours busier or quieter than it, by as much as BurstGPT's own load does."
+        "scenario. With no drift every day follows BurstGPT's average day. Mild drift adds "
+        "BurstGPT's variation within each week, surges of about 25% lasting about 3 hours; "
+        "strong drift adds all of its variation around the average day, swings of about "
+        "45 to 60% lasting about 12 hours, whole weeks included."
     ),
     "beta_knob": (
         "Accuracy (a) and energy per query (b) against RecServe's escalation quantile "
@@ -159,10 +161,11 @@ CAPTIONS = {
     ),
     "broadcast_over_timetable": (
         "Energy the broadcast saves over the timetable at 0.80 accuracy, by number of "
-        "households and traffic drift. Bars: range over three seeds."
+        "households, with no, mild and strong drift. Bars: range over three seeds."
     ),
     "drift": (
-        "Energy per query at 0.80 accuracy in each traffic scenario, 10,000 households. "
+        "Energy per query at 0.80 accuracy with no, mild and strong drift, 10,000 "
+        "households. "
         "Bars: range over three seeds."
     ),
     "bandwidth": (
