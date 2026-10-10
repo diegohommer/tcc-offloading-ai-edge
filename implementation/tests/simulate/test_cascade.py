@@ -109,6 +109,17 @@ def test_run_recserve_no_onu_sends_every_escalation_to_the_olt(setup):
     assert metrics["final_onu"] == 0
 
 
+@pytest.mark.parametrize(
+    "policy, tier", [("user_alone", "user"), ("onu_alone", "onu"), ("olt_alone", "olt")]
+)
+def test_run_alone_answers_every_query_at_its_tier(setup, policy, tier):
+    """A single-tier policy answers everything at its tier, with that tier's accuracy."""
+    metrics, _, _ = run(setup, 0.5, policy)
+    assert metrics[f"final_{tier}"] == 1.0
+    correct = [setup.answers[question][tier]["correct"] for question, _, _ in setup.stream]
+    assert metrics["accuracy"] == pytest.approx(sum(correct) / len(correct))
+
+
 def test_run_fixed_chains_measure_no_rate_error(setup):
     """Policies that never route on energy have no belief to compare with what was paid."""
     metrics, _, _ = run(setup, 0.7, "recserve")

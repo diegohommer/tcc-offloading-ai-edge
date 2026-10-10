@@ -16,7 +16,7 @@ class Energy:
 
     Average accounting charges a query its share of the batch's energy; marginal charges
     only what it adds, since the OLT is on and serving other PONs anyway. The phone's and
-    the ONU's figures are the same under both.
+    the ONU's rates arrive already set for the accounting (published_rates).
     """
 
     # ==========================================

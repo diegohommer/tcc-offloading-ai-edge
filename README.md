@@ -81,11 +81,18 @@ Every file under `results/` is written by a script, never by hand.
 cd implementation
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-.venv/bin/python -m pytest                                    # tests, ~2 s
+.venv/bin/python -m pytest                                    # tests, ~20 s
 .venv/bin/python src/simulate/simulate.py --config config/study.yaml \
     --subscribers 10000 --policies recserve,static_hour,broadcast   # one run
 bash src/simulate/run_study.sh 6                              # the case study
 .venv/bin/modal run src/simulate/run_study_modal.py          # ... or on Modal, every run at once
+.venv/bin/modal run src/simulate/run_study_modal.py --self-calibration \
+    --only main,burst_week,burst_all                          # the timetable relearned under itself
+for seed in 7 8 9; do                                         # each tier answering alone
+  .venv/bin/python src/simulate/simulate.py --config config/study.yaml --seed $seed \
+      --subscribers 10000 --betas 0.5 --policies recserve,user_alone,onu_alone,olt_alone \
+      --out results/study/alone_seed$seed.csv
+done
 .venv/bin/python src/analyze/summarize_study.py               # its tables
 .venv/bin/python src/analyze/plot_study.py                    # its figures
 .venv/bin/python src/analyze/tier_energy.py                   # tier tables

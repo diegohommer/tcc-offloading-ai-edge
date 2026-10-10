@@ -353,6 +353,9 @@ slope while the OLT is busy, the net-of-idle rate while it is idle, weighted by 
 of the last 5 minutes it spent busy. The slope is the least-squares slope of the batch's
 energy against its size over batches 1–64, about 9 J for a query on a busy OLT: a smooth
 estimate, where differences between adjacent measured batches are too noisy to route on.
+The slope is fitted on the gross curve, so it keeps the idle draw over the extra step time;
+on the net curve it is about 5 J. Routing on the net slope makes the broadcast 0.7–1.1%
+cheaper at 10,000 households (one seed), so the gross slope errs slightly against it.
 Routing on the average instead would make a busy OLT look tens of times dearer than joining
 it really is.
 
