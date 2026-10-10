@@ -310,7 +310,12 @@ drift.
 ### 8.2 The cascade
 
 Every tier's recorded answer is replayed. A tier escalates when its answer's confidence is
-below the beta-quantile of its last 1,000 confidences, RecServe's rule [1]. Lower tiers
+below the beta-quantile of its last 1,000 confidences, RecServe's rule [1]. The window of
+each tier is shared by all households, standing for a threshold calibrated on the
+population: a household sends about 100 messages a month, too few to fill its own. With one
+window per household, starting empty, the broadcast's saving over RecServe at 0.80 moves
+from 42.5% to 42.3% (10,000 households, one seed); the noisier thresholds lower both curves'
+top accuracy (RecServe 0.872 to 0.847), so RecServe no longer reaches 0.85. Lower tiers
 answer at once and are charged their published energy; the OLT answers in its own time
 (§8.3).
 
