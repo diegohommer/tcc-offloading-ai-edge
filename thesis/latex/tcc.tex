@@ -348,18 +348,30 @@ be compared directly.
 
 Servers usually answer several queries at once, and batching them together amortizes
 fixed costs such as memory transfers, although its effect on energy depends on the
-inference phase and on the setup~\cite{delavande2026understanding}. Because a query's
-energy then depends on the other queries in its batch, there is more than one way to
-charge it. Average accounting charges each query its share of the batch's energy, while
-marginal accounting charges only what the query adds to it
-(Chapter~\ref{chap:methodology}).
+inference phase and on the setup~\cite{delavande2026understanding}. Since an LLM
+generates its answer one token per step, the queries in a batch finish at different
+times. Earlier serving systems kept the batch fixed until every query in it was done, so
+a finished query could not return to the user and a new one had to wait. Orca instead
+schedules one step at a time, so queries join and leave the batch between
+steps~\cite{yu2022orca}. vLLM batches the same way and also stores the KV cache in
+fixed-size blocks, so more queries fit in a batch. Its throughput is 2--4 times that of
+Orca and FasterTransformer at the same latency~\cite{kwon2023vllm}. We refer to this way
+of serving as continuous batching.
+
+Because a query's energy then depends on the other queries in its batch, there is more
+than one way to charge it. The GPU reports only the energy of the whole batch, and the
+rules used in practice to split it among queries can differ substantially from a fair
+split, with static and continuous batching alike~\cite{luo2026request}. Average
+accounting charges each query its share of the batch's energy, while marginal accounting
+charges only what the query adds to it (Chapter~\ref{chap:methodology}).
 
 The boundary also depends on the tool, since each class of hardware is measured
 differently. GPUs report their own energy in software, read through the NVIDIA
 Management Library (NVML) on the NVIDIA GPUs this work uses, while libraries such as
 Zeus, used by \citeonline{chung2025mlenergy}, read it on both NVIDIA and AMD GPUs.
-Phones expose
-on-chip telemetry that reports the energy of the whole chip~\cite{cai2026npu}.
+These readings have limits of their own. On the A100 and H100, the power that nvidia-smi
+reports samples only a quarter of the runtime, which can lead to a large under- or
+overestimate of the energy spent~\cite{yang2023part}. Phones expose on-chip telemetry that reports the energy of the whole chip~\cite{cai2026npu}.
 Single-board edge devices are measured with a power meter at the plug, which includes the
 whole system~\cite{renney2026cloud}, or with current sensors on the board's power
 rails~\cite{tummalapalli2026edge}. Since each tool covers a different part of the
@@ -443,15 +455,21 @@ baseline router. Energy is modeled as each platform's profiled power times its l
 so the cost of the edge changes with the wireless channel, but not with how busy the
 edge is.
 
-Energy-aware routing has also been applied within a single server. GreenServ learns
+Energy-aware routing has also been applied within a single system. GreenServ learns
 online which of 16 LLMs gives the best trade-off between accuracy and measured GPU
 energy for each kind of query, and uses 31\% less energy than routing at
 random~\cite{ziller2026greenserv}. EcoThink sends simple queries to a small model that
 answers directly and complex ones to a larger model that reasons step by step, using
-40.4\% less energy than reasoning on every query~\cite{li2026ecothink}. Both
-choose among models on a single node rather than across network tiers, and GreenServ
-serves one query at a time, so the energy of a query does not depend on the others being
-served.
+40.4\% less energy than reasoning on every query~\cite{li2026ecothink}.
+\citeonline{wilkins2024offline} model the energy and runtime of each LLM from the lengths
+of its prompts and answers, and assign a workload's queries offline among Llama-2 models
+of 7, 13 and 70 billion parameters, with a parameter that trades energy for accuracy.
+All three choose among models on a single system rather than across network tiers.
+GreenServ serves one query at a time, and the energy models of
+\citeauthoronline{wilkins2024offline} are measured at a fixed batch size, so in neither
+does the energy of a query depend on the others being served. The latter also score each
+model by a single accuracy figure, so the answer to a particular query plays no part in
+their decision.
 
 In the tiered works, the decision is made at every tier from the confidence of an
 answer, but energy is left out of it. The energy-aware works use energy, but decide once
@@ -460,8 +478,44 @@ per query, over two tiers at most, before any model has answered.
 \section{Challenges Addressed in This Work}
 \label{sec:challenges}
 
-\todo{the gaps, one per contribution in Chapter~\ref{chap:introduction};
-how this work addresses them; contrast with the closest works.}
+The works reviewed above leave four gaps, and each contribution listed in
+Chapter~\ref{chap:introduction} addresses one of them.
+
+The first is that energy has no part in recursive tiered inference. In RecServe and in
+the architecture of \citeonline{pakpahan2026continuum}, every tier decides from the
+confidence of its answer alone. PerLLM and CR$^2$ do bring energy into the decision, but
+over two tiers and with a single decision per query, made before any model has
+answered~\cite{yang2024perllm,xue2026cr2}. In this work, each tier keeps RecServe's
+confidence test and also weighs the energy it expects to be spent until the query is
+answered. It does so both when a query arrives and when an answer escalates, so a query
+can skip a tier whose answer is likely to cost more than it saves.
+
+The second is that the energy of the tiers is not measured under a common boundary. The
+figures available for a phone, an edge board and a GPU server each count a different part
+of the system, and estimates for similar tasks can be an order of magnitude
+apart~\cite{elsworth2025measuring}. The energy of a server also depends on the queries it
+batches together. CR$^2$ models energy as power times latency, which leaves this out,
+and neither GreenServ nor the models of \citeonline{wilkins2024offline} let it vary with
+the load (Section~\ref{sec:energy-routing}). We build an
+energy model of the user device, the ONU and the OLT under a single boundary. The OLT's
+energy is measured by us on a GPU as a function of batch size, and checked against the
+same GPU serving with continuous batching.
+
+The third is that the cost of the OLT changes with its load, and the tiers below cannot
+observe it. One more query joining a busy batch costs far less than a query that finds
+the OLT idle, so the same decision can save or waste energy depending on the moment. A
+timetable learned in advance follows the daily pattern of the load, but not the moments
+that depart from it. We use the PON downstream broadcast (Section~\ref{sec:pon}) to let
+the OLT announce its current cost to every ONU at once, with no extra upstream traffic.
+
+The fourth is how such policies are compared. RecServe is evaluated on the trade-off
+between accuracy and communication~\cite{wu2025recserve}, and the network-side work of
+\citeonline{pakpahan2026continuum} on latency, so neither reports the energy a tiered
+system spends to reach a given accuracy. A policy that sends more queries to larger
+models is also more accurate, so comparing policies at the same $\beta$ would mix the two
+effects. We compare every policy at the same target accuracy, under recorded
+conversation traffic with and without departures from its daily pattern, against
+RecServe, a timetable and each tier answering every query alone.
 
 %==============================================================================
 \chapter{Methodology}
