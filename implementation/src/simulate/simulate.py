@@ -207,6 +207,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add("--calibration-days", type=int, help="days before them the timetable is observed over")
     add("--broadcast-interval-s", type=float, help="seconds between the OLT's broadcasts")
     add(
+        "--timing",
+        choices=("after-answer", "fixed"),
+        help="a follow-up is sent a pause after the previous answer arrives, or at a fixed time",
+    )
+    add(
         "--stats",
         choices=("published", "pooled", "household"),
         help="where households get answer lengths: each tier's own, a shared pool, or their own answers",
@@ -355,9 +360,13 @@ def prepare_population(subscribers, settings, answers, curve, prices):
 
     def calibration_setup(population):
         """Return the setup of this population's calibration days."""
+        stream, follow = population.stream(
+            questions, settings.calibration_days, 0, settings.seed, links=True
+        )
         return RunSetup(
             answers=answers,
-            stream=population.stream(questions, settings.calibration_days, 0, settings.seed),
+            stream=stream,
+            follow=follow,
             curve=curve,
             prices=prices,
             static_rates={},
@@ -388,11 +397,13 @@ def prepare_population(subscribers, settings, answers, curve, prices):
             )
             static_rates[name] = observed_tables(other).get("static_day")
 
+    stream, follow = homes.stream(
+        questions, settings.test_days, settings.calibration_days, settings.seed + 1, links=True
+    )
     setup = RunSetup(
         answers=answers,
-        stream=homes.stream(
-            questions, settings.test_days, settings.calibration_days, settings.seed + 1
-        ),
+        stream=stream,
+        follow=follow,
         curve=curve,
         prices=prices,
         static_rates=static_rates,
@@ -542,6 +553,7 @@ def output_path(s) -> Path:
         + (f"_{s.stats}" if s.stats != "published" else "")
         + ("_plearned" if s.escalation == "learned" else "")
         + ("_hwindows" if s.windows == "household" else "")
+        + ("_fixedtiming" if s.timing == "fixed" else "")
         + (f"_u{s.users_per_home:g}x{s.per_user_day:g}" if s.users_per_home != 1 else "")
         + (f"_burst{s.burst_sigma:g}x{s.burst_hours:g}h" if s.burst_sigma else "")
         + ("_marginal" if s.accounting == "marginal" else "")

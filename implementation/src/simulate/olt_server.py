@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import collections
 import heapq
+import math
 
 MAX_BATCH = 64
 """Largest batch the OLT's curve was measured at, and so its number of slots."""
@@ -146,6 +147,16 @@ class OltServer:
         self.clock = max(self.clock, until)
         self._forget_old()
         return finished
+
+    def next_finish(self) -> float:
+        """Return the wall clock at which the next answer finishes if nothing else arrives.
+
+        advance() to exactly this time finishes that answer, since both compute it the
+        same way.
+        """
+        if not self._finishing:
+            return math.inf
+        return self.clock + (self._finishing[0][0] - self._progress) / self._speed(self.batch)
 
     def drain(self) -> list[tuple[int, float, float, float]]:
         """Finish everything still generating or waiting, and return what completed."""

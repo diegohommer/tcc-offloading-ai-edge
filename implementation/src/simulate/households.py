@@ -116,7 +116,7 @@ class Households:
             drift[hour] = persistence * drift[hour - 1] + shocks[hour]
         return np.exp(drift - self.burst_sigma**2 / 2)
 
-    def stream(self, questions, days: int, first_day: int, seed: int) -> list:
+    def stream(self, questions, days: int, first_day: int, seed: int, links: bool = False):
         """Build the time-ordered queries the households send.
 
         Conversations open through the day following the measured hour-of-day shape, times
@@ -129,9 +129,13 @@ class Households:
             days: Days to simulate.
             first_day: Day the simulation starts on, in days since the trace's start.
             seed: Random seed.
+            links: Also return how each conversation goes on, so a simulation can send a
+                follow-up only once the answer before it has arrived.
 
         Returns:
-            [(question, time in hours, household)], sorted by time.
+            [(question, time in hours, household)], sorted by time; with links, also
+            follow[i] = (index of the conversation's next message, pause in seconds before
+            it) or None for a conversation's last message.
         """
         rng = np.random.default_rng([seed, 1709])
         question_pool = np.asarray(questions)
@@ -148,7 +152,7 @@ class Households:
         opened = rng.poisson(expected)
         total = int(opened.sum())
         if total == 0:
-            return []
+            return ([], []) if links else []
 
         # --- When each one opens, and how many messages it holds ---
         hour_of = np.repeat(np.arange(hours), opened)
@@ -170,11 +174,26 @@ class Households:
         asked = question_pool[rng.integers(0, len(question_pool), messages)]
 
         order = np.argsort(times, kind="stable")
-        return [
-            (int(asked[index]), float(times[index]), int(home[index]))
-            for index in order
-            if times[index] < (first_day + days) * 24
-        ]
+        kept = [index for index in order if times[index] < (first_day + days) * 24]
+        stream = [(int(asked[index]), float(times[index]), int(home[index])) for index in kept]
+        if not links:
+            return stream
+
+        # --- Each message's successor in its conversation, and the pause before it ---
+        # BurstGPT's pause runs from one request to the next, so it includes the time the
+        # cloud took to answer: taken whole, it is a slight overestimate of the time a user
+        # spends between reading an answer and sending the next message.
+        position = {index: place for place, index in enumerate(kept)}
+        follow = []
+        for index in kept:
+            successor = index + 1
+            same = successor < messages and which[successor] == which[index]
+            follow.append(
+                (position[successor], float(gaps[successor] * 3600))
+                if same and successor in position
+                else None
+            )
+        return stream, follow
 
     def weekday(self, day: int) -> bool:
         """Return whether a day of the run is a weekday.

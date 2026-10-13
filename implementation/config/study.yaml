@@ -11,6 +11,9 @@ traffic:
   # about 2,000 it almost never holds two queries at once and every answer pays the
   # lonely rate. run_study.sh sweeps the rest of the range. [swept]
   subscribers: [1000, 2000, 5000, 10000, 20000]
+  # Follow-ups at a fixed time after the previous message: the setting results/study/
+  # was run with.
+  timing: fixed
 
 energy:
   # Only what a query adds: the energy a routing decision actually changes.

@@ -77,6 +77,8 @@ class RunSetup:
         settings: The run's settings (simulate.py's parsed arguments).
         schedule_key: Maps a time to static_hour's table key (day type, hour).
         calibration: The setup of the calibration days, for tables relearned per beta.
+        follow: follow[i] = (index of the next message of stream[i]'s conversation, pause
+            in seconds before it) or None, for --timing after-answer.
     """
 
     answers: dict
@@ -87,6 +89,7 @@ class RunSetup:
     settings: object
     schedule_key: Callable | None = None
     calibration: object = None
+    follow: list | None = None
 
 
 # ==========================================
@@ -202,18 +205,33 @@ def run(setup: RunSetup, beta: float, policy: str):
     next_id = 0
     next_broadcast = -math.inf
 
-    def settle(question, hour, household, tier, spent, took, packet):
-        """Record a finished query and let its answer travel back down.
+    # Messages waiting to be sent, as a heap of (time in hours, stream index). With fixed
+    # timing every message is in it from the start; after-answer timing starts with each
+    # conversation's first message and adds the next one when an answer arrives.
+    after_answer = settings.timing == "after-answer"
+    if after_answer:
+        followers = {link[0] for link in setup.follow if link is not None}
+        pending = [
+            (hour, index)
+            for index, (_, hour, _) in enumerate(setup.stream)
+            if index not in followers
+        ]
+    else:
+        pending = [(hour, index) for index, (_, hour, _) in enumerate(setup.stream)]
+    heapq.heapify(pending)
+
+    def settle(index, hour, tier, spent, took, packet):
+        """Record a finished query, let its answer travel back down, and queue the next message.
 
         Args:
-            question: The question asked.
-            hour: Its arrival time, in hours.
-            household: Who asked it.
+            index: The query's place in the stream.
+            hour: When it was sent, in hours.
             tier: The tier whose answer was kept.
             spent: Joules the query cost.
             took: Seconds it took, waiting at the OLT included.
             packet: {tier: (J/prompt token, J/generated token, tokens)} riding back down.
         """
+        question, _, household = setup.stream[index]
         nonlocal energy, correct, confidence_delivered, comm_bytes, pon_bytes
         answer = setup.answers[question][tier]
         correct += answer["correct"]
@@ -246,6 +264,10 @@ def run(setup: RunSetup, beta: float, policy: str):
                     learner.adopt(heard)
                 else:
                     learner.absorb(heard, tier)
+        # The user reads the answer, pauses, and sends the conversation's next message.
+        if after_answer and setup.follow[index] is not None:
+            successor, pause_s = setup.follow[index]
+            heapq.heappush(pending, ((hour * 3600 + took + pause_s) / 3600, successor))
 
     def land(completions):
         """Settle every query the OLT has just finished.
@@ -280,9 +302,8 @@ def run(setup: RunSetup, beta: float, policy: str):
             else:
                 query["packet"][top] = (*reported, answer["tg"])
             settle(
-                query["question"],
+                query["index"],
                 query["hour"],
-                query["household"],
                 top,
                 query["spent"] + prefill_joules + decode_joules,
                 query["took"] + (done_at - query["reached"]),
@@ -290,18 +311,36 @@ def run(setup: RunSetup, beta: float, policy: str):
             )
 
     def hand_over(until):
-        """Admit every query that reaches the OLT by `until`, settling what finishes meanwhile."""
-        while arrivals and arrivals[0][0] <= until:
-            reached, query_id = heapq.heappop(arrivals)
-            land(server.advance(reached))
-            query = in_flight[query_id]
-            answer = setup.answers[query["question"]][top]
-            query["running"] = server.batch
-            query["fresh"] = server.reported_rate()[1]  # what the OLT itself says on arrival
-            server.admit(query_id, answer["tp"], answer["tg"])
-        land(server.advance(until))
+        """Bring the OLT up to `until`, admitting what reaches it and settling what finishes.
 
-    for question, hour, household in setup.stream:
+        An answer it finishes can queue a follow-up message sent before `until`, and the OLT
+        must not run past that message, so it stops at each answer to check.
+
+        Returns:
+            Whether it got to `until`, rather than stopping at an earlier message.
+        """
+        while True:
+            stop = min(until, pending[0][0] * 3600) if pending else until
+            if arrivals and arrivals[0][0] <= stop:
+                reached, query_id = heapq.heappop(arrivals)
+                land(server.advance(reached))
+                query = in_flight[query_id]
+                answer = setup.answers[query["question"]][top]
+                query["running"] = server.batch
+                query["fresh"] = server.reported_rate()[1]  # what the OLT itself says now
+                server.admit(query_id, answer["tp"], answer["tg"])
+            elif after_answer and server.next_finish() <= stop:
+                land(server.advance(server.next_finish()))
+            else:
+                land(server.advance(stop))
+                return stop >= until
+
+    while pending or (after_answer and (arrivals or server.next_finish() < math.inf)):
+        if not pending:  # only answers still on their way, which may queue more messages
+            hand_over(min(arrivals[0][0] if arrivals else math.inf, server.next_finish()))
+            continue
+        hour, index = pending[0]
+        question, _, household = setup.stream[index]
         now = hour * 3600
 
         # --- Bring the OLT up to now, stopping at the last broadcast on the way ---
@@ -309,10 +348,13 @@ def run(setup: RunSetup, beta: float, policy: str):
             interval = settings.broadcast_interval_s
             last_send = math.floor(now / interval) * interval
             if last_send >= next_broadcast:
-                hand_over(last_send)
+                if not hand_over(last_send):
+                    continue  # an answer on the way queued an earlier message
                 server.send_broadcast()
                 next_broadcast = last_send + interval
-        hand_over(now)
+        if not hand_over(now):
+            continue
+        heapq.heappop(pending)
 
         # --- Walk the query up until it is answered, or until it leaves for the OLT ---
         if household not in households:
@@ -346,9 +388,8 @@ def run(setup: RunSetup, beta: float, policy: str):
             # Not under a fixed chain, not at the OLT, not before it has heard enough.
             decide = policy not in FIXED and learned is not None and learned.ready(TIERS[here:])
             if decide:
-                if (
-                    stats != "household"
-                ):  # it knows its own devices' rates; only the OLT's must reach it
+                # A household knows its own devices' rates; only the OLT's must reach it.
+                if stats != "household":
                     rates = {upper: prices.rates(upper, 1) for upper in TIERS[here:TOP]}
                     rates["olt"] = learned.rates.get("olt")
                 else:
@@ -370,9 +411,9 @@ def run(setup: RunSetup, beta: float, policy: str):
             # --- The OLT answers in its own time, so the query leaves the walk here ---
             if here == TOP:
                 in_flight[next_id] = {
+                    "index": index,
                     "question": question,
                     "hour": hour,
-                    "household": household,
                     "spent": spent,
                     "took": took,
                     "packet": packet,
@@ -400,7 +441,7 @@ def run(setup: RunSetup, beta: float, policy: str):
                 own[household][tier].record(answer["tg"], escalate)
                 packet[tier] = (prompt_rate, generated_rate, own[household][tier])
             if not escalate:
-                settle(question, hour, household, tier, spent, took, packet)
+                settle(index, hour, tier, spent, took, packet)
                 break
 
             # --- On escalation: the next tier up, or a cheaper later one? ---

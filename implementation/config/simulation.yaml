@@ -50,6 +50,12 @@ traffic:
   # "drift"). [swept: data]
   burst_sigma: 0.0
   burst_hours: 12.3
+  # When a conversation's follow-up message is sent. after-answer: the measured pause
+  # after the previous answer arrives, as a user reads before writing again. fixed: at
+  # the measured pause after the previous message was sent, whether or not its answer
+  # has arrived (the results in results/study/). BurstGPT's pauses run from request to
+  # request, so they include the cloud's answer time. [data]
+  timing: after-answer
   # Days simulated, and the days before them the timetable is observed over. A month
   # is what an operator would have watched before shipping a table. [choice]
   test_days: 28

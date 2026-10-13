@@ -43,6 +43,7 @@ def _settings(**overrides):
         "escalation": "learned",
         "windows": "shared",
         "seed": 7,
+        "timing": "fixed",
         "report_window": 5.0,
         "report": "window",
         "broadcast_interval_s": 10.0,
@@ -60,9 +61,17 @@ def setup(curve, prices):
         ((rng.choice(list(answers)), rng.uniform(0, 24), rng.randrange(30)) for _ in range(600)),
         key=lambda query: query[1],
     )
+    # each household's messages form one conversation, 30 seconds between them
+    last_of = {}
+    follow = [None] * len(stream)
+    for index, (_, _, household) in enumerate(stream):
+        if household in last_of:
+            follow[last_of[household]] = (index, 30.0)
+        last_of[household] = index
     run_setup = RunSetup(
         answers=answers,
         stream=stream,
+        follow=follow,
         curve=curve,
         prices=prices,
         static_rates={},
@@ -79,8 +88,10 @@ def setup(curve, prices):
 
 
 @pytest.mark.parametrize("policy", POLICIES)
-def test_run_settles_every_query_exactly_once(setup, policy):
+@pytest.mark.parametrize("timing", ["fixed", "after-answer"])
+def test_run_settles_every_query_exactly_once(setup, policy, timing):
     """Every query ends at one tier: the shares sum to 1 and the hours hold the whole stream."""
+    setup.settings = _settings(timing=timing)
     metrics, per_hour, _ = run(setup, 0.5, policy)
     assert sum(metrics[f"final_{tier}"] for tier in TIERS) == pytest.approx(1.0)
     assert sum(hour["queries"] for hour in per_hour) == len(setup.stream)
@@ -175,9 +186,10 @@ def test_believed_olt_rate_broadcast_is_the_last_send(setup):
 @pytest.mark.parametrize("stats", ["published", "pooled", "household"])
 @pytest.mark.parametrize("escalation", ["beta", "learned"])
 @pytest.mark.parametrize("windows", ["shared", "household"])
-def test_run_settles_every_query_in_every_learning_mode(setup, stats, escalation, windows):
-    """Every combination of --stats, --escalation and --windows serves the whole stream."""
-    setup.settings = _settings(stats=stats, escalation=escalation, windows=windows)
+@pytest.mark.parametrize("timing", ["fixed", "after-answer"])
+def test_run_settles_every_query_in_every_mode(setup, stats, escalation, windows, timing):
+    """Every combination of --stats, --escalation, --windows and --timing serves the stream."""
+    setup.settings = _settings(stats=stats, escalation=escalation, windows=windows, timing=timing)
     metrics, per_hour, _ = run(setup, 0.6, "broadcast")
     assert sum(metrics[f"final_{tier}"] for tier in TIERS) == pytest.approx(1.0)
     assert sum(hour["queries"] for hour in per_hour) == len(setup.stream)
@@ -191,3 +203,16 @@ def test_run_published_decides_from_the_first_query(setup):
     setup.settings = _settings(stats="household", escalation="beta", warmup=10**6)
     metrics, _, _ = run(setup, 0.9, "oracle")
     assert metrics["forwarded_on_arrival"] + metrics["skipped_on_escalation"] == 0
+
+
+@pytest.mark.parametrize("timing, batched", [("after-answer", False), ("fixed", True)])
+def test_run_after_answer_waits_for_the_answer_before_the_follow_up(setup, timing, batched):
+    """Two messages sent together share the OLT's batch; after-answer sends the second later."""
+    setup.stream = [(0, 1.0, 0), (1, 1.0, 0)]  # both at 01:00, the second linked to the first
+    setup.follow = [(1, 0.0), None]
+    setup.settings = _settings(timing=timing)
+    metrics, _, _ = run(setup, 0.5, "olt_alone")
+    assert metrics["final_olt"] == 1.0
+    assert (metrics["mean_olt_batch"] > 1.0) == batched
+    if not batched:
+        assert metrics["mean_olt_batch"] == pytest.approx(1.0)

@@ -129,3 +129,17 @@ def test_stream_with_drift_keeps_the_volume_but_not_the_shape_of_each_day(pair_s
         return (counts[weekdays] / counts[weekdays].mean(axis=0)).ravel()
 
     assert departures(drifting_stream).std() > 3 * departures(plain_stream).std()
+
+
+def test_stream_links_chain_each_conversation_by_its_pauses(pair_stats):
+    """Each link points at the same household's next message, a measured pause later."""
+    homes = Households(200, 1.0, 4.0, pair_stats)
+    stream, follow = homes.stream(QUESTIONS, 2, 0, seed=3, links=True)
+    assert stream == homes.stream(QUESTIONS, 2, 0, seed=3)
+    linked = [(index, link) for index, link in enumerate(follow) if link is not None]
+    assert linked
+    for index, (successor, pause_s) in linked:
+        assert stream[successor][2] == stream[index][2]
+        assert pause_s == pytest.approx(60.0)
+        assert (stream[successor][1] - stream[index][1]) * 3600 == pytest.approx(pause_s)
+    assert len({successor for _, (successor, _) in linked}) == len(linked)
