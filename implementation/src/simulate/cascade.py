@@ -23,7 +23,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
 from energy.three_tier import TIERS
 from olt_server import OltServer
-from routing import Learned, on_arrival, on_escalation, TOP, Window
+from routing import Learned, on_arrival, on_escalation, OwnStats, TOP, Window
 
 # ==========================================
 # Policies
@@ -137,16 +137,59 @@ def run(setup: RunSetup, beta: float, policy: str):
     """
     settings, prices = setup.settings, setup.prices
     top = TIERS[TOP]
-    windows = {tier: Window(settings.window) for tier in TIERS}
+    stats = settings.stats
+    escalation = beta if settings.escalation == "beta" else None
     households: dict[int, dict[str, Learned]] = {}
     pool = (
         {
-            tier: Learned(settings.alpha, settings.warmup, settings.rate_alpha)
+            tier: Learned(
+                settings.alpha, settings.warmup, settings.rate_alpha, escalation=escalation
+            )
             for tier in TIERS[:TOP]
         }
-        if settings.shared_stats
+        if stats == "pooled"
         else None
     )
+
+    # What ships with each tier's model, measured on the benchmark before deployment: its
+    # mean answer length, and confidences to start a household's RecServe window from.
+    shipped_tokens = {
+        tier: statistics.mean(answer[tier]["tg"] for answer in setup.answers.values())
+        for tier in TIERS
+    }
+    shipped_confidences = {
+        tier: [answer[tier]["conf"] for answer in setup.answers.values()] for tier in TIERS
+    }
+    olt_own = OwnStats(settings.alpha, shipped_tokens[top])
+    own: dict[int, dict[str, OwnStats]] = {}  # household -> the phone's and ONU's OwnStats
+
+    shared_windows = {tier: Window(settings.window) for tier in TIERS}
+    household_windows: dict[tuple[int, str], Window] = {}
+
+    def window_for(household, tier):
+        """Return the confidence window RecServe's test reads at this tier.
+
+        Args:
+            household: Who asked.
+            tier: The tier that just answered.
+
+        Returns:
+            One window per tier for every household (--windows shared), or the household's
+            own, started from shipped confidences (--windows household).
+        """
+        if settings.windows == "shared":
+            return shared_windows[tier]
+        key = (household, tier)
+        if key not in household_windows:
+            rng = np.random.default_rng([settings.seed, household, TIERS.index(tier)])
+            confidences = shipped_confidences[tier]
+            window = Window(settings.window)
+            window.fill(
+                [confidences[i] for i in rng.integers(0, len(confidences), settings.window)]
+            )
+            household_windows[key] = window
+        return household_windows[key]
+
     server = OltServer(setup.curve, prices, settings.report_window * 60)
 
     energy = correct = forwarded = skipped = confidence_delivered = comm_bytes = pon_bytes = 0.0
@@ -194,14 +237,15 @@ def run(setup: RunSetup, beta: float, policy: str):
         # reports even for queries whose inference it skipped.
         for own_tier, learner in households[household].items():
             if TIERS.index(own_tier) <= TIERS.index(tier):
-                learner.absorb(
-                    {
-                        reported_tier: report
-                        for reported_tier, report in packet.items()
-                        if TIERS.index(reported_tier) >= TIERS.index(own_tier)
-                    },
-                    tier,
-                )
+                heard = {
+                    reported_tier: report
+                    for reported_tier, report in packet.items()
+                    if TIERS.index(reported_tier) >= TIERS.index(own_tier)
+                }
+                if stats == "published":
+                    learner.adopt(heard)
+                else:
+                    learner.absorb(heard, tier)
 
     def land(completions):
         """Settle every query the OLT has just finished.
@@ -230,7 +274,11 @@ def run(setup: RunSetup, beta: float, policy: str):
             # The packet carries this query's cost, or the OLT's report over its window,
             # which is far steadier under marginal accounting.
             reported = server.reported_rate() if settings.report == "window" else cost
-            query["packet"][top] = (*reported, answer["tg"])
+            if stats == "published":
+                olt_own.record(answer["tg"], None)
+                query["packet"][top] = (*reported, olt_own)
+            else:
+                query["packet"][top] = (*reported, answer["tg"])
             settle(
                 query["question"],
                 query["hour"],
@@ -274,9 +322,16 @@ def run(setup: RunSetup, beta: float, policy: str):
                     settings.warmup,
                     settings.rate_alpha,
                     pool[tier] if pool else None,
+                    escalation,
                 )
                 for tier in TIERS[:TOP]
             }
+            if stats == "published":
+                for learner in households[household].values():
+                    learner.ship(shipped_tokens, beta)
+                own[household] = {
+                    tier: OwnStats(settings.alpha, shipped_tokens[tier]) for tier in TIERS[:TOP]
+                }
         learners = households[household]
         prompt_tokens = setup.answers[question]["user"]["tp"]
         packet: dict[str, tuple[float, float, float]] = {}
@@ -291,7 +346,9 @@ def run(setup: RunSetup, beta: float, policy: str):
             # Not under a fixed chain, not at the OLT, not before it has heard enough.
             decide = policy not in FIXED and learned is not None and learned.ready(TIERS[here:])
             if decide:
-                if pool:  # a household knows its own devices' rates; only the OLT's must reach it
+                if (
+                    stats != "household"
+                ):  # it knows its own devices' rates; only the OLT's must reach it
                     rates = {upper: prices.rates(upper, 1) for upper in TIERS[here:TOP]}
                     rates["olt"] = learned.rates.get("olt")
                 else:
@@ -334,11 +391,14 @@ def run(setup: RunSetup, beta: float, policy: str):
             packet[tier] = (prompt_rate, generated_rate, answer["tg"])
 
             # --- RecServe's test: escalate below the beta-quantile of recent confidences ---
-            window = windows[tier]
+            window = window_for(household, tier)
             escalate = (
                 policy not in ALONE and len(window) > 1 and answer["conf"] < window.quantile(beta)
             )
             window.add(answer["conf"])
+            if stats == "published":
+                own[household][tier].record(answer["tg"], escalate)
+                packet[tier] = (prompt_rate, generated_rate, own[household][tier])
             if not escalate:
                 settle(question, hour, household, tier, spent, took, packet)
                 break

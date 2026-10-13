@@ -35,7 +35,7 @@ jobs() {
     echo "olt1.07 $seed --olt-scale 1.0714"
     echo "olt1.75 $seed --olt-scale 1.75"
     echo "users2 $seed --users-per-home 2"
-    echo "perhousehold $seed --no-shared-stats"
+    echo "perhousehold $seed --stats household"
   done
 }
 [ "${1:-}" = "--list" ] && { jobs; exit 0; }

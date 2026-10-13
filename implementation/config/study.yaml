@@ -27,9 +27,11 @@ policy:
 
 learning:
   # Question statistics pooled across households, for every energy-aware policy
-  # alike, so they differ only in where the OLT's cost comes from. [choice; per
-  # household in the ablation]
-  shared_stats: true
+  # alike, so they differ only in where the OLT's cost comes from, and escalation
+  # rates learned from the answers: the settings results/study/ was run with.
+  # [choice; per household in the ablation]
+  stats: pooled
+  escalation: learned
   # Weight on each OLT rate a household hears on its own answers (piggyback). [choice]
   rate_alpha: 0.3
 

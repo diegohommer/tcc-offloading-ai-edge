@@ -5,7 +5,7 @@ import random
 import numpy as np
 import pytest
 
-from routing import cost_to_completion, Learned, on_arrival, on_escalation, Window
+from routing import cost_to_completion, Learned, on_arrival, on_escalation, OwnStats, Window
 
 PROMPT_TOKENS = 100
 
@@ -119,3 +119,50 @@ def test_on_escalation_takes_the_next_tier_when_it_is_cheaper():
     """A cheap ONU that rarely escalates is the next stop."""
     learned = _learned(p_onu=0.1)
     assert on_escalation(0, PROMPT_TOKENS, _rates(onu=0.05, olt=0.3), learned, 0.0) == 1
+
+
+def test_learned_fixed_escalation_stays_at_beta():
+    """With --escalation beta the packets never move the escalation rates."""
+    learned = Learned(alpha=1.0, warmup=1, escalation=0.3)
+    learned.absorb({"user": (0.1, 0.2, 50), "onu": (0.0, 0.5, 80)}, "onu")
+    assert learned.p_further["user"] == learned.p_further["onu"] == 0.3
+    assert learned.tokens == {"user": 50, "onu": 80}
+
+
+def test_learned_ship_makes_a_household_ready_at_once():
+    """Shipped lengths count as heard, so only the energy rates remain to arrive."""
+    learned = Learned(alpha=0.1, warmup=20)
+    learned.ship({"user": 100.0, "onu": 150.0, "olt": 200.0}, 0.5)
+    assert learned.ready(["user", "onu", "olt"])
+    assert learned.tokens["olt"] == 200.0
+
+
+def test_learned_adopt_takes_what_each_tier_published():
+    """A published packet replaces the lengths outright instead of averaging one answer in."""
+    olt = OwnStats(alpha=0.5, shipped_tokens=100.0)
+    olt.record(300, None)
+    learned = Learned(alpha=0.01, warmup=1, escalation=0.4)
+    learned.ship({"olt": 50.0}, 0.4)
+    learned.adopt({"olt": (0.1, 0.2, olt)})
+    assert learned.tokens["olt"] == pytest.approx(200.0)
+    assert learned.rates["olt"] == (0.1, 0.2)
+    assert learned.p_further["olt"] == 0.4
+
+
+def test_own_stats_starts_from_the_shipped_length_and_tracks_escalations():
+    """A tier's own averages start from its model's measured length."""
+    own = OwnStats(alpha=0.5, shipped_tokens=100.0)
+    own.record(200, True)
+    own.record(200, False)
+    assert own.tokens == pytest.approx(175.0)
+    assert own.p_further == pytest.approx(0.5)
+    assert own.answers == 2
+
+
+def test_window_fill_starts_full_and_then_drops_the_oldest():
+    """A window filled in advance reads quantiles at once and forgets its oldest value first."""
+    window = Window(size=3)
+    window.fill([0.9, 0.1, 0.5])
+    assert window.quantile(0.5) == 0.5
+    window.add(0.7)
+    assert window.ordered == [0.1, 0.5, 0.7]

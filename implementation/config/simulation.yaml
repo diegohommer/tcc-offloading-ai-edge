@@ -20,8 +20,8 @@ recserve:
   # A tier escalates when its confidence falls below this quantile of its own
   # recent confidences. RecServe's own knob. [source: RecServe]
   betas: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-  # Confidence history per tier, in answers, one per tier shared by every
-  # household. [source: RecServe recommends 300-1000]
+  # Confidence history per tier, in answers (see learning.windows for whose).
+  # [source: RecServe recommends 300-1000]
   window: 1000
   # Confidence signal. mean = exp(mean token logprob), RecServe's definition.
   # min = exp(min token logprob): separates right from wrong better on this
@@ -104,11 +104,21 @@ learning:
   # EWMA weight for the OLT energy rates in the packets; null = same as alpha.
   # [choice]
   rate_alpha: null
-  # Pool answer lengths and escalation rates across households: they describe the
-  # questions, not the household (the operator can aggregate them), so a household
-  # decides from its first query. Each household still hears the OLT's rate on its
-  # own. false = every household learns everything from its own answers. [choice]
-  shared_stats: false
+  # Where a household gets the tiers' answer lengths. published: each tier ships with
+  # its model's mean length on the benchmark, then publishes the running mean of its own
+  # answers on every answer it returns; the OLT's covers the whole PON, the phone's and
+  # the ONU's their own household. pooled: one pool learned from every household's
+  # answers. household: each household learns from its own answers alone. Each household
+  # still hears the OLT's energy rate on its own. [choice]
+  stats: published
+  # Each tier's escalation rate in the routing rule. beta: RecServe's test escalates the
+  # answers below the beta-quantile of recent confidences, so about beta of them by
+  # construction. learned: an EWMA over the answers, like the lengths. [source: RecServe]
+  escalation: beta
+  # RecServe's confidence windows. shared: one per tier for every household. household:
+  # one per tier in every household, as a real phone and ONU would keep, started from
+  # confidences shipped with the model instead of empty. [choice]
+  windows: shared
 
 report:
   # What the OLT's packet carries. query = what this query cost (its share, or

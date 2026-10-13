@@ -137,6 +137,26 @@ def queued(runs, subscribers):
     )
 
 
+def question_statistics(args):
+    """Return how a run's households knew the answer lengths and escalation rates.
+
+    Args:
+        args: The run's settings; runs before --stats recorded shared_stats instead.
+    """
+    if "stats" not in args:
+        return "shared" if args.get("shared_stats") == "True" else "per household"
+    stats = {
+        "pooled": "shared",
+        "household": "per household",
+        "published": "published by each tier",
+    }
+    return (
+        stats[args["stats"]]
+        + (", escalation beta" if args.get("escalation") == "beta" else "")
+        + (", windows per household" if args.get("windows") == "household" else "")
+    )
+
+
 def describe(run):
     """Return one line saying what a scenario is."""
     args = run["args"]
@@ -146,7 +166,7 @@ def describe(run):
         f"{args['accounting']} accounting; ONU {run['fixed_J_per_query']['onu']:.0f} J; "
         + (f"OLT energy x{olt_scale:g}; " if olt_scale != 1 else "")
         + f"{args['users_per_home']} active user(s) x {args['per_user_day']} messages/day per household; "
-        + f"question statistics {'shared' if args['shared_stats'] == 'True' else 'per household'}"
+        + f"question statistics {question_statistics(args)}"
         + (
             f"; load drifting sigma {burst:g} over {float(args['burst_hours']):g} h"
             if burst

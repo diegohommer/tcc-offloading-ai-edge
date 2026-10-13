@@ -207,9 +207,19 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add("--calibration-days", type=int, help="days before them the timetable is observed over")
     add("--broadcast-interval-s", type=float, help="seconds between the OLT's broadcasts")
     add(
-        "--shared-stats",
-        action=argparse.BooleanOptionalAction,
-        help="pool answer lengths and escalation rates across households",
+        "--stats",
+        choices=("published", "pooled", "household"),
+        help="where households get answer lengths: each tier's own, a shared pool, or their own answers",
+    )
+    add(
+        "--escalation",
+        choices=("beta", "learned"),
+        help="each tier's escalation rate: RecServe's beta, or learned from the answers",
+    )
+    add(
+        "--windows",
+        choices=("shared", "household"),
+        help="RecServe's confidence windows: one per tier, or one per tier in every household",
     )
     add("--policies", help="comma-separated subset; must include recserve")
     add("--acc-targets", help="comma-separated accuracies the frontiers are read at")
@@ -529,7 +539,9 @@ def output_path(s) -> Path:
         s.boundary
         + (f"_onu{s.onu_scale:g}" if s.onu_scale != 1 else "")
         + (f"_olt{s.olt_scale:g}" if s.olt_scale != 1 else "")
-        + ("_shared" if s.shared_stats else "")
+        + (f"_{s.stats}" if s.stats != "published" else "")
+        + ("_plearned" if s.escalation == "learned" else "")
+        + ("_hwindows" if s.windows == "household" else "")
         + (f"_u{s.users_per_home:g}x{s.per_user_day:g}" if s.users_per_home != 1 else "")
         + (f"_burst{s.burst_sigma:g}x{s.burst_hours:g}h" if s.burst_sigma else "")
         + ("_marginal" if s.accounting == "marginal" else "")

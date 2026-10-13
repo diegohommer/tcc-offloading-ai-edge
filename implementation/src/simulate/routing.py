@@ -41,6 +41,15 @@ class Window:
         self.ordered = []
         """The same confidences, sorted, to read quantiles."""
 
+    def fill(self, confidences) -> None:
+        """Start the window from confidences shipped with the model instead of empty.
+
+        Args:
+            confidences: At most `size` confidences, oldest first.
+        """
+        self.recent = collections.deque(confidences)
+        self.ordered = sorted(self.recent)
+
     def __len__(self):
         """Return how many confidences the window holds now."""
         return len(self.recent)
@@ -77,10 +86,15 @@ class Window:
 class Learned:
     """What one household's tier knows about itself and the tiers above it.
 
-    Learned from the packets that ride back down on answers, as exponentially weighted
-    moving averages (EWMA). Answer lengths, escalation rates and packet counts describe the
-    questions, not the household, so with --shared-stats they are one pool shared by every
-    household; energy rates are always the household's own.
+    Three ways to know the answer lengths (--stats):
+      household  learned from the packets that ride back down on this household's own
+                 answers, as exponentially weighted moving averages (EWMA);
+      pooled     the same, but one pool shared by every household (a stand-in for values
+                 set in advance from the whole population);
+      published  shipped with each tier's model and then replaced by the averages each
+                 tier publishes about its own answers (OwnStats), which adopt() takes.
+    The escalation rates are RecServe's beta (--escalation beta) or learned like the
+    answer lengths (--escalation learned). Energy rates are always the household's own.
     """
 
     # ==========================================
@@ -92,6 +106,7 @@ class Learned:
         warmup: int,
         rate_alpha: float | None = None,
         pool: Learned | None = None,
+        escalation: float | None = None,
     ):
         """Start with nothing learned.
 
@@ -100,9 +115,12 @@ class Learned:
             warmup: Packets per tier needed before the household decides.
             rate_alpha: EWMA weight for reported energy rates (default: alpha).
             pool: Shared question statistics to use instead of this household's own.
+            escalation: Every tier's escalation rate, fixed (RecServe's beta); None to
+                learn it from the packets.
         """
         self.alpha, self.warmup = alpha, warmup
         self.rate_alpha = alpha if rate_alpha is None else rate_alpha
+        self.escalation = escalation
 
         self.rates: dict[str, tuple[float, float]] = {}
         """Each tier's reported (J/prompt token, J/generated token), as heard by this household."""
@@ -111,13 +129,28 @@ class Learned:
             self.tokens: dict[str, float] = {}
             """How many tokens each tier generates per answer."""
 
-            self.p_further: dict[str, float] = {}
+            self.p_further: dict[str, float] = (
+                {} if escalation is None else dict.fromkeys(TIERS, escalation)
+            )
             """How often a query that reached each tier went further up."""
 
             self.heard: collections.Counter = collections.Counter()
             """How many packets from each tier have been absorbed."""
         else:
             self.tokens, self.p_further, self.heard = pool.tokens, pool.p_further, pool.heard
+
+    def ship(self, tokens: dict, beta: float) -> None:
+        """Start from values shipped with the models, so no warm-up is needed for them.
+
+        Args:
+            tokens: {tier: tokens generated per answer}, as measured for each tier's model.
+            beta: RecServe's escalation quantile, the escalation rate its test gives by
+                construction, used until a tier publishes its own.
+        """
+        for tier, value in tokens.items():
+            self.tokens[tier] = value
+            self.p_further.setdefault(tier, beta)
+            self.heard[tier] = max(self.heard[tier], self.warmup)
 
     # ==========================================
     # Learning
@@ -131,17 +164,35 @@ class Learned:
                 query on, which updates p_further.
         """
         for tier, (j_prompt, j_generated, generated) in packet.items():
-            went_further = float(TIERS.index(answered_at) > TIERS.index(tier))
             self._ewma(self.tokens, tier, generated)
-            self._ewma(self.p_further, tier, went_further)
-            old = self.rates.get(tier)
-            a = self.rate_alpha
-            self.rates[tier] = (
-                (j_prompt, j_generated)
-                if old is None
-                else ((1 - a) * old[0] + a * j_prompt, (1 - a) * old[1] + a * j_generated)
-            )
+            if self.escalation is None:
+                went_further = float(TIERS.index(answered_at) > TIERS.index(tier))
+                self._ewma(self.p_further, tier, went_further)
+            self._hear_rates(tier, j_prompt, j_generated)
             self.heard[tier] += 1
+
+    def adopt(self, packet: dict) -> None:
+        """Take the averages each tier published about its own answers (--stats published).
+
+        Args:
+            packet: {tier: (J/prompt token, J/generated token, the tier's OwnStats)}.
+        """
+        for tier, (j_prompt, j_generated, own) in packet.items():
+            self.tokens[tier] = own.tokens
+            if self.escalation is None and own.p_further is not None:
+                self.p_further[tier] = own.p_further
+            self._hear_rates(tier, j_prompt, j_generated)
+            self.heard[tier] = max(self.heard[tier], own.answers)
+
+    def _hear_rates(self, tier: str, j_prompt: float, j_generated: float) -> None:
+        """Move a tier's believed energy rates towards the ones just reported."""
+        old = self.rates.get(tier)
+        a = self.rate_alpha
+        self.rates[tier] = (
+            (j_prompt, j_generated)
+            if old is None
+            else ((1 - a) * old[0] + a * j_prompt, (1 - a) * old[1] + a * j_generated)
+        )
 
     def _ewma(self, averages: dict, key: str, x: float) -> None:
         """Set averages[key] to the EWMA of averages[key] and x (x itself the first time)."""
@@ -156,6 +207,49 @@ class Learned:
             tiers: The tier names the decision would use.
         """
         return all(self.heard[t] >= self.warmup for t in tiers)
+
+
+class OwnStats:  # pylint: disable=too-few-public-methods
+    """What one tier knows about its own answers, published on them with --stats published.
+
+    The OLT has one for the whole PON, since it answers every household; the phone and the
+    ONU have one per household. A tier records every answer it produces, so it learns its
+    averages far faster than a household that only hears the answers it asked for.
+    """
+
+    def __init__(self, alpha: float, shipped_tokens: float):
+        """Start from the answer length measured for the tier's model.
+
+        Args:
+            alpha: EWMA weight for the answer lengths and escalation rate.
+            shipped_tokens: Tokens per answer measured for the model before deployment.
+        """
+        self.alpha = alpha
+        self.tokens = shipped_tokens
+        """How many tokens the tier generates per answer."""
+
+        self.p_further: float | None = None
+        """How often its answers escalate; None for the top tier, which never escalates."""
+
+        self.answers = 0
+        """How many answers it has produced."""
+
+    def record(self, generated: float, escalated: bool | None) -> None:
+        """Record one answer.
+
+        Args:
+            generated: Tokens the answer took.
+            escalated: Whether RecServe's test passed the query on (None at the top tier).
+        """
+        self.tokens = _ewma_step(self.tokens, generated, self.alpha)
+        if escalated is not None:
+            self.p_further = _ewma_step(self.p_further, float(escalated), self.alpha)
+        self.answers += 1
+
+
+def _ewma_step(average: float | None, value: float, alpha: float) -> float:
+    """Return the EWMA after one more value (the value itself the first time)."""
+    return value if average is None else (1 - alpha) * average + alpha * value
 
 
 # ==========================================

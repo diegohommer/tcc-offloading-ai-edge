@@ -39,7 +39,10 @@ def _settings(**overrides):
         "alpha": 0.05,
         "warmup": 3,
         "rate_alpha": 0.3,
-        "shared_stats": True,
+        "stats": "pooled",
+        "escalation": "learned",
+        "windows": "shared",
+        "seed": 7,
         "report_window": 5.0,
         "report": "window",
         "broadcast_interval_s": 10.0,
@@ -167,3 +170,24 @@ def test_believed_olt_rate_broadcast_is_the_last_send(setup):
     server = SimpleNamespace(last_broadcast=(0.1, 0.2), reported_rate=lambda: (9.0, 9.0))
     assert believed_olt_rate("broadcast", setup, server, None, 3.0) == (0.1, 0.2)
     assert believed_olt_rate("oracle", setup, server, None, 3.0) == (9.0, 9.0)
+
+
+@pytest.mark.parametrize("stats", ["published", "pooled", "household"])
+@pytest.mark.parametrize("escalation", ["beta", "learned"])
+@pytest.mark.parametrize("windows", ["shared", "household"])
+def test_run_settles_every_query_in_every_learning_mode(setup, stats, escalation, windows):
+    """Every combination of --stats, --escalation and --windows serves the whole stream."""
+    setup.settings = _settings(stats=stats, escalation=escalation, windows=windows)
+    metrics, per_hour, _ = run(setup, 0.6, "broadcast")
+    assert sum(metrics[f"final_{tier}"] for tier in TIERS) == pytest.approx(1.0)
+    assert sum(hour["queries"] for hour in per_hour) == len(setup.stream)
+
+
+def test_run_published_decides_from_the_first_query(setup):
+    """Lengths shipped with the models leave only the OLT's rate to wait for."""
+    setup.settings = _settings(stats="published", escalation="beta", warmup=10**6)
+    metrics, _, _ = run(setup, 0.9, "oracle")
+    assert metrics["forwarded_on_arrival"] + metrics["skipped_on_escalation"] > 0
+    setup.settings = _settings(stats="household", escalation="beta", warmup=10**6)
+    metrics, _, _ = run(setup, 0.9, "oracle")
+    assert metrics["forwarded_on_arrival"] + metrics["skipped_on_escalation"] == 0

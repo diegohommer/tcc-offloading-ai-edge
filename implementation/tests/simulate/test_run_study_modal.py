@@ -38,7 +38,7 @@ def test_study_jobs_are_the_runs_run_study_sh_lists():
     flags = {tag: tag_flags for tag, _, tag_flags in jobs}
     assert flags["main"] == []
     assert flags["burst_all"] == ["--burst-sigma", "0.457", "--burst-hours", "12.3"]
-    assert flags["perhousehold"] == ["--no-shared-stats"]
+    assert flags["perhousehold"] == ["--stats", "household"]
 
 
 def test_study_sizes_are_the_household_counts_of_the_study():
