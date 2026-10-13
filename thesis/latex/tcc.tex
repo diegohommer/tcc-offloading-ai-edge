@@ -608,10 +608,10 @@ climbs one tier at a time, as it does in RecServe.
 
 Since RecServe's test escalates the answers whose confidence falls below the
 $\beta$-quantile of the tier's recent confidences, about a fraction $\beta$ of a tier's
-answers escalate by construction, and $p_j \approx \beta$. The policy still learns $p_j$
-from past answers instead of fixing it to $\beta$, so it applies unchanged to an
-escalation test whose rate is not set in advance. In our simulation the learned values
-stay within 0.003 of $\beta$.
+answers escalate by construction, and the policy sets $p_j = \beta$. An escalation test
+whose rate is not fixed in advance would need $p_j$ to be learned from the answers
+instead, and Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$ for
+that reason.
 
 The policy uses $C_j$ at two points of Algorithm~\ref{alg:decision}. The first is when a
 query arrives at a tier $i < J$ (lines 1 to 4). Running the query there costs $E_i$ and,
@@ -628,7 +628,7 @@ The margin $\delta$ keeps a tier from moving a query for a negligible saving and
 to zero in this work. The top tier has nowhere to send a query and always returns its
 answer.
 
-With $\delta = 0$ and $p_i \approx \beta$, Equation~\eqref{eq:on-arrival} reduces to
+With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} reduces to
 $C_{k^*} < E_i / (1-\beta)$. A tier therefore runs a query only if the cheapest tier
 above it costs at least $E_i/(1-\beta)$. This threshold rises with $\beta$, because the more
 often a tier escalates, the more often the energy it spends running a query is wasted.
@@ -656,26 +656,19 @@ often a tier escalates, the more often the energy it spends running a query is w
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
 
-To compute $C_k$, a tier learns the answer lengths and escalation rates of the tiers
-above it from the answers that pass through it. An answer that is returned travels back
-to the user through every tier below the one that produced it, so it can carry, at no
-extra cost, its length and the energy rates of every tier that ran the query. From these,
-each tier keeps exponentially weighted moving averages of how many tokens each tier
-above it generates per answer and of how often each tier escalates. Once it has heard at
-least 20 answers from every tier above it and has an estimate of the OLT's energy rate,
-the tier can decide. Until then it follows RecServe, running every query that reaches it
-and escalating to the next tier.
-
-A single household sends too few queries to learn these averages quickly on its own.
-The escalation rates stay close to $\beta$ whatever the model, but the answer lengths
-depend on the models a household runs and on the questions its users ask, so in a real
-deployment they would differ from one household to the next. Households with the same
-models could still share them, through an operator that keeps one average per model or
-through values shipped with the model. In the case study every household has the same
-three tiers and asks the same kind of question, so the averages are pooled across all
-the households on the PON, in place of such values set in advance. The evaluation also
-includes a run in which every household learns on its own
-(Section~\ref{sec:evaluation}).
+To compute $C_k$, a tier also needs the average answer length of every tier above it.
+Each tier ships with the mean answer length of its model, measured on the benchmark
+before deployment, and then keeps a running mean of the lengths of its own answers. An
+answer that is returned travels back to the user through every tier below the one that
+produced it, so it can carry, at no extra cost, the energy rates and the running mean of
+every tier that ran the query, and each tier below replaces the values it holds with the
+ones it hears. The OLT's mean covers every household on the PON, while those of the user
+device and the ONU cover only their own household, so households with different models
+would each hold their own values. A tier can decide once it has an estimate of the OLT's
+energy rate, and until then it follows RecServe, running every query that reaches it and
+escalating to the next tier. Each device also keeps its own confidence window for
+RecServe's test, started from the confidences of its model on the benchmark, so the
+threshold is right from the first query.
 
 The energy rates of the user device and the ONU do not change, so the rates a tier hears
 on past answers stay valid. The OLT's rate, however, depends on how many other queries
@@ -713,12 +706,15 @@ simulation tries to reproduce, following the load of the households and its drif
 the others are held still. The user device and the ONU spend a fixed energy per token, while
 a real phone or gateway spends more or less depending on its temperature, its battery
 and whatever else it is running. Every household has the same three models and asks
-questions drawn at random from the same benchmark, so the answer lengths and escalation
-rates the policy learns do not move, while real households differ in both and change
-over time. RecServe's confidence windows do move with the answers, but each tier keeps
-one window shared by every household, where a real device would keep its own. The
-results therefore show what the policy does when the only uncertainty it faces is the
-OLT's load.
+questions drawn at random from the same benchmark, so the answer lengths each tier
+publishes barely move, while real households would differ in their models and in what
+they ask. Every message is an independent problem, so a conversation never grows the
+prompt with earlier turns, and the pauses between the messages of a conversation follow
+those measured on a cloud service, whatever the time the previous answer takes to
+arrive. The policy also uses one mean answer length per model, while the standard
+deviation of a single answer's length is 30 to 40\% of that mean, and the length could
+be predicted from the query itself~\cite{zheng2023response}. The results therefore show what the
+policy does when the main uncertainty it faces is the OLT's load.
 
 \section{Evaluation}
 \label{sec:evaluation}
