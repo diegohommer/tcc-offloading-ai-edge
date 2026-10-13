@@ -709,9 +709,10 @@ and whatever else it is running. Every household has the same three models and a
 questions drawn at random from the same benchmark, so the answer lengths each tier
 publishes barely move, while real households would differ in their models and in what
 they ask. Every message is an independent problem, so a conversation never grows the
-prompt with earlier turns, and the pauses between the messages of a conversation follow
-those measured on a cloud service, whatever the time the previous answer takes to
-arrive. The policy also uses one mean answer length per model, while the standard
+prompt with earlier turns. A follow-up is sent a pause after the previous answer
+arrives, but the pauses were measured on a cloud service from one request to the next,
+so they include that service's own answer time and slightly overstate how long a user
+waits before writing again. The policy also uses one mean answer length per model, while the standard
 deviation of a single answer's length is 30 to 40\% of that mean, and the length could
 be predicted from the query itself~\cite{zheng2023response}. The results therefore show what the
 policy does when the main uncertainty it faces is the OLT's load.
