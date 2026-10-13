@@ -24,6 +24,8 @@
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,decorations.pathreplacing,calc}
+% Pseudocode, numbered by chapter like figures and tables (Algorithm 3.1).
+\usepackage[ruled,vlined,linesnumbered,algochapter]{algorithm2e}
 % Marks unfinished text in red; remove every \todo before submission.
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 
@@ -521,6 +523,165 @@ RecServe, a timetable and each tier answering every query alone.
 \chapter{Methodology}
 \label{chap:methodology}
 %==============================================================================
+
+This chapter describes how energy is brought into recursive tiered inference and how the
+case study evaluates it. Section~\ref{sec:overview} presents the three tiers of the case
+study, and Section~\ref{sec:policy} the decision each tier makes.
+Section~\ref{sec:energy-model} gives the energy model of the tiers,
+Section~\ref{sec:simulation} the simulation, and Section~\ref{sec:evaluation} how the
+policies are compared.
+
+\section{Overview of the Case Study}
+\label{sec:overview}
+
+The case study places a three-tier hierarchy on a PON. The user tier is the device the
+query is typed on, the middle tier is the ONU in the home, and the top tier is the OLT at
+the operator's central office, shared by every home on the PON. Each tier runs a larger
+model than the one below, as in RecServe and in the architecture of
+\citeonline{pakpahan2026continuum}, and Table~\ref{tab:tiers} lists them. The user tier is
+a phone running a model of about one billion parameters, and the ONU a single-board
+computer with a neural accelerator, the class of device an AI-capable home gateway could
+carry. Their energy comes from published measurements~\cite{cai2026npu,renney2026cloud},
+while the OLT's is measured by us on a GPU (Section~\ref{sec:energy-model}).
+
+The hierarchy stops at the OLT, without the cloud tier that RecServe and
+\citeonline{pakpahan2026continuum} place above it. The access network is where the
+downstream broadcast exists, and so where the strategies this work compares differ. A
+cloud tier would also need the same two inputs as the other tiers. One is the answers of a
+model of more than 70 billion parameters to every test problem, with the probabilities of
+their tokens. The other is that model's energy measured against batch size, on a cluster
+of GPUs~\cite{pakpahan2026continuum}. Both were beyond the resources of this work. Since the
+OLT is the top tier, it answers every query that reaches it, so its accuracy is the
+highest any policy can deliver. The decision rule itself does not depend on the number of
+tiers (Section~\ref{sec:policy}), and a cloud tier would only add one more term to it.
+
+\begin{table}[htb]
+  \centering
+  \caption{The three tiers of the case study and their accuracy on GSM8K}
+  \label{tab:tiers}
+  \begin{tabular}{llll}
+    \hline
+    Tier & Hardware & Model & Accuracy \\
+    \hline
+    User & OnePlus 15 phone & Llama-3.2-1B, 4-bit & 47.2\% \\
+    ONU & Raspberry Pi 5 with Hailo-10H & Qwen2.5-1.5B, 4-bit & 68.8\% \\
+    OLT & Server with one NVIDIA L4 & Qwen2.5-7B, 8-bit & 91.7\% \\
+    \hline
+  \end{tabular}
+  \legend{Source: The author}
+\end{table}
+
+The task is GSM8K, a set of grade-school math problems whose answer is a single
+number~\cite{cobbe2021training}. Each answer is graded exactly, by comparing its final
+number with the reference, so no judge model is needed. The problems take between two
+and eight steps to solve, which spreads the accuracies of the three models far apart.
+Every tier answered each of the 1,319 test problems once, and the simulation replays
+these recorded answers, with the confidence RecServe computes from them, instead of
+running the models again.
+
+\section{Energy-Aware Recursive Offloading}
+\label{sec:policy}
+
+The policy keeps RecServe's recursive structure and its confidence test unchanged. A
+query starts at the user device, and each tier that answers it compares the confidence of
+its answer with the $\beta$-quantile of the confidences it has seen recently. The answer
+is returned if it passes and escalated if it does not (Section~\ref{sec:recserve}). What
+the policy adds is a choice of where the query goes, made from the energy each tier is
+expected to spend. It never decides whether an answer is good enough, so the accuracy
+delivered still comes only from the models and from RecServe's test.
+
+The choice rests on the expected energy from handing a query to tier $j$ until some tier
+answers it. Tier $j$ always runs the query, and with probability $p_j$ its answer
+escalates to tier $j+1$, so
+\begin{equation}
+  C_j = E_j + p_j \, C_{j+1}, \qquad C_J = E_J,
+  \label{eq:cost-to-completion}
+\end{equation}
+where $J$ is the top tier and $E_j$ is the energy tier $j$ is expected to spend answering.
+$E_j$ is the tier's energy per prompt token times the length of the prompt, plus its
+energy per generated token times the length of its answers. Neither the length of an
+answer nor whether it will escalate is known before the tier runs, so both come from
+averages. Each tier keeps exponentially weighted moving averages of how many tokens each
+tier above it generates per answer and of how often a query that reached that tier went
+further.
+
+The policy uses $C_j$ at two points, as Algorithm~\ref{alg:decision} shows. When a query
+arrives at tier $i$, running it there costs $E_i$ plus, if it escalates, the cheapest way
+on. The tier forwards the query directly to the tier $k^*$ above it with the lowest $C_k$
+if
+\begin{equation}
+  C_{k^*} < (1-\delta)\left(E_i + p_i \, C_{k^*}\right),
+  \label{eq:on-arrival}
+\end{equation}
+and runs it itself otherwise. When an answer escalates, the query goes to tier $i+1$, or
+skips to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$. The margin $\delta$ keeps a tier from
+moving a query for a negligible saving, and is zero in this work. The top tier has nowhere
+to pass a query, so it always answers.
+
+\begin{algorithm}[htb]
+  \caption{The decision of tier $i < J$ on a query $q$}
+  \label{alg:decision}
+  \KwIn{the query $q$; RecServe's $\beta$; the window $W_i$ of tier $i$'s recent
+    confidences; the learned averages; the energy rates of every tier above}
+  \If{tier $i$ can decide}{
+    $k^* \leftarrow \arg\min_{k>i} C_k$ \tcp*{Equation~\eqref{eq:cost-to-completion}}
+    \If{$C_{k^*} < (1-\delta)\,(E_i + p_i\,C_{k^*})$}{
+      forward $q$ to tier $k^*$ and stop\;
+    }
+  }
+  run $q$, giving the answer $a$ with confidence $s$\;
+  $\theta \leftarrow$ the $\beta$-quantile of $W_i$, then add $s$ to $W_i$\;
+  \If{$s \geq \theta$}{
+    return $a$ to the user and stop\;
+  }
+  $\mathit{next} \leftarrow i+1$\;
+  \If{tier $i$ can decide \textbf{and} $C_{k^*} < (1-\delta)\,C_{i+1}$}{
+    $\mathit{next} \leftarrow k^*$\;
+  }
+  pass $q$ to tier $\mathit{next}$\;
+\end{algorithm}
+
+The averages are learned from the answers coming back down. When a tier answers, the
+answer travels back through the tiers below it, carrying the length of the answer and the
+energy rates of every tier that handled the query, and each tier below updates its
+averages from it. A tier can decide once it has heard at least 20 answers from every tier
+above it and has a figure for the OLT's cost. Until then it follows RecServe. The answer
+lengths and escalation rates describe the questions rather than the household that asked
+them, so in the case study they are pooled across all the households on the PON.
+
+Each device knows its own energy rates. The one figure a tier below cannot know by itself
+is the OLT's, which depends on how many other queries the OLT is serving
+(Section~\ref{sec:energy-model}). The two strategies differ only in where this figure
+comes from.
+
+\begin{itemize}
+  \item \textbf{Timetable.} One figure per hour of the day, for weekdays and for weekends,
+  learned over a month of calibration and shipped to every device in advance. The
+  timetable is learned while its own policy runs, since the policy changes the load it is
+  learning, and relearned three times so that it settles.
+  \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream what one more query
+  would cost it, averaged over its last 5 minutes. A single message reaches every ONU on
+  the PON, which passes it on to the devices in its home.
+\end{itemize}
+
+\section{Energy Model}
+\label{sec:energy-model}
+
+\todo{the boundary; the user and ONU figures; the OLT's measurement against batch size
+and its check under continuous batching; average and marginal accounting; what the OLT
+reports.}
+
+\section{Simulation}
+\label{sec:simulation}
+
+\todo{the households and their traffic; the drift and how it is measured; the OLT serving
+with continuous batching; calibration and test months; seeds.}
+
+\section{Evaluation}
+\label{sec:evaluation}
+
+\todo{reading every policy at the same accuracy; the baselines; the metrics; the
+sensitivity runs.}
 
 %==============================================================================
 \chapter{Results}
