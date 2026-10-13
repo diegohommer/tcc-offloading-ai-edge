@@ -582,46 +582,50 @@ running the models again.
 \section{Energy-Aware Recursive Offloading}
 \label{sec:policy}
 
-The policy keeps RecServe's recursive structure and its confidence test unchanged. A
-query starts at the user device, and each tier that answers it returns the answer if its
-confidence reaches the $\beta$-quantile of the confidences the tier has seen recently,
-and escalates it otherwise (Section~\ref{sec:recserve}). The policy only adds a choice of
-where the query goes, made from the energy each tier is expected to spend. It never
-judges whether an answer is good enough, so the accuracy delivered still comes only from
-the models and from RecServe's test.
+The policy keeps RecServe's recursive structure and its confidence test unchanged
+(Section~\ref{sec:recserve}). A query starts at the user device. Each tier that runs it
+returns its answer to the user if the answer's confidence reaches the $\beta$-quantile of
+the confidences the tier has seen recently, and escalates the query otherwise. The
+policy adds only a choice of which tier runs the query, made from the energy each tier
+is expected to spend. It never judges whether an answer is good enough, so the accuracy
+delivered still comes only from the models and from RecServe's test.
 
-The choice rests on $C_j$, the expected energy from handing a query to tier $j$ until
-some tier answers it. Tier $j$ always runs the query, and its answer escalates to tier
-$j+1$ with probability $p_j$, so
+The choice rests on $C_j$, the expected energy spent from the moment a query is handed
+to tier $j$ until some tier returns an answer. Tier $j$ always runs the query, and with
+probability $p_j$ its answer fails the test and the query moves on to tier $j+1$, so
 \begin{equation}
   C_j = E_j + p_j \, C_{j+1}, \qquad C_J = E_J,
   \label{eq:cost-to-completion}
 \end{equation}
-where $J$ is the top tier and $E_j$ is the energy tier $j$ is expected to spend
-answering. $E_j$ is the tier's energy per prompt token times the length of the prompt,
-plus its energy per generated token times the average length of its past answers.
-Because RecServe's test escalates the answers that fall below a quantile of recent
-confidences, about a fraction $\beta$ of each tier's answers escalate by construction,
-and $p_j \approx \beta$. The policy still learns $p_j$ from the answers instead of fixing
-it to $\beta$, so it applies unchanged to an escalation test whose rate is not set in
-advance.
+where $J$ is the top tier and $E_j$ is the energy tier $j$ is expected to spend running
+the query. $E_j$ is the tier's energy per prompt token times the length of the prompt,
+plus its energy per generated token times the average length of its past answers, since
+the length of an answer is only known after the tier runs. Equation~\eqref{eq:cost-to-completion}
+assumes that the query then climbs one tier at a time, as it does in RecServe. Because
+RecServe's test escalates the answers that fall below a quantile of the tier's recent
+confidences, about a fraction $\beta$ of them escalate by construction, and
+$p_j \approx \beta$. The policy still learns $p_j$ from past answers instead of fixing it
+to $\beta$, so it applies unchanged to an escalation test whose rate is not set in
+advance. In our simulation the learned values stay within 0.003 of $\beta$.
 
-The policy uses $C_j$ at two points, as Algorithm~\ref{alg:decision} shows. When a query
-arrives at tier $i$, running it there costs $E_i$ plus, if the answer escalates, the
-cheapest way on. The tier therefore forwards the query straight to the tier $k^*$ above
-it with the lowest $C_k$ if
+The policy uses $C_j$ at two points of Algorithm~\ref{alg:decision}. The first is when a
+query arrives at a tier $i < J$ (lines 1 to 4). Running the query there costs $E_i$ and,
+if its answer escalates, the expected energy of the cheapest tier above. The tier
+therefore forwards the query, without running it, to the tier $k^*$ above it with the
+lowest $C_k$ if
 \begin{equation}
   C_{k^*} < (1-\delta)\left(E_i + p_i \, C_{k^*}\right),
   \label{eq:on-arrival}
 \end{equation}
-and runs it itself otherwise. When an answer escalates, the query goes to tier $i+1$, or
-skips to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$. The top tier has nowhere to pass a
-query and always answers. The margin $\delta$ keeps a tier from moving a query for a
-negligible saving and is zero in this work. With $\delta = 0$ and $p_i \approx \beta$,
-Equation~\eqref{eq:on-arrival} reduces to $C_{k^*} < E_i / (1-\beta)$, so a tier is
-worth trying only if the cheapest tier above costs at least $E_i/(1-\beta)$. This
-threshold rises with $\beta$, because the more often a tier escalates, the more often
-the energy it spends answering is wasted.
+and runs it otherwise. The second is when an answer escalates (lines 9 to 11). The query
+then goes to tier $i+1$, or skips directly to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$.
+The margin $\delta$ keeps a tier from moving a query for a negligible saving and is zero
+in this work. The top tier has nowhere to send a query and always returns its answer.
+
+With $\delta = 0$ and $p_i \approx \beta$, Equation~\eqref{eq:on-arrival} reduces to
+$C_{k^*} < E_i / (1-\beta)$. A tier is therefore worth running only if the cheapest tier
+above costs at least $E_i/(1-\beta)$. This threshold rises with $\beta$, because the more
+often a tier escalates, the more often the energy it spends running a query is wasted.
 
 \begin{algorithm}[htb]
   \caption{The decision of tier $i < J$ on a query $q$}
@@ -646,30 +650,41 @@ the energy it spends answering is wasted.
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
 
-An answer returns to the user through the tiers below the one that produced it, so it
-can carry its length and the energy rates of every tier that handled the query at no
-extra cost. From these, each tier keeps moving averages of how many tokens each tier
-above it generates per answer and of how often each tier escalates. In our simulation
-the escalation estimates stay within 0.003 of $\beta$. A single household sends too few
-queries to learn these averages well on its own, but they depend only on the models, so
-the case study pools them across all the households on the PON, which stands for values
-set in advance from the whole population. A tier can decide once it has heard at least
-20 answers from every tier above it and has a figure for the OLT's cost, and until then
-it follows RecServe.
+A tier can only make these choices once it knows $E_k$ and $p_k$ for the tiers above it.
+An answer that is returned travels back to the user through every tier below the one
+that produced it, so it can carry, at no extra cost, its length and the energy rates of
+every tier that ran the query. From these, each tier keeps moving averages of how many
+tokens each tier above it generates per answer and of how often each tier escalates. A
+tier can decide once it has heard at least 20 answers from every tier above it and has a
+figure for the OLT's energy rate. Until then it follows RecServe, running every query
+that reaches it and escalating to the next tier.
 
-Each device knows its own energy rates. The only figure a tier cannot know by itself is
-the OLT's, which depends on how many other queries the OLT is serving
-(Section~\ref{sec:energy-model}), and the two strategies differ only in where it comes
-from.
+A single household sends too few queries to learn these averages quickly on its own.
+The escalation rates stay close to $\beta$ whatever the model, but the answer lengths
+depend on the models a household runs and on the questions its users ask, so in a real
+deployment they would differ from one household to the next. Households with the same
+models could still share them, through an operator that keeps one average per model or
+through values shipped with the model. In the case study every household has the same
+three tiers and asks the same kind of question, so the averages are pooled across all
+the households on the PON, in place of such values set in advance. The evaluation also
+includes a run in which every household learns on its own
+(Section~\ref{sec:evaluation}).
+
+The energy rates of the user device and the ONU are fixed per token, so the figures a
+tier hears on past answers stay valid. The OLT's rate is different. It depends on how
+many other queries the OLT is serving at the moment (Section~\ref{sec:energy-model}),
+and a household hears it on its own answers only a few times a day. We compare two
+strategies for giving every tier a current figure for it.
 
 \begin{itemize}
-  \item \textbf{Timetable.} One figure per hour of the day, for weekdays and for weekends,
-  learned over a month of calibration and shipped to every device in advance. The
-  timetable is learned while its own policy runs, since the policy changes the load it is
-  learning, and relearned three times so that it settles.
-  \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream what one more query
-  would cost it, averaged over its last 5 minutes. A single message reaches every ONU on
-  the PON, which passes it on to the devices in its home.
+  \item \textbf{Timetable.} One OLT rate per hour of the day, for weekdays and for
+  weekends, learned over a month of calibration and shipped to every device in advance.
+  Because the policy changes the load the timetable describes, the timetable is learned
+  while the policy itself runs, and relearned three times so that it settles.
+  \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream the energy one
+  more query would add to its consumption, averaged over its last 5 minutes. A single
+  message reaches every ONU on the PON, and each ONU passes it on to the devices in its
+  home.
 \end{itemize}
 
 \section{Energy Model}
@@ -684,6 +699,18 @@ reports.}
 
 \todo{the households and their traffic; the drift and how it is measured; the OLT serving
 with continuous batching; calibration and test months; seeds.}
+
+Of the quantities the policy reads, only the OLT's cost changes over time in a way the
+simulation tries to reproduce, following the load of the households and its drift. The
+others are held still. The user device and the ONU spend a fixed energy per token, while
+a real phone or gateway spends more or less depending on its temperature, its battery
+and whatever else it is running. Every household has the same three models and asks
+questions drawn at random from the same benchmark, so the answer lengths and escalation
+rates the policy learns do not move, while real households differ in both and change
+over time. RecServe's confidence windows do move with the answers, but each tier keeps
+one window shared by every household, where a real device would keep its own. The
+results therefore show what the policy does when the only uncertainty it faces is the
+OLT's load.
 
 \section{Evaluation}
 \label{sec:evaluation}
