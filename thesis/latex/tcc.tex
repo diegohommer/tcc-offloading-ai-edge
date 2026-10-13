@@ -583,9 +583,9 @@ running the models again.
 \label{sec:policy}
 
 The policy keeps RecServe's recursive structure and its confidence test unchanged
-(Section~\ref{sec:recserve}). A query starts at the user device. Each tier that runs it
-returns its answer to the user if the answer's confidence reaches the $\beta$-quantile of
-the confidences the tier has seen recently, and escalates the query otherwise. The
+(Section~\ref{sec:recserve}). A query starts at the user device, and each tier that runs
+it returns its answer to the user if the answer's confidence reaches the $\beta$-quantile
+of the confidences the tier has seen recently, or escalates the query otherwise. The
 policy adds only a choice of which tier runs the query, made from the energy each tier
 is expected to spend. It never judges whether an answer is good enough, so the accuracy
 delivered still comes only from the models and from RecServe's test.
@@ -671,9 +671,9 @@ includes a run in which every household learns on its own
 (Section~\ref{sec:evaluation}).
 
 The energy rates of the user device and the ONU are fixed per token, so the figures a
-tier hears on past answers stay valid. The OLT's rate is different. It depends on how
-many other queries the OLT is serving at the moment (Section~\ref{sec:energy-model}),
-and a household hears it on its own answers only a few times a day. We compare two
+tier hears on past answers stay valid. The OLT's rate, however, depends on how many
+other queries the OLT is serving at the moment (Section~\ref{sec:energy-model}), and a
+household hears it on its own answers only a few times a day. We compare two
 strategies for giving every tier a current figure for it.
 
 \begin{itemize}
@@ -701,8 +701,8 @@ reports.}
 with continuous batching; calibration and test months; seeds.}
 
 Of the quantities the policy reads, only the OLT's cost changes over time in a way the
-simulation tries to reproduce, following the load of the households and its drift. The
-others are held still. The user device and the ONU spend a fixed energy per token, while
+simulation tries to reproduce, following the load of the households and its drift, and
+the others are held still. The user device and the ONU spend a fixed energy per token, while
 a real phone or gateway spends more or less depending on its temperature, its battery
 and whatever else it is running. Every household has the same three models and asks
 questions drawn at random from the same benchmark, so the answer lengths and escalation
