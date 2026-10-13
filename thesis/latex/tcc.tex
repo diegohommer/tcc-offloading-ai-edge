@@ -547,13 +547,14 @@ while the OLT's is measured by us on a GPU (Section~\ref{sec:energy-model}).
 The hierarchy stops at the OLT, without the cloud tier that RecServe and
 \citeonline{pakpahan2026continuum} place above it. The access network is where the
 downstream broadcast exists, and so where the strategies this work compares differ. A
-cloud tier would also need the same two inputs as the other tiers. One is the answers of a
-model of more than 70 billion parameters to every test problem, with the probabilities of
-their tokens. The other is that model's energy measured against batch size, on a cluster
-of GPUs~\cite{pakpahan2026continuum}. Both were beyond the resources of this work. Since the
-OLT is the top tier, it answers every query that reaches it, so its accuracy is the
-highest any policy can deliver. The decision rule itself does not depend on the number of
-tiers (Section~\ref{sec:policy}), and a cloud tier would only add one more term to it.
+cloud tier was also beyond the resources of this work, since, like the other tiers, it
+would need the answers of its model, of more than 70 billion parameters, to every test
+problem with the probabilities of their tokens, and that model's energy measured against
+batch size on a cluster of GPUs~\cite{pakpahan2026continuum}.
+Without it, the OLT is the top tier and returns its answer to every query that reaches
+it, so its accuracy is the highest any policy can deliver. The decision rule itself does
+not depend on the number of tiers (Section~\ref{sec:policy}), and a cloud tier would
+only add one more term to it.
 
 \begin{table}[htb]
   \centering
