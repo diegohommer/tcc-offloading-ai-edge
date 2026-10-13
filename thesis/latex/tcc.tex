@@ -602,8 +602,8 @@ $E_j$ is the tier's energy per prompt token times the length of the prompt, plus
 energy per generated token times the length of its answers. The length of an answer is
 not known before the tier runs, so it comes from an average of past answers. The
 probability $p_j$ is set by RecServe's own test, which escalates the answers whose
-confidence falls below the $\beta$-quantile of the tier's recent confidences, so a
-fraction $\beta$ of them escalate by construction and $p_j = \beta$.
+confidence falls below the $\beta$-quantile of the tier's recent confidences, so about a
+fraction $\beta$ of them escalate by construction and $p_j \approx \beta$.
 
 The policy uses $C_j$ at two points, as Algorithm~\ref{alg:decision} shows. When a query
 arrives at tier $i$, running it there costs $E_i$ plus, if it escalates, the cheapest way
@@ -616,8 +616,8 @@ if
 and runs it itself otherwise. When an answer escalates, the query goes to tier $i+1$, or
 skips to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$. The margin $\delta$ keeps a tier from
 moving a query for a negligible saving, and is zero in this work. With $\delta = 0$ and
-$p_i = \beta$, Equation~\eqref{eq:on-arrival} becomes $C_{k^*} < E_i / (1-\beta)$, a single
-threshold. A tier is worth trying only if the cheapest tier above costs more than this,
+$p_i \approx \beta$, Equation~\eqref{eq:on-arrival} becomes approximately
+$C_{k^*} < E_i / (1-\beta)$, a single threshold. A tier is worth trying only if the cheapest tier above costs more than this,
 and the threshold rises with $\beta$, since the more often a tier escalates, the more
 often the energy it spends answering is wasted. The top tier has nowhere
 to pass a query, so it always answers.
