@@ -599,11 +599,11 @@ escalates to tier $j+1$, so
 \end{equation}
 where $J$ is the top tier and $E_j$ is the energy tier $j$ is expected to spend answering.
 $E_j$ is the tier's energy per prompt token times the length of the prompt, plus its
-energy per generated token times the length of its answers. Neither the length of an
-answer nor whether it will escalate is known before the tier runs, so both come from
-averages. Each tier keeps exponentially weighted moving averages of how many tokens each
-tier above it generates per answer and of how often a query that reached that tier went
-further.
+energy per generated token times the length of its answers. The length of an answer is
+not known before the tier runs, so it comes from an average of past answers. The
+probability $p_j$ is set by RecServe's own test, which escalates the answers whose
+confidence falls below the $\beta$-quantile of the tier's recent confidences, so a
+fraction $\beta$ of them escalate by construction and $p_j = \beta$.
 
 The policy uses $C_j$ at two points, as Algorithm~\ref{alg:decision} shows. When a query
 arrives at tier $i$, running it there costs $E_i$ plus, if it escalates, the cheapest way
@@ -615,7 +615,11 @@ if
 \end{equation}
 and runs it itself otherwise. When an answer escalates, the query goes to tier $i+1$, or
 skips to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$. The margin $\delta$ keeps a tier from
-moving a query for a negligible saving, and is zero in this work. The top tier has nowhere
+moving a query for a negligible saving, and is zero in this work. With $\delta = 0$ and
+$p_i = \beta$, Equation~\eqref{eq:on-arrival} becomes $C_{k^*} < E_i / (1-\beta)$, a single
+threshold. A tier is worth trying only if the cheapest tier above costs more than this,
+and the threshold rises with $\beta$, since the more often a tier escalates, the more
+often the energy it spends answering is wasted. The top tier has nowhere
 to pass a query, so it always answers.
 
 \begin{algorithm}[htb]
@@ -641,13 +645,16 @@ to pass a query, so it always answers.
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
 
-The averages are learned from the answers coming back down. When a tier answers, the
-answer travels back through the tiers below it, carrying the length of the answer and the
-energy rates of every tier that handled the query, and each tier below updates its
-averages from it. A tier can decide once it has heard at least 20 answers from every tier
-above it and has a figure for the OLT's cost. Until then it follows RecServe. The answer
-lengths and escalation rates describe the questions rather than the household that asked
-them, so in the case study they are pooled across all the households on the PON.
+When a tier answers, the answer returns to the user through the tiers below it, so it
+can carry the length of the answer and the energy rates of every tier that handled the
+query at no extra cost. Each tier updates from it a moving average of how many tokens
+each tier above it generates per answer. Our simulation also estimates $p_j$ from the
+answers in the same way, and the estimates stay within 0.003 of $\beta$. A tier can
+decide once it has heard at least 20 answers from every tier above it and has a figure
+for the OLT's cost, and until then it follows RecServe. A single household sends too
+few queries to learn the answer lengths well on its own. They depend only on the models,
+however, so in the case study they are pooled across all the households on the PON,
+which stands for values set in advance from the whole population.
 
 Each device knows its own energy rates. The one figure a tier below cannot know by itself
 is the OLT's, which depends on how many other queries the OLT is serving
