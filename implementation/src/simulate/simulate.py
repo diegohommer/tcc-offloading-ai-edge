@@ -36,7 +36,7 @@ from energy.three_tier import (
     TIERS,
 )
 from frontier import frontier, iso_accuracy
-from households import Households
+from households import Households, load_sessions, TRAFFIC
 from olt_energy import Energy
 
 CONFIG = ROOT / "config" / "simulation.yaml"
@@ -199,6 +199,11 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add("--alpha", type=float, help="EWMA weight for learned answer lengths and escalation rates")
     add("--rate-alpha", type=float, help="EWMA weight for reported energy rates (unset: --alpha)")
     add("--warmup", type=int, help="reports per tier before a household decides")
+    add(
+        "--traffic",
+        choices=("wildchat", "wildchat-brazil", "burstgpt"),
+        help="whose conversations the households follow: WildChat's (all, or Brazil's) or BurstGPT's",
+    )
     add("--users-per-home", type=float, help="weekly-active LLM users in one household")
     add("--per-user-day", type=float, help="messages one active user sends a day")
     add(
@@ -364,6 +369,7 @@ def prepare_population(subscribers, settings, answers, curve, prices):
         subscribers,
         settings.users_per_home,
         settings.per_user_day,
+        load_sessions(TRAFFIC[settings.traffic]),
         burst_sigma=settings.burst_sigma,
         burst_hours=settings.burst_hours,
         activity_sigma=settings.activity_sigma,
@@ -409,6 +415,7 @@ def prepare_population(subscribers, settings, answers, curve, prices):
                 max(round(subscribers * scale), 1),
                 settings.users_per_home,
                 settings.per_user_day,
+                load_sessions(TRAFFIC[settings.traffic]),
                 burst_sigma=settings.burst_sigma,
                 burst_hours=settings.burst_hours,
                 activity_sigma=settings.activity_sigma,
@@ -573,6 +580,7 @@ def output_path(s) -> Path:
         + ("_plearned" if s.escalation == "learned" else "")
         + ("_hwindows" if s.windows == "household" else "")
         + ("_fixedtiming" if s.timing == "fixed" else "")
+        + (f"_{s.traffic}" if s.traffic != "wildchat" else "")
         + (f"_act{s.activity_sigma:g}" if s.activity_sigma is not None else "")
         + ("_nocontext" if s.context == "none" else "")
         + ("_noonuqueue" if not s.onu_queue else "")

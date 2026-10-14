@@ -1,10 +1,17 @@
-"""Tests for measuring conversation shapes in BurstGPT."""
+"""Tests for measuring conversation shapes in BurstGPT and WildChat."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from prepare_load_traces import burstgpt_sessions, drift_around_timetable, SESSION_GAP_S
+from prepare_load_traces import (
+    activity_spread,
+    burstgpt_sessions,
+    clean_and_localize,
+    drift_around_timetable,
+    SESSION_GAP_S,
+    wildchat_sessions,
+)
 
 
 def _trace(rows):
@@ -84,3 +91,64 @@ def test_drift_around_timetable_of_pure_counting_noise_is_none():
     counts = rng.poisson(200.0, size=(60, 24)).astype(float)
     fit = drift_around_timetable(counts, np.zeros(60, dtype=bool), level_days=0)
     assert fit["sigma"] is None or fit["sigma"] < 0.05
+
+
+def _answers(rows):
+    """Return wildchat_answers()-like rows from (user, local time) pairs."""
+    frame = pd.DataFrame(rows, columns=["user", "local"])
+    frame["local"] = pd.to_datetime(frame["local"])
+    frame["state"] = "São Paulo"
+    return frame.sort_values(["user", "local"])
+
+
+def test_wildchat_sessions_splits_bursts_and_reads_the_calendar_weekend():
+    """A user's answers a minute apart form one burst; a Saturday burst counts as weekend."""
+    stats = wildchat_sessions(
+        _answers(
+            [
+                ("a", "2023-05-01 21:00:00"),  # Monday
+                ("a", "2023-05-01 21:01:00"),
+                ("a", "2023-05-01 23:00:00"),
+                ("b", "2023-05-06 10:30:00"),  # Saturday
+            ]
+        )
+    )
+    assert stats["sessions"] == 3
+    assert stats["weekend_days_mod7"] == [5, 6]
+    assert stats["starts_by_hour"]["weekday"][21] == 1.0
+    assert stats["starts_by_hour"]["weekday"][23] == 1.0
+    assert stats["starts_by_hour"]["weekend"][10] == 1.0
+    assert set(stats["think_time_s_icdf"]) == {60.0}
+
+
+def test_activity_spread_reads_sigma_off_the_busiest_tenth():
+    """Users drawn log-normal with a known spread give that spread back."""
+    rng = np.random.default_rng(1)
+    messages = pd.Series(np.exp(rng.normal(0.0, 1.2, 200_000)))
+    assert activity_spread(messages)["sigma"] == pytest.approx(1.2, abs=0.03)
+    assert activity_spread(pd.Series([1.0] * 100))["sigma"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_clean_and_localize_drops_one_shot_users_and_keeps_summer_time():
+    """A user seen once is dropped; a Californian in July is seven hours behind UTC."""
+    answers = pd.DataFrame(
+        {
+            "user": [1, 1, 2, 3, 3],
+            "country": ["United States"] * 3 + ["Brazil"] * 2,
+            "state": ["California", "California", "Texas", "Acre", "Acre"],
+            "utc": pd.to_datetime(
+                [
+                    "2024-07-01 12:00",
+                    "2024-07-01 12:01",
+                    "2024-07-01 12:00",
+                    "2024-07-01 12:00",
+                    "2024-07-01 12:02",
+                ]
+            ),
+        }
+    )
+    everyone = clean_and_localize(answers)
+    assert set(everyone["user"]) == {1, 3}
+    assert everyone.loc[everyone["user"] == 1, "local"].iloc[0] == pd.Timestamp("2024-07-01 05:00")
+    assert everyone.loc[everyone["user"] == 3, "local"].iloc[0] == pd.Timestamp("2024-07-01 07:00")
+    assert set(clean_and_localize(answers, "Brazil")["user"]) == {3}

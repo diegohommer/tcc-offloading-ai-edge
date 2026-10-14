@@ -17,6 +17,7 @@ known_first_party = [
     "frontier",
     "gsm8k",
     "households",
+    "local_time",
     "measure",
     "measure_gpu_energy_continuous",
     "measure_gpu_energy_static",

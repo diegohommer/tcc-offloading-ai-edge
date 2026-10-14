@@ -33,6 +33,16 @@ traffic:
   # MA5800-X2 carries up to 16,000 subscribers and a ZTE C600 up to 34,816; below about
   # 2,000 the OLT almost never holds two queries at once. [swept: vendor datasheets]
   subscribers: [1000, 2000, 5000, 10000, 20000]
+  # Whose conversations the households follow: when they open by hour of a weekday or
+  # weekend day, how many messages they hold and the pauses between them, and how
+  # unevenly users chat. wildchat: WildChat-4.8M's users, people using a free ChatGPT
+  # from home, worldwide, April 2023 to July 2025, each in their own local time, without
+  # the users seen only once (most of the automated traffic). wildchat-brazil: the same,
+  # Brazil's users only. burstgpt: BurstGPT's conversation log, one Azure OpenAI provider
+  # serving enterprises and campuses, office hours and quiet weekends. The drift
+  # (burst_sigma, burst_hours) is BurstGPT's either way: one provider's users are closer to
+  # one OLT's than WildChat's, spread over the world. [data: prepare_load_traces.py]
+  traffic: wildchat
   # Weekly-active LLM users in one household. The weakest number here: it moves the
   # OLT's batch about as much as the subscriber count does. [choice: no Brazilian
   # adoption figure yet]
@@ -43,9 +53,10 @@ traffic:
   per_user_day: 3.6
   # How unevenly households talk. null: every household alike. A number: each holds a
   # Poisson number of active users (mean users_per_home), each as active as a log-normal
-  # factor with mean 1 and this log-sd; the total stays the same. No source gives the
-  # spread across users (Chatterji et al. report only averages). [choice: swept]
-  activity_sigma: 1.0
+  # factor with mean 1 and this log-sd; the total stays the same. WildChat's users seen
+  # in two weeks or more: the busiest tenth send 59% of the messages, which a log-sd of
+  # 1.5 reproduces (wildchat_sessions.json, "activity"; 1.3 for Brazil's). [data: swept]
+  activity_sigma: 1.5
   # How far the whole population's load drifts from the timetable (log-sd of a
   # shared factor with mean 1), and how long a departure lasts (correlation
   # time, hours). 0 = every day follows the average day, plus counting noise.

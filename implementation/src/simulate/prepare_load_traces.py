@@ -1,19 +1,32 @@
 #!/usr/bin/env python3
-"""Measure the shape of a conversation in BurstGPT, and how its load drifts.
+"""Measure the shape of a conversation, in BurstGPT and in WildChat.
 
-Writes data/load_traces/burstgpt_sessions.json. Downloads BurstGPT_3.csv (232 MB) once
-into implementation/.cache/load_traces/.
+BurstGPT (one Azure OpenAI provider serving enterprises and campuses) gives how the load
+drifts. WildChat (people chatting with a free ChatGPT, from home, worldwide, 2023-2025)
+gives when people chat in their own local time, how their conversations go and how
+unevenly they use it, for everyone and for Brazil alone.
+
+Writes data/load_traces/burstgpt_sessions.json, wildchat_sessions.json and
+wildchat_brazil_sessions.json. Downloads BurstGPT_3.csv (232 MB) and WildChat-4.8M (15 GB,
+of which only timing and user fields are read) once into implementation/.cache/load_traces/.
 """
 
 from __future__ import annotations
 
+import glob
 import json
+import statistics
 import sys
 import urllib.request
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # src/simulate
+from local_time import LocalTime  # pylint: disable=wrong-import-position
 
 ROOT = Path(__file__).resolve().parents[2]  # implementation/
 CACHE = ROOT / ".cache" / "load_traces"
@@ -21,6 +34,21 @@ CACHE = ROOT / ".cache" / "load_traces"
 
 OUT = ROOT / "data" / "load_traces" / "burstgpt_sessions.json"
 """Where the conversation shapes are written."""
+
+WILDCHAT_OUT = {
+    None: ROOT / "data" / "load_traces" / "wildchat_sessions.json",
+    "Brazil": ROOT / "data" / "load_traces" / "wildchat_brazil_sessions.json",
+}
+"""Where the conversation shapes of WildChat's users are written: everyone's, and Brazil's."""
+
+WILDCHAT_URL = "https://huggingface.co/datasets/allenai/WildChat-4.8M/resolve/main/data/"
+WILDCHAT_FILES = [f"train-{index:05d}-of-00086.parquet" for index in range(86)]
+"""WildChat-4.8M's parquet files (ODC-BY): 3.2M non-toxic conversations from April 2023 to
+July 2025, each turn with its time, the user's country and state, and a hashed IP."""
+
+WEEKLY_ACTIVE_WEEKS = 2
+"""Weeks a WildChat user must show up in to count among the weekly-active users whose
+spread of activity is measured, rather than a one-off visitor."""
 
 BURSTGPT_URL = "https://github.com/HPMLL/BurstGPT/releases/download/v2.0/BurstGPT_3.csv"
 """BurstGPT_3 is the only release carrying a session id, which a household is built from."""
@@ -161,12 +189,202 @@ def burstgpt_sessions(trace: pd.DataFrame) -> dict:
     }
 
 
+def wildchat_answers(folder: Path) -> pd.DataFrame:
+    """Return when each WildChat user got each answer, in UTC, with where the user was.
+
+    Only assistant turns carry a time: when the server received the full answer. A user is
+    a hashed IP with its request header, as WildChat's own card suggests for linking
+    conversations.
+
+    Args:
+        folder: Where WildChat-4.8M's parquet files are.
+
+    Returns:
+        One row per answer: user (an integer id), country, state, utc (naive).
+    """
+    ids: dict[str, int] = {}
+    parts = []
+    for path in sorted(glob.glob(str(folder / "*.parquet"))):
+        table = pq.ParquetFile(path).read(
+            columns=[
+                "country",
+                "state",
+                "hashed_ip",
+                "header",
+                "conversation.list.element.role",
+                "conversation.list.element.timestamp",
+            ]
+        )
+        users = [
+            ids.setdefault(ip + json.dumps(header, sort_keys=True), len(ids))
+            for ip, header in zip(
+                table["hashed_ip"].to_pylist(), table["header"].to_pylist(), strict=True
+            )
+        ]
+        conversations = table["conversation"].combine_chunks()
+        turns = conversations.flatten()
+        parent = pc.list_parent_indices(conversations).to_numpy()
+        answer = pc.and_(
+            pc.equal(turns.field("role"), "assistant"), pc.is_valid(turns.field("timestamp"))
+        )
+        rows = parent[answer.to_numpy(zero_copy_only=False)]
+        parts.append(
+            pd.DataFrame(
+                {
+                    "user": np.asarray(users)[rows],
+                    "country": table["country"].to_numpy(zero_copy_only=False)[rows],
+                    "state": table["state"].to_numpy(zero_copy_only=False)[rows],
+                    "utc": pc.filter(turns.field("timestamp"), answer).to_pandas().to_numpy(),
+                }
+            )
+        )
+    return pd.concat(parts, ignore_index=True)
+
+
+def clean_and_localize(answers: pd.DataFrame, country: str | None = None) -> pd.DataFrame:
+    """Drop the automated traffic, place every answer at its user's local time.
+
+    WildChat-4.8M's later months hold bursts of API-like traffic: in its spike months most
+    answers come from "users" seen exactly once, against about 4% in an ordinary month, so
+    users with a single answer are dropped. Answers whose time zone cannot be told
+    (local_time.LocalTime) are dropped too.
+
+    Args:
+        answers: wildchat_answers()'s rows.
+        country: Keep only this country's users, or None for everyone.
+
+    Returns:
+        The kept rows with "local", the naive local time, sorted by user and time.
+    """
+    if country is not None:
+        answers = answers[answers["country"] == country]
+    per_user = answers.groupby("user").size()
+    answers = answers[answers["user"].map(per_user) >= 2].copy()
+    mapper = LocalTime()
+    pairs = answers[["country", "state"]].drop_duplicates()
+    zone_of = {
+        (place, state): mapper.zone(place, state)
+        for place, state in zip(pairs["country"], pairs["state"], strict=True)
+    }
+    answers["zone"] = [
+        zone_of[pair] for pair in zip(answers["country"], answers["state"], strict=True)
+    ]
+    answers = answers[answers["zone"].notna()]
+    local = pd.Series(pd.NaT, index=answers.index, dtype="datetime64[us]")
+    for zone, rows in answers.groupby("zone").groups.items():
+        utc = pd.to_datetime(answers.loc[rows, "utc"]).dt.tz_localize("UTC")
+        local.loc[rows] = utc.dt.tz_convert(zone).dt.tz_localize(None).to_numpy()
+    answers["local"] = local
+    return answers.sort_values(["user", "local"])
+
+
+def activity_spread(per_user: pd.Series) -> dict:
+    """Return how unevenly users chat, and the log-normal spread that matches it.
+
+    A log-normal activity with log-sd sigma gives the busiest tenth of users a share
+    1 - Phi(z_0.9 - sigma) of the messages, so sigma is read off the measured share.
+
+    Args:
+        per_user: Messages each user sent.
+
+    Returns:
+        {"users", "top_tenth_share", "sigma"}, the last two None without any user.
+    """
+    if per_user.sum() <= 0:
+        return {"users": int(len(per_user)), "top_tenth_share": None, "sigma": None}
+    ordered = per_user.sort_values(ascending=False)
+    share = float(ordered.head(max(len(ordered) // 10, 1)).sum() / ordered.sum())
+    normal = statistics.NormalDist()
+    sigma = normal.inv_cdf(0.9) - normal.inv_cdf(1 - share)
+    return {
+        "users": int(len(ordered)),
+        "top_tenth_share": round(share, 3),
+        "sigma": round(sigma, 2),
+    }
+
+
+def wildchat_sessions(answers: pd.DataFrame) -> dict:
+    """Measure WildChat conversations the way burstgpt_sessions() does BurstGPT's.
+
+    Bursts split at SESSION_GAP_S as there, in each user's local time. The weekend is the
+    calendar's (Saturday and Sunday, days 5 and 6 of a simulation whose day 0 is a Monday),
+    though some countries rest on Friday. Drift stays BurstGPT's, one provider's users
+    being closer to one OLT's than WildChat's, spread over the world. It adds how unevenly
+    the users chat.
+
+    Args:
+        answers: clean_and_localize()'s rows.
+
+    Returns:
+        The session statistics, in burstgpt_sessions()'s format plus "activity".
+    """
+    pause = answers.groupby("user")["local"].diff().dt.total_seconds()
+    opens = pause.isna() | (pause > SESSION_GAP_S)
+    requests_per_burst = answers.groupby(opens.cumsum().to_numpy()).size()
+    think_time = pause[(~opens) & (pause > 0)]
+    span_days = (answers["local"].max() - answers["local"].min()).total_seconds() / 86400
+
+    starts = answers["local"][opens.to_numpy()]
+    on_weekend = (starts.dt.dayofweek >= 5).to_numpy()
+    starts_by_hour = {}
+    for day_type, rows in (("weekday", ~on_weekend), ("weekend", on_weekend)):
+        days_of_type = max(starts[rows].dt.normalize().nunique(), 1)
+        counts = np.bincount(starts[rows].dt.hour, minlength=24).astype(float) / days_of_type
+        starts_by_hour[day_type] = [round(count, 3) for count in counts]
+
+    weeks = answers.groupby("user")["local"].apply(lambda times: times.dt.to_period("W").nunique())
+    per_user = answers.groupby("user").size()
+    quantiles = (np.arange(ICDF_POINTS) + 0.5) / ICDF_POINTS
+    return {
+        "source": WILDCHAT_URL,
+        "session_gap_s": SESSION_GAP_S,
+        "span_days": round(span_days, 1),
+        "users": int(len(per_user)),
+        "sessions": int(len(requests_per_burst)),
+        "requests": int(len(answers)),
+        "sessions_per_day": round(len(requests_per_burst) / span_days, 1),
+        "requests_per_day": round(len(answers) / span_days, 1),
+        "requests_per_session_mean": round(float(requests_per_burst.mean()), 3),
+        "requests_per_session_icdf": [
+            int(value) for value in requests_per_burst.quantile(quantiles)
+        ],
+        "think_time_s_icdf": [round(float(value), 1) for value in think_time.quantile(quantiles)],
+        "weekend_days_mod7": [5, 6],
+        "starts_by_hour": starts_by_hour,
+        "activity": {
+            "all": activity_spread(per_user),
+            "weekly_active": activity_spread(per_user[weeks >= WEEKLY_ACTIVE_WEEKS]),
+        },
+    }
+
+
 def main() -> int:
-    """Download BurstGPT_3 if needed, measure its conversations and write the shapes.
+    """Download the traces if needed, measure their conversations and write the shapes.
 
     Returns:
         The process exit code.
     """
+    folder = CACHE / "wildchat48"
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in WILDCHAT_FILES:
+        if not (folder / name).exists():
+            print(f"downloading {WILDCHAT_URL}{name}", file=sys.stderr)
+            urllib.request.urlretrieve(WILDCHAT_URL + name, folder / name)
+    answers = wildchat_answers(folder)
+    for country, out in WILDCHAT_OUT.items():
+        stats = {
+            "country": country or "all",
+            **wildchat_sessions(clean_and_localize(answers, country)),
+        }
+        with open(out, "w", encoding="utf-8") as file:
+            json.dump(stats, file, indent=1)
+        print(
+            f"WildChat {stats['country']}: {stats['users']:,} users, {stats['sessions']:,} "
+            f"conversations over {stats['span_days']} days, {stats['requests_per_session_mean']} "
+            f"requests each; activity sigma {stats['activity']['weekly_active']['sigma']} "
+            "(weekly active)"
+        )
+
     raw = CACHE / "BurstGPT_3.csv"
     if not raw.exists():
         CACHE.mkdir(parents=True, exist_ok=True)

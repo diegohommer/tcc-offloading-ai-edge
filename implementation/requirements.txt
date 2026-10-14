@@ -1,9 +1,11 @@
 # Python packages for the whole pipeline (versions: the ones the thesis results were produced with).
-#   simulate/, analyze/, energy/:  numpy, pyyaml (+ pandas for prepare_load_traces.py, matplotlib for plot_study.py)
+#   simulate/, analyze/, energy/:  numpy, pyyaml (+ pandas, pyarrow and tzdata for prepare_load_traces.py, matplotlib for plot_study.py)
 #   measure/ (runs on Modal GPUs): modal, datasets (GSM8K); vLLM is installed inside the Modal image
 numpy>=2.5
 pyyaml>=6.0
 pandas>=3.0
+pyarrow>=25.0
+tzdata>=2026.5
 matplotlib>=3.11
 modal>=1.5
 datasets>=5.0

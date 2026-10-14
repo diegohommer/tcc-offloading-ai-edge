@@ -19,8 +19,16 @@ from pathlib import Path
 
 import numpy as np
 
-SESSIONS = Path(__file__).resolve().parents[2] / "data" / "load_traces" / "burstgpt_sessions.json"
+TRACES = Path(__file__).resolve().parents[2] / "data" / "load_traces"
+SESSIONS = TRACES / "burstgpt_sessions.json"
 """Conversation shapes measured in BurstGPT's conversation log."""
+
+TRAFFIC = {
+    "wildchat": TRACES / "wildchat_sessions.json",
+    "wildchat-brazil": TRACES / "wildchat_brazil_sessions.json",
+    "burstgpt": SESSIONS,
+}
+"""The conversation shapes a simulation can follow (--traffic), by name."""
 
 
 def load_sessions(path: Path = SESSIONS) -> dict:
