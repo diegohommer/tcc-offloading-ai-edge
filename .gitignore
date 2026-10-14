@@ -254,3 +254,4 @@ thesis/latex/.olcli.json
 .claude/scheduled_tasks.lock
 implementation/results/study/parts/
 implementation/results/study/parts_self/
+implementation/results/study_previous/parts_self/
