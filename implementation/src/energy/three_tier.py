@@ -177,6 +177,7 @@ class OltCurve:
             rows: The sweep's batch_curve (batch 1, 2, 4, ..., 64).
             factor: Boundary multiplier on every energy figure (olt_factor).
         """
+        self._read: dict = {}  # (id of a curve, batch) -> its value there, see _at
         self.b = [r["batch"] for r in rows]
         self.pf = [r["prefill_J_per_input_token"] * factor for r in rows]
         self.dec = [r["decode_J_per_output_token"] * factor for r in rows]
@@ -202,13 +203,21 @@ class OltCurve:
         return self._at(self.pf_net, batch), self._at(self.dec_net, batch)
 
     def _at(self, ys: list[float], batch: float) -> float:
-        """Return ys interpolated log-log at this batch size, clamped to the measured range."""
-        b = min(max(batch, self.b[0]), self.b[-1])
-        for x0, x1, y0, y1 in zip(self.b, self.b[1:], ys, ys[1:]):
-            if b <= x1:
-                f = (math.log(b) - math.log(x0)) / (math.log(x1) - math.log(x0))
-                return math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
-        return ys[-1]
+        """Return ys interpolated log-log at this batch size, clamped to the measured range.
+
+        Kept per (curve, batch): a simulation asks for the same few dozen sizes millions of
+        times.
+        """
+        key = (id(ys), batch)
+        if key not in self._read:
+            b = min(max(batch, self.b[0]), self.b[-1])
+            self._read[key] = ys[-1]
+            for x0, x1, y0, y1 in zip(self.b, self.b[1:], ys, ys[1:]):
+                if b <= x1:
+                    f = (math.log(b) - math.log(x0)) / (math.log(x1) - math.log(x0))
+                    self._read[key] = math.exp(math.log(y0) + f * (math.log(y1) - math.log(y0)))
+                    break
+        return self._read[key]
 
     def rates(self, batch: float) -> tuple[float, float]:
         """Return average accounting's (J per prompt token, J per generated token) at this batch size."""
