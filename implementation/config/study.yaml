@@ -35,6 +35,7 @@ learning:
   # [choice; per household in the ablation]
   stats: pooled
   escalation: learned
+  windows: shared
   # Weight on each OLT rate a household hears on its own answers (piggyback). [choice]
   rate_alpha: 0.3
 

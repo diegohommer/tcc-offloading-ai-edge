@@ -124,7 +124,7 @@ learning:
   # RecServe's confidence windows. shared: one per tier for every household. household:
   # one per tier in every household, as a real phone and ONU would keep, started from
   # confidences shipped with the model instead of empty. [choice]
-  windows: shared
+  windows: household
 
 report:
   # What the OLT's packet carries. query = what this query cost (its share, or
