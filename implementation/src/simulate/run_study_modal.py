@@ -309,6 +309,7 @@ def main(
     label: str = "study",
     collect: bool = False,
     self_calibration: bool = False,
+    sizes: str = "",
 ):
     """Launch every piece not yet collected, or collect what the volume holds, then merge.
 
@@ -321,6 +322,8 @@ def main(
         self_calibration: Run static_day and static_hour relearned under themselves, split
             by beta, and add them to the runs already merged as static_day_self and
             static_hour_self.
+        sizes: Comma-separated household counts to launch (all when empty), the rest being
+            run on the laptop (SIZES=... run_study.sh); merging still waits for every count.
     """
     folder = Path(out) if out else STUDY
     if self_calibration and label == "study":
@@ -333,7 +336,7 @@ def main(
         for tag, seed, flags in study_jobs()
         if not wanted or tag in wanted
     ]
-    sizes = study_sizes()
+    sizes_wanted, sizes = sizes, study_sizes()
 
     if collect:
         # --- Bring down whatever finished, even while this machine was away ---
@@ -361,10 +364,11 @@ def main(
                 if not (parts / f"{piece_name(tag, seed, size)}{beta_part(beta)}.json").exists()
             ]
         else:
+            launch = [int(size) for size in sizes_wanted.split(",") if size] or study_sizes()
             jobs = [
                 (tag, seed, flags, size, label, "")
                 for tag, seed, flags in runs
-                for size in sizes
+                for size in launch
                 if not (parts / f"{piece_name(tag, seed, size)}.json").exists()
             ]
         print(f"{len(jobs)} pieces on Modal, one container each, writing to {folder}")

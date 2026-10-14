@@ -7,12 +7,19 @@
 #                 week only, and with whole weeks departing too               x 3 seeds
 #   sensitivity   one change each: average accounting; a 2x or 5x cheaper ONU; the
 #                 OLT's energy x1.07 (Latin America's PUE, 1.65) or x1.75; two active
-#                 users per household; statistics learned per household      x 3 seeds
+#                 users per household; statistics learned per household; users all
+#                 alike or far apart in how much they chat; BurstGPT's office-hours
+#                 conversations, or WildChat's Brazilians only, instead of
+#                 WildChat's users worldwide                                 x 3 seeds
 # Runs already finished are skipped, so the script can be restarted. While it runs,
 # nothing suspends the laptop: neither idle time (GNOME's and logind's) nor closing
 # the lid.
 #   bash src/simulate/run_study.sh [parallel jobs] [cores]   # e.g. 6 jobs pinned to cores 4-9
 #   bash src/simulate/run_study.sh --list                    # print the runs and exit
+#   SIZES=1000,2000,5000 bash src/simulate/run_study.sh 6    # only these household counts,
+#       one piece each in results/study/parts/, as run_study_modal.py writes them, so the
+#       laptop and Modal can share a study (Modal: --sizes 10000,20000); merge with
+#       modal run src/simulate/run_study_modal.py --collect
 # On Modal instead, every run in parallel: modal run src/simulate/run_study_modal.py
 # Jobs run at the lowest CPU priority; with [cores] they are also confined to those
 # cores (taskset), so the rest of the machine stays free. On this laptop (Core 5
@@ -36,6 +43,10 @@ jobs() {
     echo "olt1.75 $seed --olt-scale 1.75"
     echo "users2 $seed --users-per-home 2"
     echo "perhousehold $seed --stats household"
+    echo "act0 $seed --activity-sigma 0"
+    echo "act2 $seed --activity-sigma 2"
+    echo "burstgpt $seed --traffic burstgpt"
+    echo "brazil $seed --traffic wildchat-brazil"
   done
 }
 [ "${1:-}" = "--list" ] && { jobs; exit 0; }
@@ -77,6 +88,21 @@ fi
 
 PIN=()
 [ -n "${2:-}" ] && PIN=(taskset -c "$2")
+if [ -n "${SIZES:-}" ]; then
+  # one line per piece: tag, seed, household count, then the run's flags
+  pieces() { jobs | while read -r tag seed flags; do
+    for size in ${SIZES//,/ }; do echo "$tag $seed $size $flags"; done; done; }
+  mkdir -p "$OUT/parts"
+  pieces | "${INHIBIT[@]}" "${PIN[@]}" nice -n 19 xargs -P "${1:-6}" -L 1 bash -c '
+    tag=$0 seed=$1 size=$2; shift 2
+    name='"$OUT"'/parts/study_${tag}_seed${seed}_n${size}
+    [ -f "$name.json" ] && exit 0
+    '"$PY"' src/simulate/simulate.py --config config/study.yaml --seed "$seed" "$@" \
+        --subscribers "$size" --out "$name.csv" > "$name.txt" 2>&1
+    echo "done $name"'
+  exit 0
+fi
+
 jobs | "${INHIBIT[@]}" "${PIN[@]}" nice -n 19 xargs -P "${1:-6}" -L 1 bash -c '
   tag=$0 seed=$1; shift
   name='"$OUT"'/study_${tag}_seed${seed}

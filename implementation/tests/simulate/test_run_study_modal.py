@@ -33,7 +33,7 @@ def _simulate(tmp_path, name, subscribers, flags=()):
 def test_study_jobs_are_the_runs_run_study_sh_lists():
     """Every scenario runs at three seeds, each with the flags run_study.sh gives it."""
     jobs = study_jobs()
-    assert len(jobs) == 30
+    assert len(jobs) == 42
     assert {seed for _, seed, _ in jobs} == {7, 8, 9}
     flags = {tag: tag_flags for tag, _, tag_flags in jobs}
     assert flags["main"] == []

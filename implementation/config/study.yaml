@@ -1,8 +1,10 @@
-# The case study's settings (energy_tests.md §9): RecServe, the static tables and
-# the broadcast policy (the OLT's cost broadcast on the PON). Everything not listed
-# here is config/simulation.yaml's default; each value below says why the study
-# uses it. run_study.sh varies only
-# the seed and the few settings its sensitivity runs name.
+# The case study's settings (energy_tests.md §9): RecServe, the timetable and the
+# broadcast policy (the OLT's cost broadcast on the PON). Everything not listed here is
+# config/simulation.yaml's default, which is also where the realism settings live
+# (published answer lengths, escalation at beta, one RecServe window per household,
+# follow-ups after the answer with their context, the ONU's queue, uneven households);
+# each value below says why the study uses it. run_study.sh varies only the seed and the
+# few settings its sensitivity runs name.
 extends: simulation.yaml
 
 traffic:
@@ -11,12 +13,6 @@ traffic:
   # about 2,000 it almost never holds two queries at once and every answer pays the
   # lonely rate. run_study.sh sweeps the rest of the range. [swept]
   subscribers: [1000, 2000, 5000, 10000, 20000]
-  # Follow-ups at a fixed time after the previous message: the setting results/study/
-  # was run with.
-  timing: fixed
-  activity_sigma: null
-  context: none
-  onu_queue: false
 
 energy:
   # Only what a query adds: the energy a routing decision actually changes.
@@ -24,21 +20,16 @@ energy:
   accounting: marginal
 
 policy:
-  # RecServe; RecServe without the ONU (control); the OLT's cost from a table set in
-  # advance, one rate per day (static_day) or per hour (static_hour, the timetable);
-  # the OLT's cost broadcast on the PON (broadcast: the proposal); the oracle (the
-  # broadcast with no delay); broadcast fed only by the household's own answers
-  # (piggyback: ablation).
-  policies: [recserve, recserve_no_onu, static_day, static_hour, broadcast, oracle, piggyback]
+  # RecServe; RecServe without the ONU (control); the OLT's cost from a timetable, one
+  # rate per hour of a weekday or weekend day (static_hour); the OLT's cost broadcast on
+  # the PON (broadcast: the proposal); the OLT's rate heard only on the household's own
+  # answers (piggyback: ablation); each tier answering every query alone (references).
+  policies: [recserve, recserve_no_onu, static_hour, broadcast, piggyback, user_alone, onu_alone, olt_alone]
+  # The timetable is relearned while it runs, since it changes the load it describes,
+  # as the thesis describes it. [choice]
+  calibration: self
 
 learning:
-  # Question statistics pooled across households, for every energy-aware policy
-  # alike, so they differ only in where the OLT's cost comes from, and escalation
-  # rates learned from the answers: the settings results/study/ was run with.
-  # [choice; per household in the ablation]
-  stats: pooled
-  escalation: learned
-  windows: shared
   # Weight on each OLT rate a household hears on its own answers (piggyback). [choice]
   rate_alpha: 0.3
 
