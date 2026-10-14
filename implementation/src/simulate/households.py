@@ -44,6 +44,7 @@ class Households:
         sessions_per_day: How many conversations that is, at the measured length.
         burst_sigma: Log-sd of the factor the whole population's load drifts by (0: none).
         burst_hours: How long a departure from the timetable lasts (correlation time).
+        share: Each household's share of the conversations, or None when all are equal.
     """
 
     # ==========================================
@@ -57,6 +58,8 @@ class Households:
         stats: dict | None = None,
         burst_sigma: float = 0.0,
         burst_hours: float = 12.0,
+        activity_sigma: float | None = None,
+        seed: int = 0,
     ):
         """Size the population.
 
@@ -67,6 +70,10 @@ class Households:
             stats: The measured conversation shapes (load_sessions() by default).
             burst_sigma: Log-sd of the drifting load factor (0: the timetable, plus noise).
             burst_hours: Its correlation time, in hours.
+            activity_sigma: None for households that all talk alike. Otherwise each holds a
+                Poisson number of active users (mean `users`), each as active as a
+                log-normal factor with mean 1 and this log-sd says.
+            seed: Random seed of who lives where, the same for every stream drawn.
         """
         self.stats = stats or load_sessions()
         self.count, self.users, self.per_user_day = count, users, per_user_day
@@ -78,6 +85,17 @@ class Households:
         self._think = np.array(self.stats["think_time_s_icdf"])
         self.weekend = set(self.stats["weekend_days_mod7"])
         """Days of the week (index mod 7) the trace runs quiet."""
+
+        self.share = None
+        if activity_sigma is not None:
+            rng = np.random.default_rng([seed, 4242])
+            residents = rng.poisson(users, count)
+            activity = np.exp(
+                rng.normal(-(activity_sigma**2) / 2, activity_sigma, int(residents.sum()))
+            )
+            per_home = np.bincount(np.repeat(np.arange(count), residents), activity, count)
+            if per_home.sum() > 0:
+                self.share = per_home / per_home.sum()
 
         per_day = self.stats["sessions_per_day"]
         self._starts = {
@@ -121,8 +139,8 @@ class Households:
 
         Conversations open through the day following the measured hour-of-day shape, times
         the drifting load factor. Each one holds a measured number of messages, spaced by
-        measured pauses, and belongs to one household drawn at random: BurstGPT has no user
-        id, so there is nothing to say which households talk more than others.
+        measured pauses, and belongs to one household drawn at random, in proportion to its
+        share of the activity when households differ.
 
         Args:
             questions: The question indices that can be asked.
@@ -170,7 +188,10 @@ class Households:
         times = opens_h[which] + offsets
 
         # --- One household and one question per message ---
-        home = rng.integers(0, self.count, total)[which]
+        if self.share is None:
+            home = rng.integers(0, self.count, total)[which]
+        else:
+            home = rng.choice(self.count, total, p=self.share)[which]
         asked = question_pool[rng.integers(0, len(question_pool), messages)]
 
         order = np.argsort(times, kind="stable")

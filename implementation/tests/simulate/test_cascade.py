@@ -44,6 +44,8 @@ def _settings(**overrides):
         "windows": "shared",
         "seed": 7,
         "timing": "fixed",
+        "context": "none",
+        "onu_queue": False,
         "report_window": 5.0,
         "report": "window",
         "broadcast_interval_s": 10.0,
@@ -216,3 +218,41 @@ def test_run_after_answer_waits_for_the_answer_before_the_follow_up(setup, timin
     assert (metrics["mean_olt_batch"] > 1.0) == batched
     if not batched:
         assert metrics["mean_olt_batch"] == pytest.approx(1.0)
+
+
+def test_run_context_carry_makes_a_follow_up_dearer(setup):
+    """A follow-up whose prompt holds the first turn costs more prefill than one that does not."""
+    setup.stream = [(0, 1.0, 0), (1, 1.0, 0)]
+    setup.follow = [(1, 0.0), None]
+    joules = {}
+    for context in ("none", "carry"):
+        setup.settings = _settings(timing="after-answer", context=context)
+        joules[context] = run(setup, 0.5, "olt_alone")[0]["J_per_query"]
+    assert joules["carry"] > joules["none"]
+
+
+def test_run_onu_queue_makes_a_second_query_wait(setup):
+    """Two queries at once from one home: with a queue, the second waits for the first."""
+    setup.stream = [(0, 1.0, 0), (1, 1.0, 0)]
+    setup.follow = [None, None]
+    latency = {}
+    for queue in (False, True):
+        setup.settings = _settings(onu_queue=queue)
+        latency[queue] = run(setup, 0.5, "onu_alone")[0]["latency_s_mean"]
+    assert latency[True] > latency[False]
+
+
+@pytest.mark.parametrize("policy", POLICIES)
+def test_run_settles_every_query_under_the_realistic_settings(setup, policy):
+    """Published lengths, beta, own windows, after-answer timing, context and the ONU queue."""
+    setup.settings = _settings(
+        stats="published",
+        escalation="beta",
+        windows="household",
+        timing="after-answer",
+        context="carry",
+        onu_queue=True,
+    )
+    metrics, per_hour, _ = run(setup, 0.6, policy)
+    assert sum(metrics[f"final_{tier}"] for tier in TIERS) == pytest.approx(1.0)
+    assert sum(hour["queries"] for hour in per_hour) == len(setup.stream)

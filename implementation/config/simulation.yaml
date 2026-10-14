@@ -41,6 +41,11 @@ traffic:
   # 2.5 billion messages a day over more than 700 million weekly users. BurstGPT's
   # campus trace gives about 4 independently. [source: Chatterji et al.]
   per_user_day: 3.6
+  # How unevenly households talk. null: every household alike. A number: each holds a
+  # Poisson number of active users (mean users_per_home), each as active as a log-normal
+  # factor with mean 1 and this log-sd; the total stays the same. No source gives the
+  # spread across users (Chatterji et al. report only averages). [choice: swept]
+  activity_sigma: 1.0
   # How far the whole population's load drifts from the timetable (log-sd of a
   # shared factor with mean 1), and how long a departure lasts (correlation
   # time, hours). 0 = every day follows the average day, plus counting noise.
@@ -56,6 +61,15 @@ traffic:
   # has arrived (the results in results/study/). BurstGPT's pauses run from request to
   # request, so they include the cloud's answer time. [data]
   timing: after-answer
+  # What a follow-up's prompt holds. carry: the earlier turns too (each question and the
+  # answer the user got), so prefill energy, prefill time and bytes grow along the
+  # conversation; no tier reuses a cached prefix. none: only its own question. The
+  # recorded answers stay single-turn either way. Needs timing: after-answer, so the
+  # answer before is known. [choice]
+  context: carry
+  # A household's ONU answers one query at a time, in the order they were sent, so a
+  # second one waits; false: it answers any number at once. [choice]
+  onu_queue: true
   # Days simulated, and the days before them the timetable is observed over. A month
   # is what an operator would have watched before shipping a table. [choice]
   test_days: 28

@@ -14,6 +14,9 @@ traffic:
   # Follow-ups at a fixed time after the previous message: the setting results/study/
   # was run with.
   timing: fixed
+  activity_sigma: null
+  context: none
+  onu_queue: false
 
 energy:
   # Only what a query adds: the energy a routing decision actually changes.

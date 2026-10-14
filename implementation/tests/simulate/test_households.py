@@ -143,3 +143,22 @@ def test_stream_links_chain_each_conversation_by_its_pauses(pair_stats):
         assert pause_s == pytest.approx(60.0)
         assert (stream[successor][1] - stream[index][1]) * 3600 == pytest.approx(pause_s)
     assert len({successor for _, (successor, _) in linked}) == len(linked)
+
+
+def test_uneven_activity_keeps_the_total_and_one_population(pair_stats):
+    """Uneven households send what equal ones do, and the same homes talk in every stream."""
+    equal = Households(400, 1.0, 4.0, pair_stats)
+    uneven = Households(400, 1.0, 4.0, pair_stats, activity_sigma=1.0, seed=2)
+    assert uneven.share.sum() == pytest.approx(1.0)
+    assert (uneven.share == 0).any()  # a Poisson count leaves some homes with no user
+    silent = set(np.flatnonzero(uneven.share == 0))
+    for seed in (1, 2):
+        stream = uneven.stream(QUESTIONS, 7, 0, seed=seed)
+        assert not silent & {household for _, _, household in stream}
+        assert len(stream) == pytest.approx(len(equal.stream(QUESTIONS, 7, 0, seed=seed)), rel=0.1)
+
+
+def test_uneven_activity_concentrates_messages_in_fewer_homes(pair_stats):
+    """With a wide spread, the busiest tenth of homes sends far more than a tenth."""
+    homes = Households(1000, 1.0, 4.0, pair_stats, activity_sigma=1.5, seed=3)
+    assert np.sort(homes.share)[-100:].sum() > 0.3

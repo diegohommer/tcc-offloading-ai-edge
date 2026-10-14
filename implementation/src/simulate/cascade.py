@@ -220,6 +220,10 @@ def run(setup: RunSetup, beta: float, policy: str):
         pending = [(hour, index) for index, (_, hour, _) in enumerate(setup.stream)]
     heapq.heapify(pending)
 
+    # Earlier turns a message carries (--context carry): stream index -> (tokens, bytes).
+    context: dict[int, tuple[float, float]] = {}
+    onu_free: dict[int, float] = {}  # household -> second its ONU finishes what it holds
+
     def settle(index, hour, tier, spent, took, packet):
         """Record a finished query, let its answer travel back down, and queue the next message.
 
@@ -236,7 +240,8 @@ def run(setup: RunSetup, beta: float, policy: str):
         answer = setup.answers[question][tier]
         correct += answer["correct"]
         confidence_delivered += answer["conf"]
-        question_bytes = setup.answers[question]["user"]["qb"]
+        carried_tokens, carried_bytes = context.pop(index, (0.0, 0.0))
+        question_bytes = setup.answers[question]["user"]["qb"] + carried_bytes
         # RecServe's communication burden: the input goes up and the output comes down once
         # per hop, 2(i-1)(|x|+|y|). Skipping a tier saves inference, not bytes.
         comm_bytes += 2 * TIERS.index(tier) * (question_bytes + answer["ab"])
@@ -268,6 +273,12 @@ def run(setup: RunSetup, beta: float, policy: str):
         if after_answer and setup.follow[index] is not None:
             successor, pause_s = setup.follow[index]
             heapq.heappush(pending, ((hour * 3600 + took + pause_s) / 3600, successor))
+            if settings.context == "carry":
+                # the next prompt holds this turn's question and the answer the user got
+                context[successor] = (
+                    carried_tokens + setup.answers[question]["user"]["tp"] + answer["tg"],
+                    question_bytes + answer["ab"],
+                )
 
     def land(completions):
         """Settle every query the OLT has just finished.
@@ -283,8 +294,9 @@ def run(setup: RunSetup, beta: float, policy: str):
             if prices.accounting == "marginal":
                 cost = prices.added_rates(query["running"])
             else:
+                prompt = answer["tp"] + query["carried"]
                 cost = (
-                    prefill_joules / answer["tp"] if answer["tp"] else 0.0,
+                    prefill_joules / prompt if prompt else 0.0,
                     decode_joules / answer["tg"] if answer["tg"] else 0.0,
                 )
             if query["belief"] is not None:
@@ -328,7 +340,7 @@ def run(setup: RunSetup, beta: float, policy: str):
                 answer = setup.answers[query["question"]][top]
                 query["running"] = server.batch
                 query["fresh"] = server.reported_rate()[1]  # what the OLT itself says now
-                server.admit(query_id, answer["tp"], answer["tg"])
+                server.admit(query_id, answer["tp"] + query["carried"], answer["tg"])
             elif after_answer and server.next_finish() <= stop:
                 land(server.advance(server.next_finish()))
             else:
@@ -375,7 +387,8 @@ def run(setup: RunSetup, beta: float, policy: str):
                     tier: OwnStats(settings.alpha, shipped_tokens[tier]) for tier in TIERS[:TOP]
                 }
         learners = households[household]
-        prompt_tokens = setup.answers[question]["user"]["tp"]
+        carried = context.get(index, (0.0, 0.0))[0]  # tokens of earlier turns in the prompt
+        prompt_tokens = setup.answers[question]["user"]["tp"] + carried
         packet: dict[str, tuple[float, float, float]] = {}
         spent = took = 0.0
         here = ALONE.get(policy, 0)
@@ -419,6 +432,7 @@ def run(setup: RunSetup, beta: float, policy: str):
                     "packet": packet,
                     "reached": now + took,
                     "belief": belief,
+                    "carried": carried,
                 }
                 heapq.heappush(arrivals, (now + took, next_id))
                 next_id += 1
@@ -427,8 +441,14 @@ def run(setup: RunSetup, beta: float, policy: str):
             # --- A tier below answers at once: replay it, charge the true energy ---
             answer = setup.answers[question][tier]
             prompt_rate, generated_rate = prices.rates(tier, 1)
-            spent += prompt_rate * answer["tp"] + generated_rate * answer["tg"]
-            took += prices.seconds(tier, 1, answer["tp"], answer["tg"])
+            spent += prompt_rate * (answer["tp"] + carried) + generated_rate * answer["tg"]
+            seconds = prices.seconds(tier, 1, answer["tp"] + carried, answer["tg"])
+            if tier == "onu" and settings.onu_queue:
+                # the household's ONU serves one query at a time, in the order they were sent
+                start = max(now + took, onu_free.get(household, 0.0))
+                took = start - now
+                onu_free[household] = start + seconds
+            took += seconds
             packet[tier] = (prompt_rate, generated_rate, answer["tg"])
 
             # --- RecServe's test: escalate below the beta-quantile of recent confidences ---

@@ -201,11 +201,26 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add("--warmup", type=int, help="reports per tier before a household decides")
     add("--users-per-home", type=float, help="weekly-active LLM users in one household")
     add("--per-user-day", type=float, help="messages one active user sends a day")
+    add(
+        "--activity-sigma",
+        type=float,
+        help="log-sd of each user's activity, with Poisson users per home (unset: all alike)",
+    )
     add("--burst-sigma", type=float, help="log-sd of the load's drift around the timetable")
     add("--burst-hours", type=float, help="how long a departure from the timetable lasts")
     add("--test-days", type=int, help="days simulated")
     add("--calibration-days", type=int, help="days before them the timetable is observed over")
     add("--broadcast-interval-s", type=float, help="seconds between the OLT's broadcasts")
+    add(
+        "--context",
+        choices=("carry", "none"),
+        help="a follow-up's prompt carries the earlier turns, or only its own question",
+    )
+    add(
+        "--onu-queue",
+        action=argparse.BooleanOptionalAction,
+        help="a household's ONU answers one query at a time",
+    )
     add(
         "--timing",
         choices=("after-answer", "fixed"),
@@ -351,6 +366,8 @@ def prepare_population(subscribers, settings, answers, curve, prices):
         settings.per_user_day,
         burst_sigma=settings.burst_sigma,
         burst_hours=settings.burst_hours,
+        activity_sigma=settings.activity_sigma,
+        seed=settings.seed,
     )
     questions = sorted(answers)
 
@@ -394,6 +411,8 @@ def prepare_population(subscribers, settings, answers, curve, prices):
                 settings.per_user_day,
                 burst_sigma=settings.burst_sigma,
                 burst_hours=settings.burst_hours,
+                activity_sigma=settings.activity_sigma,
+                seed=settings.seed,
             )
             static_rates[name] = observed_tables(other).get("static_day")
 
@@ -554,6 +573,9 @@ def output_path(s) -> Path:
         + ("_plearned" if s.escalation == "learned" else "")
         + ("_hwindows" if s.windows == "household" else "")
         + ("_fixedtiming" if s.timing == "fixed" else "")
+        + (f"_act{s.activity_sigma:g}" if s.activity_sigma is not None else "")
+        + ("_nocontext" if s.context == "none" else "")
+        + ("_noonuqueue" if not s.onu_queue else "")
         + (f"_u{s.users_per_home:g}x{s.per_user_day:g}" if s.users_per_home != 1 else "")
         + (f"_burst{s.burst_sigma:g}x{s.burst_hours:g}h" if s.burst_sigma else "")
         + ("_marginal" if s.accounting == "marginal" else "")
