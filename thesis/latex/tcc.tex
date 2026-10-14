@@ -703,19 +703,23 @@ with continuous batching; calibration and test months; seeds.}
 
 Of the quantities the policy reads, only the OLT's cost changes over time in a way the
 simulation tries to reproduce, following the load of the households and its drift, and
-the others are held still. The user device and the ONU spend a fixed energy per token, while
-a real phone or gateway spends more or less depending on its temperature, its battery
-and whatever else it is running. Every household has the same three models and asks
-questions drawn at random from the same benchmark, so the answer lengths each tier
+the others are held still. The user device and the ONU spend a fixed energy per token,
+while a real phone or gateway spends more or less depending on its temperature, its
+battery and whatever else it is running. Every household has the same three models and
+asks questions drawn at random from the same benchmark, so the answer lengths each tier
 publishes barely move, while real households would differ in their models and in what
-they ask. Every message is an independent problem, so a conversation never grows the
-prompt with earlier turns. A follow-up is sent a pause after the previous answer
-arrives, but the pauses were measured on a cloud service from one request to the next,
-so they include that service's own answer time and slightly overstate how long a user
-waits before writing again. The policy also uses one mean answer length per model, while the standard
-deviation of a single answer's length is 30 to 40\% of that mean, and the length could
-be predicted from the query itself~\cite{zheng2023response}. The results therefore show what the
-policy does when the main uncertainty it faces is the OLT's load.
+they ask. A follow-up carries the earlier turns of its conversation in its prompt, but
+its answer is still the one recorded for its question alone. It is sent a pause after
+the previous answer arrives, and the pauses, measured on a cloud service from one
+request to the next, include that service's own answer time, so they slightly overstate
+how long a user waits before writing again. How unevenly the households talk is also
+set by us, and the evaluation varies it, since OpenAI's study of ChatGPT use reports the
+messages per user only as averages over users who signed up at the same
+time~\cite{chatterji2025how}. The policy uses one mean
+answer length per model, while the standard deviation of a single answer's length is 30
+to 40\% of that mean, and the length could be predicted from the query
+itself~\cite{zheng2023response}. The results therefore show what the policy does when
+the main uncertainty it faces is the OLT's load.
 
 \section{Evaluation}
 \label{sec:evaluation}
