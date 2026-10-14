@@ -91,15 +91,19 @@ PIN=()
 if [ -n "${SIZES:-}" ]; then
   # one line per piece: tag, seed, household count, then the run's flags
   pieces() { jobs | while read -r tag seed flags; do
-    for size in ${SIZES//,/ }; do echo "$tag $seed $size $flags"; done; done; }
+    # no trailing blank: xargs -L would join the next line to it
+    for size in ${SIZES//,/ }; do echo "$tag $seed $size${flags:+ $flags}"; done; done; }
   mkdir -p "$OUT/parts"
   pieces | "${INHIBIT[@]}" "${PIN[@]}" nice -n 19 xargs -P "${1:-6}" -L 1 bash -c '
     tag=$0 seed=$1 size=$2; shift 2
     name='"$OUT"'/parts/study_${tag}_seed${seed}_n${size}
     [ -f "$name.json" ] && exit 0
-    '"$PY"' src/simulate/simulate.py --config config/study.yaml --seed "$seed" "$@" \
-        --subscribers "$size" --out "$name.csv" > "$name.txt" 2>&1
-    echo "done $name"'
+    if '"$PY"' src/simulate/simulate.py --config config/study.yaml --seed "$seed" "$@" \
+        --subscribers "$size" --out "$name.csv" > "$name.txt" 2>&1; then
+      echo "done $name"
+    else
+      echo "FAILED $name (see $name.txt)"
+    fi'
   exit 0
 fi
 
