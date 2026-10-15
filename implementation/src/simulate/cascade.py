@@ -198,6 +198,13 @@ def run(setup: RunSetup, beta: float, policy: str):
     energy = correct = forwarded = skipped = confidence_delivered = comm_bytes = pon_bytes = 0.0
     rate_errors, latencies = [], []
     answered_at = collections.Counter()
+    # Where the energy and the bytes go, for explaining the totals (diagnostics only).
+    energy_at = collections.Counter()  # tier -> joules it spent, over every query
+    comm_at = collections.Counter()  # answering tier -> RecServe burden bytes
+    follow_up_at = collections.Counter()  # answering tier -> follow-ups it answered
+    carried_at = collections.Counter()  # answering tier -> context bytes its answers carried
+    comm_follow_ups = 0.0
+    follow_ups = {link[0] for link in setup.follow if link is not None} if setup.follow else set()
     hourly = [[0.0, 0, 0, 0, 0] for _ in range(24)]
     seen: dict = {}  # (day type, hour) -> [sum of J/prompt token, sum of J/gen token, answers]
     arrivals: list = []  # heap of (second it reaches the OLT, query id)
@@ -236,7 +243,7 @@ def run(setup: RunSetup, beta: float, policy: str):
             packet: {tier: (J/prompt token, J/generated token, tokens)} riding back down.
         """
         question, _, household = setup.stream[index]
-        nonlocal energy, correct, confidence_delivered, comm_bytes, pon_bytes
+        nonlocal energy, correct, confidence_delivered, comm_bytes, pon_bytes, comm_follow_ups
         answer = setup.answers[question][tier]
         correct += answer["correct"]
         confidence_delivered += answer["conf"]
@@ -244,7 +251,13 @@ def run(setup: RunSetup, beta: float, policy: str):
         question_bytes = setup.answers[question]["user"]["qb"] + carried_bytes
         # RecServe's communication burden: the input goes up and the output comes down once
         # per hop, 2(i-1)(|x|+|y|). Skipping a tier saves inference, not bytes.
-        comm_bytes += 2 * TIERS.index(tier) * (question_bytes + answer["ab"])
+        burden = 2 * TIERS.index(tier) * (question_bytes + answer["ab"])
+        comm_bytes += burden
+        comm_at[tier] += burden
+        carried_at[tier] += carried_bytes
+        if index in follow_ups:
+            follow_up_at[tier] += 1
+            comm_follow_ups += burden
         # What crosses the shared PON fibre: question up, answer down, once, for every query
         # the OLT answers.
         pon_bytes += (question_bytes + answer["ab"]) if tier == top else 0
@@ -313,6 +326,7 @@ def run(setup: RunSetup, beta: float, policy: str):
                 query["packet"][top] = (*reported, olt_own)
             else:
                 query["packet"][top] = (*reported, answer["tg"])
+            energy_at[top] += prefill_joules + decode_joules
             settle(
                 query["index"],
                 query["hour"],
@@ -441,7 +455,9 @@ def run(setup: RunSetup, beta: float, policy: str):
             # --- A tier below answers at once: replay it, charge the true energy ---
             answer = setup.answers[question][tier]
             prompt_rate, generated_rate = prices.rates(tier, 1)
-            spent += prompt_rate * (answer["tp"] + carried) + generated_rate * answer["tg"]
+            here_joules = prompt_rate * (answer["tp"] + carried) + generated_rate * answer["tg"]
+            spent += here_joules
+            energy_at[tier] += here_joules
             seconds = prices.seconds(tier, 1, answer["tp"] + carried, answer["tg"])
             if tier == "onu" and settings.onu_queue:
                 # the household's ONU serves one query at a time, in the order they were sent
@@ -496,6 +512,23 @@ def run(setup: RunSetup, beta: float, policy: str):
         "mean_olt_batch": server.mean_batch,
         "olt_queued": server.queued / server.admitted if server.admitted else 0.0,
         **{f"final_{tier}": answered_at[tier] / total for tier in TIERS},
+        # --- Diagnostics: where the energy and RecServe's burden come from ---
+        **{f"J_{tier}_per_query": energy_at[tier] / total for tier in TIERS},
+        **{f"comm_MB_{tier}_per_1k": comm_at[tier] / total * 1000 / 1e6 for tier in TIERS},
+        "comm_MB_followups_per_1k": comm_follow_ups / total * 1000 / 1e6,
+        "followup_share": len(follow_ups) / total,
+        **{
+            f"followup_share_{tier}": (
+                follow_up_at[tier] / answered_at[tier] if answered_at[tier] else float("nan")
+            )
+            for tier in TIERS
+        },
+        **{
+            f"carried_kB_{tier}": (
+                carried_at[tier] / answered_at[tier] / 1e3 if answered_at[tier] else float("nan")
+            )
+            for tier in TIERS
+        },
     }
     per_hour = [
         {

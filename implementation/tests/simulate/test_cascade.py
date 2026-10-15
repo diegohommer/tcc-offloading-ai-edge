@@ -256,3 +256,18 @@ def test_run_settles_every_query_under_the_realistic_settings(setup, policy):
     metrics, per_hour, _ = run(setup, 0.6, policy)
     assert sum(metrics[f"final_{tier}"] for tier in TIERS) == pytest.approx(1.0)
     assert sum(hour["queries"] for hour in per_hour) == len(setup.stream)
+
+
+@pytest.mark.parametrize("policy", ["recserve", "broadcast", "olt_alone"])
+def test_run_breakdowns_add_up_to_the_totals(setup, policy):
+    """Energy by tier sums to J per query, and the burden by answering tier to the burden."""
+    setup.settings = _settings(stats="published", escalation="beta", timing="after-answer")
+    metrics, _, _ = run(setup, 0.7, policy)
+    assert sum(metrics[f"J_{tier}_per_query"] for tier in TIERS) == pytest.approx(
+        metrics["J_per_query"]
+    )
+    assert sum(metrics[f"comm_MB_{tier}_per_1k"] for tier in TIERS) == pytest.approx(
+        metrics["comm_MB_per_1k_queries"]
+    )
+    assert metrics["comm_MB_user_per_1k"] == 0.0  # a phone's own answer crosses no hop
+    assert 0 < metrics["comm_MB_followups_per_1k"] <= metrics["comm_MB_per_1k_queries"]
