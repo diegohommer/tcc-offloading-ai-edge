@@ -223,6 +223,29 @@ def simulate_piece(
     return {"name": name, "returncode": result.returncode, "files": files}
 
 
+@app.function(image=image, cpu=0.25, memory=512, timeout=24 * 60 * 60)
+def dispatch(jobs: list) -> list[str]:
+    """Run every piece from inside Modal, so the launching machine can go away (--remote).
+
+    A detached app keeps only the last function its client triggered alive. Pieces mapped
+    from the client die with it; mapped from here, they live as long as this call does.
+    Each piece keeps its own files in the volume, so this only reports how they went.
+
+    Args:
+        jobs: simulate_piece's arguments, one tuple per piece.
+
+    Returns:
+        One "done"/"failed" line per piece.
+    """
+    report = []
+    for result in simulate_piece.starmap(jobs, order_outputs=False, return_exceptions=True):
+        if isinstance(result, Exception):
+            report.append(f"failed: {result!r}")
+        else:
+            report.append(f"{'failed' if result['returncode'] else 'done'}: {result['name']}")
+    return report
+
+
 # ==========================================
 # The study, from the launching machine
 # ==========================================
@@ -311,6 +334,7 @@ def main(
     self_calibration: bool = False,
     sizes: str = "",
     skip: str = "",
+    remote: bool = False,
 ):
     """Launch every piece not yet collected, or collect what the volume holds, then merge.
 
@@ -326,6 +350,8 @@ def main(
         sizes: Comma-separated household counts to launch (all when empty), the rest being
             run on the laptop (SIZES=... run_study.sh); merging still waits for every count.
         skip: Comma-separated piece names not to launch, e.g. those the laptop is running.
+        remote: Dispatch the pieces from inside Modal (with --detach), so this machine can
+            sleep or disconnect; collect them later with --collect.
     """
     folder = Path(out) if out else STUDY
     if self_calibration and label == "study":
@@ -375,6 +401,11 @@ def main(
                 and piece_name(tag, seed, size) not in skip.split(",")
             ]
         print(f"{len(jobs)} pieces on Modal, one container each, writing to {folder}")
+        if remote:
+            print("dispatched from Modal: safe to disconnect; collect later with --collect")
+            for line in dispatch.remote(jobs):
+                print(f"  {line}", flush=True)
+            return
         for result in simulate_piece.starmap(jobs, order_outputs=False, return_exceptions=True):
             if isinstance(result, Exception):
                 print(f"  failed: {result!r}", flush=True)
