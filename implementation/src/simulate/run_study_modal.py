@@ -170,7 +170,7 @@ def add_self_calibrated(report: dict, new_rows: list[dict]) -> dict:
 @app.function(
     image=image,
     cpu=1.0,
-    memory=8192,
+    memory=4096,  # a 20,000-home run holds about 2 GB
     timeout=24 * 60 * 60,
     volumes={VOLUME: results_volume},
 )
