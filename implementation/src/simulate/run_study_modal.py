@@ -15,6 +15,8 @@ collect whatever has finished at any time:
         # the runs already in results/study/ as static_day_self and static_hour_self
     modal run --detach src/simulate/run_study_modal.py --only main --label smoke \\
         --extra "--test-days 1 --calibration-days 1" --out /tmp/smoke   # a short check
+Pieces run locally (SIZES=... run_study.sh) merge without Modal:
+    python src/simulate/run_study_modal.py
 Then: python src/analyze/summarize_study.py -> results/study/SUMMARY.md
 """
 
@@ -272,12 +274,22 @@ def study_sizes() -> list[int]:
         return [int(size) for size in yaml.safe_load(file)["traffic"]["subscribers"]]
 
 
+LARGEST_FOR = ("main", "burst_week", "burst_all")
+"""The scenarios run at the largest household count too; the sensitivity runs stop below it,
+where each takes about seven hours."""
+
+
+def sizes_of(tag: str, sizes: list[int]) -> list[int]:
+    """Return the household counts a scenario is run at."""
+    return sizes if tag in LARGEST_FOR else [size for size in sizes if size != max(sizes)]
+
+
 def merge_finished(runs: list[tuple[str, int, list[str]]], sizes: list[int], folder: Path) -> list:
     """Merge every run whose pieces are all in folder/parts/, and return the runs still missing."""
     parts, missing = folder / "parts", []
     for tag, seed, _ in runs:
         # names like study_onu0.5_... hold a dot, so suffixes are appended, never swapped
-        stems = [piece_name(tag, seed, size) for size in sizes]
+        stems = [piece_name(tag, seed, size) for size in sizes_of(tag, sizes)]
         if not all((parts / f"{stem}.json").exists() for stem in stems):
             missing.append(f"study_{tag}_seed{seed}")
             continue
@@ -397,7 +409,8 @@ def main(
                 (tag, seed, flags, size, label, "")
                 for tag, seed, flags in runs
                 for size in launch
-                if not (parts / f"{piece_name(tag, seed, size)}.json").exists()
+                if size in sizes_of(tag, sizes)
+                and not (parts / f"{piece_name(tag, seed, size)}.json").exists()
                 and piece_name(tag, seed, size) not in skip.split(",")
             ]
         print(f"{len(jobs)} pieces on Modal, one container each, writing to {folder}")
@@ -422,3 +435,11 @@ def main(
     print(f"{len(runs) - len(missing)} of {len(runs)} runs finished in {folder}")
     if missing:
         print("still missing pieces: " + ", ".join(missing))
+
+
+if __name__ == "__main__":
+    # Merge what is in results/study/parts/ without Modal, when every piece ran locally.
+    still_missing = merge_finished(study_jobs(), study_sizes(), STUDY)
+    print(f"{len(study_jobs()) - len(still_missing)} of {len(study_jobs())} runs merged in {STUDY}")
+    if still_missing:
+        print("still missing pieces: " + ", ".join(still_missing))

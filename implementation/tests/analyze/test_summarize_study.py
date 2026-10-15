@@ -93,10 +93,28 @@ def test_main_writes_the_summary(monkeypatch, tmp_path):
     assert summarize_study.main() == 0
     summary = (tmp_path / "SUMMARY.md").read_text()
     assert summary.startswith("# Case study — summary")
-    assert "| `main` | +25.0% · - · - |" in summary
+    assert "| `main` | +25.0% · - |" in summary
 
 
 def test_main_without_runs_fails(monkeypatch, tmp_path):
     """An empty study folder is an error, not an empty summary."""
     monkeypatch.setattr(summarize_study, "STUDY", tmp_path)
     assert summarize_study.main() == 1
+
+
+def test_main_shows_a_scenario_without_the_largest_size_as_missing(monkeypatch, tmp_path):
+    """A sensitivity run that stops below the largest household count gets "-" there."""
+    big = _run()
+    for entry in big["rows"] + big["frontiers"]:
+        entry["subscribers"] = 2000
+    main_run = _run()
+    main_run["rows"] += big["rows"]
+    main_run["frontiers"] += big["frontiers"]
+    (tmp_path / "study_main_seed7.json").write_text(json.dumps(main_run))
+    (tmp_path / "study_average_seed7.json").write_text(json.dumps(_run()))
+    monkeypatch.setattr(summarize_study, "STUDY", tmp_path)
+    assert summarize_study.main() == 0
+    summary = (tmp_path / "SUMMARY.md").read_text()
+    assert "| `average` | +25.0% · - | - |" in summary
+    average = summary[summary.index("## `average`") :]
+    assert "| 2,000 |" not in average

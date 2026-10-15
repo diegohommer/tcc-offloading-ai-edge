@@ -11,6 +11,7 @@ from run_study_modal import (
     merge_finished,
     merge_pieces,
     piece_name,
+    sizes_of,
     study_jobs,
     study_sizes,
 )
@@ -105,3 +106,11 @@ def test_add_self_calibrated_matches_a_run_made_with_self_calibration(tmp_path):
             relearned = frontiers[(entry["subscribers"], "static_hour_self")]
             assert relearned["J_at_accuracy"] == entry["J_at_accuracy"]
     assert report["args"]["policies"].endswith("static_day_self,static_hour_self")
+
+
+def test_sizes_of_keeps_the_largest_count_for_the_size_sweeps_only():
+    """Main and the drift scenarios reach the largest count; the sensitivity runs stop below."""
+    sizes = [1000, 2000, 20000]
+    assert sizes_of("main", sizes) == sizes
+    assert sizes_of("burst_all", sizes) == sizes
+    assert sizes_of("onu0.5", sizes) == [1000, 2000]

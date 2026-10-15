@@ -24,26 +24,22 @@ from energy.three_tier import STUDY
 NAMES = {
     "recserve": "RecServe",
     "recserve_no_onu": "RecServe w/o ONU",
-    "static_day": "static/day",
-    "static_hour": "static/hour",
-    "static_day_self": "static/day, self",
-    "static_hour_self": "static/hour, self",
+    "static_hour": "timetable",
     "broadcast": "broadcast",
     "piggyback": "piggyback",
-    "oracle": "oracle",
+    "user_alone": "phone alone",
+    "onu_alone": "ONU alone",
+    "olt_alone": "OLT alone",
 }
-"""Display name of each policy (simulate/cascade.py explains each)."""
+"""Display name of each policy (simulate/cascade.py explains each). The study relearns the
+timetable while it runs (--calibration self), so static_hour is that timetable."""
 
 COMPARE = [
-    ("static_day", "recserve"),
-    ("static_hour", "recserve"),
     ("broadcast", "recserve"),
-    ("broadcast", "static_day"),
+    ("static_hour", "recserve"),
     ("broadcast", "static_hour"),
-    ("static_hour_self", "recserve"),
-    ("broadcast", "static_hour_self"),
     ("piggyback", "static_hour"),
-    ("oracle", "broadcast"),
+    ("broadcast", "olt_alone"),
 ]
 """(policy, baseline) pairs in the full tables: the saving of the first over the second."""
 
@@ -58,6 +54,10 @@ ORDER = [
     "olt1.75",
     "users2",
     "perhousehold",
+    "act0",
+    "act2",
+    "burstgpt",
+    "brazil",
 ]
 """Scenarios in run_study.sh's order."""
 
@@ -167,6 +167,12 @@ def describe(run):
         + (f"OLT energy x{olt_scale:g}; " if olt_scale != 1 else "")
         + f"{args['users_per_home']} active user(s) x {args['per_user_day']} messages/day per household; "
         + f"question statistics {question_statistics(args)}"
+        + (f"; traffic {args['traffic']}" if "traffic" in args else "")
+        + (
+            f"; activity spread {args['activity_sigma']}"
+            if args.get("activity_sigma") not in (None, "None")
+            else ""
+        )
         + (
             f"; load drifting sigma {burst:g} over {float(args['burst_hours']):g} h"
             if burst
@@ -214,10 +220,7 @@ def headline(runs, populations):
     sizes = [f"{size:,} homes" + (" †" if queued(main_runs, size) else "") for size in populations]
     lines = [f"## Headline — {describe(main_runs[0])}; 0.80 accuracy", ""]
 
-    lines += [
-        "### Saving over RecServe: static/day / static/hour / static/hour, self / broadcast",
-        "",
-    ]
+    lines += ["### Saving over RecServe: timetable / broadcast", ""]
     lines += header(["", *sizes])
     cells = []
     for size in populations:
@@ -225,52 +228,48 @@ def headline(runs, populations):
         cells.append(
             " / ".join(
                 percent(
-                    [saving(energy.get(policy), energy["recserve"]) for energy in per_seed], False
+                    [saving(energy.get(policy), energy.get("recserve")) for energy in per_seed],
+                    False,
                 )
-                for policy in ("static_day", "static_hour", "static_hour_self", "broadcast")
+                for policy in ("static_hour", "broadcast")
             )
         )
     lines += ["| saving | " + " | ".join(cells) + " |", ""]
 
-    lines += ["### Saving over each timetable: broadcast (oracle) · piggyback", ""]
+    lines += ["### Saving over the timetable: broadcast · piggyback", ""]
     lines += header(["", *sizes])
-    for timetable in ("static_hour", "static_hour_self"):
-        cells = []
-        for size in populations:
-            per_seed = [at(run, size, "0.80") for run in main_runs]
-            broadcast, oracle, piggyback = (
+    cells = []
+    for size in populations:
+        per_seed = [at(run, size, "0.80") for run in main_runs]
+        cells.append(
+            " · ".join(
                 percent(
-                    [saving(energy.get(policy), energy.get(timetable)) for energy in per_seed],
+                    [saving(energy.get(policy), energy.get("static_hour")) for energy in per_seed],
                     False,
                 )
-                for policy in ("broadcast", "oracle", "piggyback")
+                for policy in ("broadcast", "piggyback")
             )
-            cells.append(f"{broadcast} ({oracle}) · {piggyback}")
-        lines.append(f"| over {NAMES[timetable]} | " + " | ".join(cells) + " |")
-    lines += [""]
+        )
+    lines += ["| over the timetable | " + " | ".join(cells) + " |", ""]
 
-    lines += [
-        "### Every scenario: broadcast's saving over RecServe · over static/hour · over "
-        "static/hour, self",
-        "",
-    ]
+    lines += ["### Every scenario: broadcast's saving over RecServe · over the timetable", ""]
     lines += header(["scenario", *(f"{size:,} homes" for size in populations)])
     for scenario in [name for name in ORDER if name in runs]:
         cells = []
         for size in populations:
             per_seed = [at(run, size, "0.80") for run in runs[scenario]]
-            over_recserve = percent(
-                [saving(energy.get("broadcast"), energy["recserve"]) for energy in per_seed], False
-            )
-            over_timetable, over_self = (
+            if not any(per_seed):
+                cells.append("-")
+                continue
+            over_recserve, over_timetable = (
                 percent(
-                    [saving(energy.get("broadcast"), energy.get(timetable)) for energy in per_seed],
+                    [saving(energy.get("broadcast"), energy.get(base)) for energy in per_seed],
                     False,
                 )
-                for timetable in ("static_hour", "static_hour_self")
+                for base in ("recserve", "static_hour")
             )
             cells.append(
-                f"{over_recserve} · {over_timetable} · {over_self}"
+                f"{over_recserve} · {over_timetable}"
                 + (" †" if queued(runs[scenario], size) else "")
             )
         lines.append(f"| `{scenario}` | " + " | ".join(cells) + " |")
@@ -278,7 +277,16 @@ def headline(runs, populations):
 
 
 def scenario_tables(scenario, runs, populations):
-    """Return one scenario's full tables: energy and savings, then the other columns."""
+    """Return one scenario's full tables: energy and savings, then the other columns.
+
+    Only the household counts this scenario was run at are shown (the sensitivity runs
+    stop below the largest).
+    """
+    populations = [
+        size
+        for size in populations
+        if any(frontier["subscribers"] == size for frontier in runs[0]["frontiers"])
+    ]
     policies = [policy for policy in NAMES if policy in runs[0]["args"]["policies"].split(",")]
     pairs = [(new, old) for new, old in COMPARE if new in policies and old in policies]
     lines = [f"## `{scenario}` — {describe(runs[0])} ({len(runs)} seeds)", ""]
@@ -350,7 +358,8 @@ def main() -> int:
     populations = sorted(
         {
             frontier["subscribers"]
-            for run in next(iter(runs.values()))
+            for scenario_runs in runs.values()
+            for run in scenario_runs
             for frontier in run["frontiers"]
         }
     )
