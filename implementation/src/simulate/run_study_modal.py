@@ -310,6 +310,7 @@ def main(
     collect: bool = False,
     self_calibration: bool = False,
     sizes: str = "",
+    skip: str = "",
 ):
     """Launch every piece not yet collected, or collect what the volume holds, then merge.
 
@@ -324,6 +325,7 @@ def main(
             static_hour_self.
         sizes: Comma-separated household counts to launch (all when empty), the rest being
             run on the laptop (SIZES=... run_study.sh); merging still waits for every count.
+        skip: Comma-separated piece names not to launch, e.g. those the laptop is running.
     """
     folder = Path(out) if out else STUDY
     if self_calibration and label == "study":
@@ -370,6 +372,7 @@ def main(
                 for tag, seed, flags in runs
                 for size in launch
                 if not (parts / f"{piece_name(tag, seed, size)}.json").exists()
+                and piece_name(tag, seed, size) not in skip.split(",")
             ]
         print(f"{len(jobs)} pieces on Modal, one container each, writing to {folder}")
         for result in simulate_piece.starmap(jobs, order_outputs=False, return_exceptions=True):
