@@ -20,6 +20,7 @@
 #       one piece each in results/study/parts/, as run_study_modal.py writes them, so the
 #       laptop and Modal can share a study (Modal: --sizes 10000,20000); merge with
 #       modal run src/simulate/run_study_modal.py --collect
+#   ONLY=main,burst_week SIZES=20000 bash src/simulate/run_study.sh 7  # some scenarios only
 # On Modal instead, every run in parallel: modal run src/simulate/run_study_modal.py
 # Jobs run at the lowest CPU priority; with [cores] they are also confined to those
 # cores (taskset), so the rest of the machine stays free. On this laptop (Core 5
@@ -91,6 +92,7 @@ PIN=()
 if [ -n "${SIZES:-}" ]; then
   # one line per piece: tag, seed, household count, then the run's flags
   pieces() { jobs | while read -r tag seed flags; do
+    [ -n "${ONLY:-}" ] && [[ ",$ONLY," != *",$tag,"* ]] && continue
     # no trailing blank: xargs -L would join the next line to it
     for size in ${SIZES//,/ }; do echo "$tag $seed $size${flags:+ $flags}"; done; done; }
   mkdir -p "$OUT/parts"
