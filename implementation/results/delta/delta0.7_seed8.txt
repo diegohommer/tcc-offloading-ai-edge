@@ -1,0 +1,34 @@
+answers: gsm8k_zeroshot_user-onu-olt_n1319_20260911T023919Z.raw.jsonl, gsm8k_zeroshot_onu_n1319_20260911T031326Z.raw.jsonl
+n=1319 questions; 28 days after 28 calibration days; confidence exp(mean); OLT boundary system (x2.20), marginal accounting; OLT reports its 5-min mean; delta=0.7, window=1000; load drift sigma 0
+standalone accuracy: user 0.472  onu 0.688  olt 0.917
+per query: user 15.7 J, ONU 90.5 J (fixed)
+
+10,000 households x 1 active users x 3.6 msg/day = 36,000 messages/day in 11,225 bursts, weekends quieter; 1,010,614 queries simulated
+
+  homes  beta     policy     acc  J/query  saving    fwd   skip rate err  batch queued |   user    onu    olt
+  10000   0.1   recserve  0.5094     85.2    0.0%   0.0%   0.0%     nan%    1.1   0.0% |  89.9%   7.4%   2.7%
+  10000   0.1  broadcast  0.5094     85.2   -0.0%   0.0%   0.0%     2.6%    1.1   0.0% |  89.9%   7.4%   2.7%
+  10000   0.2   recserve  0.5656    132.3    0.0%   0.0%   0.0%     nan%    1.2   0.0% |  79.9%  12.7%   7.4%
+  10000   0.2  broadcast  0.5656    132.3   -0.0%   0.0%   0.0%     5.1%    1.2   0.0% |  79.9%  12.7%   7.4%
+  10000   0.3   recserve  0.6071    176.3    0.0%   0.0%   0.0%     nan%    1.3   0.0% |  70.0%  17.2%  12.8%
+  10000   0.3  broadcast  0.6071    176.3    0.0%   0.0%   0.0%     7.1%    1.3   0.0% |  70.0%  17.2%  12.8%
+  10000   0.4   recserve  0.6507    224.4    0.0%   0.0%   0.0%     nan%    1.5   0.0% |  60.0%  19.5%  20.5%
+  10000   0.4  broadcast  0.6507    224.4    0.0%   0.0%   0.0%     9.6%    1.5   0.0% |  60.0%  19.5%  20.5%
+  10000   0.5   recserve  0.6975    268.5    0.0%   0.0%   0.0%     nan%    1.7   0.0% |  50.0%  21.0%  29.0%
+  10000   0.5  broadcast  0.6976    268.5    0.0%   0.0%   0.0%    12.5%    1.7   0.0% |  50.0%  21.0%  29.0%
+  10000   0.6   recserve  0.7482    310.7    0.0%   0.0%   0.0%     nan%    2.1   0.0% |  40.0%  19.9%  40.1%
+  10000   0.6  broadcast  0.7489    309.8    0.4%   0.0%   1.0%    17.0%    2.1   0.0% |  40.0%  19.6%  40.4%
+  10000   0.7   recserve  0.7959    347.1    0.0%   0.0%   0.0%     nan%    2.4   0.0% |  30.1%  17.5%  52.4%
+  10000   0.7  broadcast  0.7993    340.3    2.8%   0.0%   7.5%    21.5%    2.5   0.0% |  30.1%  15.5%  54.4%
+  10000   0.8   recserve  0.8330    379.9    0.0%   0.0%   0.0%     nan%    2.9   0.0% |  20.1%  14.0%  65.9%
+  10000   0.8  broadcast  0.8382    362.2    5.7%   0.0%  19.4%    22.6%    3.0   0.0% |  20.1%  10.6%  69.4%
+  10000   0.9   recserve  0.8732    411.0    0.0%   0.0%   0.0%     nan%    3.4   0.0% |  10.1%   8.4%  81.5%
+  10000   0.9  broadcast  0.8780    380.7    nan%   0.0%  32.9%    20.7%    3.5   0.0% |  10.1%   5.3%  84.6%
+median saving at equal accuracy, across beta:
+   10,000 households: broadcast   0.0%
+
+J/query at equal accuracy, each policy's own frontier (- = accuracy out of its range):
+  homes   acc   recserve  broadcast
+  10000  0.70      270.5      270.4
+  10000  0.80      350.7      340.7
+wrote results/delta/delta0.7_seed8.csv and delta0.7_seed8.json
