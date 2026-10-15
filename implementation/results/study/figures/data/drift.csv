@@ -1,0 +1,10 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,10000,RecServe,scenario,No drift,J_per_query_at_target,347.491,344.19,350.656
+,burst_week,10000,RecServe,scenario,Mild drift,J_per_query_at_target,343.839,337.136,350.153
+,burst_all,10000,RecServe,scenario,Strong drift,J_per_query_at_target,332.581,321.746,338.433
+,main,10000,Timetable,scenario,No drift,J_per_query_at_target,256.661,254.353,259.21
+,burst_week,10000,Timetable,scenario,Mild drift,J_per_query_at_target,254.882,248.738,260.34
+,burst_all,10000,Timetable,scenario,Strong drift,J_per_query_at_target,247.308,236.545,255.549
+,main,10000,Broadcast,scenario,No drift,J_per_query_at_target,240.297,238.704,241.328
+,burst_week,10000,Broadcast,scenario,Mild drift,J_per_query_at_target,234.508,227.153,240.209
+,burst_all,10000,Broadcast,scenario,Strong drift,J_per_query_at_target,216.477,203.708,224.489

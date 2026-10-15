@@ -1,0 +1,16 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,,No drift,households,1000,saving_over_timetable_percent,0.0876893,-0.0106238,0.165914
+,main,,No drift,households,2000,saving_over_timetable_percent,0.378695,0.354115,0.395543
+,main,,No drift,households,5000,saving_over_timetable_percent,2.10894,2.01812,2.27732
+,main,,No drift,households,10000,saving_over_timetable_percent,6.37329,6.0688,6.89846
+,main,,No drift,households,20000,saving_over_timetable_percent,8.07849,7.93894,8.33678
+,burst_week,,Mild drift,households,1000,saving_over_timetable_percent,0.138871,0.0372286,0.191859
+,burst_week,,Mild drift,households,2000,saving_over_timetable_percent,0.935471,0.759537,1.23492
+,burst_week,,Mild drift,households,5000,saving_over_timetable_percent,4.23475,3.72211,5.23637
+,burst_week,,Mild drift,households,10000,saving_over_timetable_percent,8.00128,7.59311,8.67813
+,burst_week,,Mild drift,households,20000,saving_over_timetable_percent,8.71383,8.00232,9.19152
+,burst_all,,Strong drift,households,1000,saving_over_timetable_percent,0.498682,0.092052,0.912214
+,burst_all,,Strong drift,households,2000,saving_over_timetable_percent,3.29367,1.81965,5.02381
+,burst_all,,Strong drift,households,5000,saving_over_timetable_percent,8.8067,7.12393,11.0281
+,burst_all,,Strong drift,households,10000,saving_over_timetable_percent,12.494,11.4455,13.8822
+,burst_all,,Strong drift,households,20000,saving_over_timetable_percent,10.5211,10.2614,10.7652

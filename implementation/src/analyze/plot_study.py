@@ -39,8 +39,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "simulate"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_continuous_batching import compare_run  # noqa: E402
 from energy.three_tier import olt_reference, RESULTS, STUDY  # noqa: E402
-from households import Households  # noqa: E402
-from summarize_study import at_column  # noqa: E402
+from households import Households, load_sessions, TRAFFIC  # noqa: E402
+from summarize_study import at_column, ORDER  # noqa: E402
+
+DELTA = STUDY.parent / "delta"
+"""The delta sweep (src/simulate/run_delta.sh) and its diagnostic runs."""
 
 FIGURES = STUDY / "figures"
 """Where the figures are written."""
@@ -96,7 +99,7 @@ plt.rcParams.update(
 # entry and a marker of its own, and reads in greyscale print too.
 SERIES = {
     "recserve": ("RecServe", "#2a78d6", "o"),
-    "static_hour_self": ("Timetable", "#1baf7a", "^"),
+    "static_hour": ("Timetable", "#1baf7a", "^"),
     "broadcast": ("Broadcast", "#eda100", "D"),
 }
 SCENARIOS = {
@@ -106,7 +109,15 @@ SCENARIOS = {
 }
 TIERS = {"user": ("Phone", "#e87ba4"), "onu": ("ONU", "#008300"), "olt": ("OLT", "#4a3aa7")}
 ALONE = {"user_alone": "Phone alone", "onu_alone": "ONU alone", "olt_alone": "OLT alone"}
-"""The single-tier runs (results/study/alone_seed*.json), each tier answering every query."""
+"""The single-tier policies, each tier answering every query, run beside the others."""
+
+TRAFFIC_SERIES = {
+    "wildchat": ("WildChat, worldwide", "#2a78d6", "o"),
+    "wildchat-brazil": ("WildChat, Brazil", "#eb6834", "s"),
+    "burstgpt": ("BurstGPT (office hours)", "#52514e", "^"),
+}
+DELTAS = ("0", "0.05", "0.1", "0.2", "0.3", "0.5", "0.7", "1")
+"""The margins the delta sweep ran; 0 is the study's main runs, 1 is RecServe itself."""
 
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 BETA = r"$\beta$ (escalation quantile)"
@@ -131,10 +142,15 @@ y is a mean over the seeds and y_low, y_high their range, when the point has see
 CAPTIONS = {
     "traffic_week": (
         "Messages sent per hour over one test week by 10,000 households, in each traffic "
-        "scenario. With no drift every day follows BurstGPT's average day. Mild drift adds "
-        "BurstGPT's variation within each week, surges of about 25% lasting about 3 hours; "
-        "strong drift adds all of its variation around the average day, swings of about "
-        "45 to 60% lasting about 12 hours, whole weeks included."
+        "scenario. With no drift every day follows WildChat's average day in local time. "
+        "Mild drift adds BurstGPT's variation within each week, surges of about 25% "
+        "lasting about 3 hours; strong drift adds all of its variation around the average "
+        "day, swings of about 45 to 60% lasting about 12 hours, whole weeks included."
+    ),
+    "traffic_profiles": (
+        "Share of the day's conversations opening in each hour, local time, on weekdays (a) "
+        "and weekends (b): WildChat's users worldwide (the study's traffic), its Brazilian "
+        "users, and BurstGPT's enterprise and campus users."
     ),
     "beta_knob": (
         "Accuracy (a) and energy per query (b) against RecServe's escalation quantile "
@@ -172,6 +188,22 @@ CAPTIONS = {
         "(a) RecServe's communication burden, the bytes carried between tiers, against "
         "accuracy. (b) Change in energy and in communication burden against RecServe at "
         "0.80 accuracy. No drift, 10,000 households; bars: range over three seeds."
+    ),
+    "sensitivity": (
+        "Energy the broadcast saves over RecServe and over the timetable at 0.80 accuracy, "
+        "10,000 households, in every scenario of the study. Bars: range over three seeds."
+    ),
+    "delta": (
+        "(a) Energy the broadcast saves over RecServe at 0.80 accuracy against the margin "
+        "$\\delta$, from 0 (the policy as evaluated) to 1, where no query is moved and "
+        "the policy is RecServe. (b) Its communication burden and mean latency against "
+        "RecServe's. No drift, 10,000 households; bars: range over three seeds (one at "
+        "$\\delta = 1$)."
+    ),
+    "energy_split": (
+        "Energy per query spent at each tier at 0.80 accuracy, under RecServe and under the "
+        "broadcast with $\\delta = 0.3$ and $\\delta = 0$. No drift, 10,000 households, "
+        "seed 7."
     ),
 }
 """Draft caption of each figure, written to README.md beside them."""
@@ -234,17 +266,15 @@ def savings(runs: list[dict], policy: str, reference: str) -> list:
 
 
 def tier_alone(policy: str, column: str) -> tuple[float, float, float]:
-    """Return one tier's column when it answers every query, (mean, low, high) over seeds."""
-    return spread(
-        [
-            row[column]
-            for seed in SEEDS
-            for row in json.loads((STUDY / f"alone_seed{seed}.json").read_text(encoding="utf-8"))[
-                "rows"
-            ]
-            if row["policy"] == policy and row["subscribers"] == SIZE
-        ]
-    )
+    """Return one tier's column when it answers every query, (mean, low, high) over seeds.
+
+    A single tier ignores beta, so any beta's row will do; the lowest is read.
+    """
+    values = []
+    for run in load_runs("main"):
+        rows = [r for r in run["rows"] if r["policy"] == policy and r["subscribers"] == SIZE]
+        values.append(min(rows, key=lambda row: row["beta"])[column])
+    return spread(values)
 
 
 # ==========================================
@@ -390,7 +420,16 @@ def plot_traffic() -> Path:
     drift = {"main": (0.0, 12.3), "burst_week": (0.235, 3.18), "burst_all": (0.457, 12.3)}
     rows = []
     for axes, (scenario, (sigma, hours)) in zip(panels, drift.items()):
-        homes = Households(SIZE, 1.0, 3.6, burst_sigma=sigma, burst_hours=hours)
+        homes = Households(
+            SIZE,
+            1.0,
+            3.6,
+            load_sessions(TRAFFIC["wildchat"]),
+            burst_sigma=sigma,
+            burst_hours=hours,
+            activity_sigma=1.5,
+            seed=8,
+        )
         times = np.array([hour for _, hour, _ in homes.stream(questions, 7, 28, seed=8)]) - 28 * 24
         counts = np.bincount(times.astype(int), minlength=7 * 24)[: 7 * 24]
         name, color, _ = SCENARIOS[scenario]
@@ -480,7 +519,7 @@ def plot_beta_knob() -> Path:
 # ==========================================
 # 3. Reading every policy at the same accuracy
 # ==========================================
-READING_LABELS = {"static_hour_self": (-8, 4, "right")}
+READING_LABELS = {"static_hour": (-8, 4, "right")}
 """Where each reading's value is written, so the closest ones do not collide."""
 
 READING_DEFAULT = (8, -6, "left")
@@ -737,7 +776,7 @@ def plot_savings_over_recserve() -> Path:
     figure, (axes,) = new_figure()
     style(axes, "Households on the OLT", f"Energy saved over RecServe at {TARGET} (%)")
     rows = []
-    for policy in ("static_hour_self", "broadcast"):
+    for policy in ("static_hour", "broadcast"):
         name, color, marker = SERIES[policy]
         points = savings(runs, policy, "recserve")
         ranged_line(axes, SIZES, points, name, color, marker)
@@ -760,7 +799,7 @@ def plot_broadcast_over_timetable() -> Path:
     axes.axhline(0, color=MUTED, linewidth=0.6)
     rows = []
     for scenario, (name, color, marker) in SCENARIOS.items():
-        points = savings(load_runs(scenario), "broadcast", "static_hour_self")
+        points = savings(load_runs(scenario), "broadcast", "static_hour")
         ranged_line(axes, SIZES, points, name, color, marker)
         rows += ranged(
             name,
@@ -821,7 +860,7 @@ def plot_drift() -> Path:
     axes.set_xticks(range(len(SCENARIOS)), [name for name, _, _ in SCENARIOS.values()])
     axes.grid(axis="x", visible=False)
     legend(axes, "upper right", ncol=3)
-    axes.set_ylim(0, 260)
+    axes.set_ylim(0, 1.18 * max(row["y_high"] for row in rows))
     return save(figure, "drift", rows)
 
 
@@ -866,7 +905,7 @@ def plot_bandwidth() -> Path:
         ("Communication burden", "comm_MB_per_1k_queries"),
     )
     width = 0.36
-    for slot, policy in enumerate(("static_hour_self", "broadcast")):
+    for slot, policy in enumerate(("static_hour", "broadcast")):
         name, color, _ = SERIES[policy]
         points = []
         for _, column in measures:
@@ -890,7 +929,7 @@ def plot_bandwidth() -> Path:
             panels[1].annotate(
                 f"{value[0]:+.0f}%",
                 (position, value[2] if value[0] >= 0 else value[1]),
-                xytext=(0, 2 if value[0] >= 0 else -2),
+                xytext=(0, 2 if value[0] >= 0 else -4),
                 textcoords="offset points",
                 ha="center",
                 va="bottom" if value[0] >= 0 else "top",
@@ -913,10 +952,267 @@ def plot_bandwidth() -> Path:
             for (_, column), value in zip(measures, points)
         ]
     panels[1].set_xticks(range(len(measures)), [label for label, _ in measures])
-    panels[1].set_ylim(-52, 18)
+    lows = [row["y_low"] for row in rows if row["panel"] == "b"]
+    highs = [row["y_high"] for row in rows if row["panel"] == "b"]
+    panels[1].set_ylim(min(lows + [0]) * 1.25 - 2, max(highs + [0]) * 1.25 + 4)
     panels[1].grid(axis="x", visible=False)
     legend(panels[1], "lower right")
     return save(figure, "bandwidth", rows)
+
+
+SCENARIO_LABELS = {
+    "main": "No drift (main)",
+    "burst_week": "Mild drift",
+    "burst_all": "Strong drift",
+    "average": "Average accounting",
+    "onu0.5": "ONU energy \u00d70.5",
+    "onu0.2": "ONU energy \u00d70.2",
+    "olt1.07": "OLT energy \u00d71.07",
+    "olt1.75": "OLT energy \u00d71.75",
+    "users2": "Two users per home",
+    "perhousehold": "Each home learns alone",
+    "act0": "Users alike",
+    "act2": "Users far apart",
+    "burstgpt": "BurstGPT traffic",
+    "brazil": "Brazil's traffic",
+}
+"""How each scenario is named in the figures."""
+
+
+def saving_at(runs: list[dict], policy: str, reference: str, size: int) -> tuple:
+    """Return (mean, low, high) of a policy's saving over a reference at one size, in %."""
+    per_seed = []
+    for run in runs:
+        energy = {
+            entry["policy"]: entry["J_at_accuracy"][TARGET]
+            for entry in run["frontiers"]
+            if entry["subscribers"] == size
+        }
+        if energy.get(policy) and energy.get(reference):
+            per_seed.append(100 * (1 - energy[policy] / energy[reference]))
+    return spread(per_seed)
+
+
+def plot_traffic_profiles() -> Path:
+    """When conversations open, by hour of a weekday and a weekend day, in each trace."""
+    figure, panels = new_figure(columns=2, sharey=True)
+    rows = []
+    for axes, day_type, letter in zip(panels, ("weekday", "weekend"), "ab"):
+        style(
+            axes,
+            "Hour of the day (local time)",
+            "Conversations opening (% of the day)" if letter == "a" else "",
+            f"({letter}) {day_type.capitalize()}s",
+        )
+        for traffic, (name, color, marker) in TRAFFIC_SERIES.items():
+            shape = np.array(load_sessions(TRAFFIC[traffic])["starts_by_hour"][day_type])
+            share = 100 * shape / shape.sum()
+            line(axes, range(24), share, name, color, marker)
+            rows += [
+                point(
+                    panel=letter,
+                    scenario=traffic,
+                    series=name,
+                    x_name="hour",
+                    x=hour,
+                    y_name=f"share_opening_{day_type}_percent",
+                    y=value,
+                )
+                for hour, value in enumerate(share)
+            ]
+        axes.set_xticks(range(0, 24, 3))
+        axes.set_xlim(-0.5, 23.5)
+    legend(panels[1], "upper left")
+    return save(figure, "traffic_profiles", rows)
+
+
+def plot_sensitivity() -> Path:
+    """The broadcast's saving over RecServe and over the timetable, in every scenario."""
+    figure, (axes,) = new_figure(height=3.6)
+    style(axes, f"Broadcast's saving at {TARGET} accuracy, {SIZE:,} households (%)", "")
+    scenarios = [name for name in ORDER if (STUDY / f"study_{name}_seed7.json").exists()]
+    height = 0.38
+    rows = []
+    for slot, (reference, name, color) in enumerate(
+        (
+            ("recserve", "over RecServe", SERIES["recserve"][1]),
+            ("static_hour", "over the timetable", SERIES["static_hour"][1]),
+        )
+    ):
+        points = [
+            saving_at(load_runs(scenario), "broadcast", reference, SIZE) for scenario in scenarios
+        ]
+        positions = np.arange(len(scenarios)) + (slot - 0.5) * height
+        axes.barh(
+            positions,
+            [value[0] for value in points],
+            height=height,
+            color=color,
+            edgecolor="white",
+            linewidth=0.6,
+            label=name,
+            xerr=bar_errors(points)["yerr"],
+            error_kw=bar_errors(points)["error_kw"],
+        )
+        rows += [
+            point(
+                scenario=scenario,
+                households=SIZE,
+                series=name,
+                x_name="scenario",
+                x=SCENARIO_LABELS[scenario],
+                y_name="saving_percent",
+                y=value[0],
+                y_low=value[1],
+                y_high=value[2],
+            )
+            for scenario, value in zip(scenarios, points)
+        ]
+    axes.set_yticks(range(len(scenarios)), [SCENARIO_LABELS[name] for name in scenarios])
+    axes.invert_yaxis()
+    axes.axvline(0, color=MUTED, linewidth=0.6)
+    axes.grid(axis="y", visible=False)
+    legend(axes, "upper right")
+    return save(figure, "sensitivity", rows)
+
+
+def delta_runs(delta: str) -> list[dict]:
+    """Return the runs of one margin: the study's main runs for 0, the sweep's otherwise."""
+    if delta == "0":
+        return load_runs("main")
+    return [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(DELTA.glob(f"delta{delta}_seed*.json"))
+    ]
+
+
+def plot_delta() -> Path:
+    """What the margin delta trades: energy, against RecServe's burden and the latency."""
+    figure, panels = new_figure(columns=2)
+    style(panels[0], r"Margin $\delta$", f"Saving over RecServe at {TARGET} (%)", "(a)")
+    style(panels[1], r"Margin $\delta$", f"Change against RecServe at {TARGET} (%)", "(b)")
+    xs = [float(delta) for delta in DELTAS]
+    rows = []
+    points = [saving_at(delta_runs(delta), "broadcast", "recserve", SIZE) for delta in DELTAS]
+    ranged_line(panels[0], xs, points, "Broadcast", *SERIES["broadcast"][1:])
+    rows += ranged(
+        "Broadcast",
+        zip(xs, points),
+        panel="a",
+        scenario="main",
+        households=SIZE,
+        x_name="delta",
+        y_name="saving_over_recserve_percent",
+    )
+    panels[1].axhline(0, color=MUTED, linewidth=0.6)
+    for column, name, color, marker in (
+        ("comm_MB_per_1k_queries", "Communication burden", "#4a3aa7", "s"),
+        ("latency_s_mean", "Mean latency", "#eb6834", "o"),
+    ):
+        changes = []
+        for delta in DELTAS:
+            per_seed = []
+            for run in delta_runs(delta):
+                values = at_column(run, SIZE, TARGET, column)
+                per_seed.append(100 * (values["broadcast"] / values["recserve"] - 1))
+            changes.append(spread(per_seed))
+        ranged_line(panels[1], xs, changes, name, color, marker)
+        rows += ranged(
+            name,
+            zip(xs, changes),
+            panel="b",
+            scenario="main",
+            households=SIZE,
+            x_name="delta",
+            y_name=f"{column}_change_against_recserve_percent",
+        )
+    for axes in panels:
+        axes.set_xticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    legend(panels[1], "lower right")
+    return save(figure, "delta", rows)
+
+
+def plot_energy_split() -> Path:
+    """Joules per query spent at each tier, under RecServe and under the broadcast."""
+    cases = (
+        ("RecServe", "delta0_seed7.json", "recserve"),
+        (r"Broadcast, $\delta = 0.3$", "delta0.3_seed7.json", "broadcast"),
+        (r"Broadcast, $\delta = 0$", "delta0_seed7.json", "broadcast"),
+    )
+    figure, (axes,) = new_figure()
+    style(axes, f"{ENERGY} at {TARGET} accuracy", "")
+    rows = []
+    left = np.zeros(len(cases))
+    for tier, (name, color) in TIERS.items():
+        values = np.array(
+            [
+                at_column(
+                    json.loads((DELTA / "diagnostic" / file).read_text(encoding="utf-8")),
+                    SIZE,
+                    TARGET,
+                    f"J_{tier}_per_query",
+                )[policy]
+                for _, file, policy in cases
+            ]
+        )
+        axes.barh(
+            range(len(cases)),
+            values,
+            left=left,
+            color=color,
+            label=name,
+            edgecolor="white",
+            linewidth=0.6,
+            height=0.55,
+        )
+        for position, (value, start) in enumerate(zip(values, left)):
+            if value >= 12:
+                axes.annotate(
+                    f"{value:.0f}",
+                    (start + value / 2, position),
+                    ha="center",
+                    va="center",
+                    fontsize=7.5,
+                    color="white" if tier != "user" else INK,
+                )
+        rows += [
+            point(
+                scenario="main",
+                households=SIZE,
+                series=name,
+                x_name="case",
+                x=label,
+                y_name="J_per_query_at_target",
+                y=value,
+            )
+            for (label, _, _), value in zip(cases, values)
+        ]
+        left += values
+    for position, total in enumerate(left):
+        axes.annotate(
+            f"{total:.0f} J",
+            (total, position),
+            xytext=(4, 0),
+            textcoords="offset points",
+            va="center",
+            fontsize=8,
+            color=INK,
+        )
+    axes.set_yticks(range(len(cases)), [label for label, _, _ in cases])
+    axes.invert_yaxis()
+    axes.set_xlim(0, 1.15 * left.max())
+    axes.grid(axis="y", visible=False)
+    handles, names = axes.get_legend_handles_labels()
+    figure.legend(
+        handles,
+        names,
+        loc="upper center",
+        ncol=3,
+        frameon=False,
+        labelcolor=INK,
+        bbox_to_anchor=(0.5, 1.0),
+    )
+    return save(figure, "energy_split", rows, top=0.88)
 
 
 # ==========================================
@@ -960,6 +1256,7 @@ def main() -> int:
     DATA.mkdir(parents=True, exist_ok=True)
     for draw in (
         plot_traffic,
+        plot_traffic_profiles,
         plot_beta_knob,
         plot_equal_accuracy,
         plot_tiers,
@@ -968,6 +1265,9 @@ def main() -> int:
         plot_broadcast_over_timetable,
         plot_drift,
         plot_bandwidth,
+        plot_sensitivity,
+        plot_delta,
+        plot_energy_split,
     ):
         print(f"wrote {draw()}")
     print(f"wrote {write_index()}")

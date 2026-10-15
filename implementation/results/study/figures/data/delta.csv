@@ -1,0 +1,25 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+a,main,10000,Broadcast,delta,0,saving_over_recserve_percent,30.8462,30.6477,31.178
+a,main,10000,Broadcast,delta,0.05,saving_over_recserve_percent,29.1522,28.9361,29.4345
+a,main,10000,Broadcast,delta,0.1,saving_over_recserve_percent,27.1974,26.9506,27.455
+a,main,10000,Broadcast,delta,0.2,saving_over_recserve_percent,21.6509,21.4626,21.9227
+a,main,10000,Broadcast,delta,0.3,saving_over_recserve_percent,15.345,15.3405,15.3526
+a,main,10000,Broadcast,delta,0.5,saving_over_recserve_percent,8.75785,8.73536,8.76976
+a,main,10000,Broadcast,delta,0.7,saving_over_recserve_percent,2.79115,2.76687,2.83852
+a,main,10000,Broadcast,delta,1,saving_over_recserve_percent,-5.30687e-12,-5.30687e-12,-5.30687e-12
+b,main,10000,Communication burden,delta,0,comm_MB_per_1k_queries_change_against_recserve_percent,12.0043,11.6202,12.2901
+b,main,10000,Communication burden,delta,0.05,comm_MB_per_1k_queries_change_against_recserve_percent,10.9915,10.6331,11.2168
+b,main,10000,Communication burden,delta,0.1,comm_MB_per_1k_queries_change_against_recserve_percent,8.65282,8.34031,9.01397
+b,main,10000,Communication burden,delta,0.2,comm_MB_per_1k_queries_change_against_recserve_percent,-1.36608,-1.69469,-0.874666
+b,main,10000,Communication burden,delta,0.3,comm_MB_per_1k_queries_change_against_recserve_percent,-9.43775,-9.6757,-9.31118
+b,main,10000,Communication burden,delta,0.5,comm_MB_per_1k_queries_change_against_recserve_percent,-4.56525,-4.67112,-4.50874
+b,main,10000,Communication burden,delta,0.7,comm_MB_per_1k_queries_change_against_recserve_percent,-1.56885,-1.60009,-1.53827
+b,main,10000,Communication burden,delta,1,comm_MB_per_1k_queries_change_against_recserve_percent,0,0,0
+b,main,10000,Mean latency,delta,0,latency_s_mean_change_against_recserve_percent,-57.3048,-57.5497,-57.0727
+b,main,10000,Mean latency,delta,0.05,latency_s_mean_change_against_recserve_percent,-55.7008,-55.8028,-55.5441
+b,main,10000,Mean latency,delta,0.1,latency_s_mean_change_against_recserve_percent,-54.2366,-54.3503,-54.0995
+b,main,10000,Mean latency,delta,0.2,latency_s_mean_change_against_recserve_percent,-47.6875,-47.842,-47.5352
+b,main,10000,Mean latency,delta,0.3,latency_s_mean_change_against_recserve_percent,-37.6965,-37.8915,-37.4309
+b,main,10000,Mean latency,delta,0.5,latency_s_mean_change_against_recserve_percent,-23.8452,-23.9273,-23.7958
+b,main,10000,Mean latency,delta,0.7,latency_s_mean_change_against_recserve_percent,-7.85952,-7.94919,-7.80085
+b,main,10000,Mean latency,delta,1,latency_s_mean_change_against_recserve_percent,1.33227e-12,1.33227e-12,1.33227e-12

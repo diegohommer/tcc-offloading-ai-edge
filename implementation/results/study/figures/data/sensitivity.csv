@@ -1,0 +1,29 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,10000,over RecServe,scenario,No drift (main),saving_percent,30.8462,30.6477,31.178
+,burst_week,10000,over RecServe,scenario,Mild drift,saving_percent,31.805,31.3932,32.6228
+,burst_all,10000,over RecServe,scenario,Strong drift,saving_percent,34.9389,33.6682,36.6868
+,average,10000,over RecServe,scenario,Average accounting,saving_percent,19.696,19.599,19.7491
+,onu0.5,10000,over RecServe,scenario,ONU energy ×0.5,saving_percent,24.4095,24.0394,24.6675
+,onu0.2,10000,over RecServe,scenario,ONU energy ×0.2,saving_percent,19.208,18.8943,19.498
+,olt1.07,10000,over RecServe,scenario,OLT energy ×1.07,saving_percent,28.8154,28.5066,29.1625
+,olt1.75,10000,over RecServe,scenario,OLT energy ×1.75,saving_percent,16.0573,15.9195,16.1985
+,users2,10000,over RecServe,scenario,Two users per home,saving_percent,45.8497,45.6719,45.9502
+,perhousehold,10000,over RecServe,scenario,Each home learns alone,saving_percent,24.804,24.621,24.9179
+,act0,10000,over RecServe,scenario,Users alike,saving_percent,30.6375,30.3559,30.9871
+,act2,10000,over RecServe,scenario,Users far apart,saving_percent,31.188,30.7689,31.4711
+,burstgpt,10000,over RecServe,scenario,BurstGPT traffic,saving_percent,36.7805,36.5445,36.9904
+,brazil,10000,over RecServe,scenario,Brazil's traffic,saving_percent,31.1829,30.9481,31.3079
+,main,10000,over the timetable,scenario,No drift (main),saving_percent,6.37329,6.0688,6.89846
+,burst_week,10000,over the timetable,scenario,Mild drift,saving_percent,8.00128,7.59311,8.67813
+,burst_all,10000,over the timetable,scenario,Strong drift,saving_percent,12.494,11.4455,13.8822
+,average,10000,over the timetable,scenario,Average accounting,saving_percent,0.00813293,-0.0545821,0.0480361
+,onu0.5,10000,over the timetable,scenario,ONU energy ×0.5,saving_percent,5.79452,5.51711,6.00587
+,onu0.2,10000,over the timetable,scenario,ONU energy ×0.2,saving_percent,4.63073,4.35232,5.01608
+,olt1.07,10000,over the timetable,scenario,OLT energy ×1.07,saving_percent,5.68353,5.27096,6.32906
+,olt1.75,10000,over the timetable,scenario,OLT energy ×1.75,saving_percent,3.10312,2.98645,3.21363
+,users2,10000,over the timetable,scenario,Two users per home,saving_percent,8.11843,7.83448,8.35746
+,perhousehold,10000,over the timetable,scenario,Each home learns alone,saving_percent,3.39136,3.26276,3.50815
+,act0,10000,over the timetable,scenario,Users alike,saving_percent,6.19493,5.80372,6.69761
+,act2,10000,over the timetable,scenario,Users far apart,saving_percent,6.43952,6.05082,6.65636
+,burstgpt,10000,over the timetable,scenario,BurstGPT traffic,saving_percent,6.73436,6.27519,6.99089
+,brazil,10000,over the timetable,scenario,Brazil's traffic,saving_percent,6.32056,6.07754,6.48213

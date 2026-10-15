@@ -1,0 +1,10 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,10000,Phone,case,RecServe,J_per_query_at_target,57.1523,,
+,main,10000,Phone,case,"Broadcast, $\delta = 0.3$",J_per_query_at_target,53.7754,,
+,main,10000,Phone,case,"Broadcast, $\delta = 0$",J_per_query_at_target,19.3873,,
+,main,10000,ONU,case,RecServe,J_per_query_at_target,64.3758,,
+,main,10000,ONU,case,"Broadcast, $\delta = 0.3$",J_per_query_at_target,27.5288,,
+,main,10000,ONU,case,"Broadcast, $\delta = 0$",J_per_query_at_target,22.9476,,
+,main,10000,OLT,case,RecServe,J_per_query_at_target,226.097,,
+,main,10000,OLT,case,"Broadcast, $\delta = 0.3$",J_per_query_at_target,212.989,,
+,main,10000,OLT,case,"Broadcast, $\delta = 0$",J_per_query_at_target,198.525,,
