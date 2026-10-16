@@ -150,14 +150,13 @@ decision.
 
 In this work, we propose the integration of energy awareness into recursive tiered LLM
 inference.
-Building on RecServe's recursive offloading, a tier decides whether to answer a query or
-pass it up based not only on its confidence, but also on the energy spent answering at
-each tier. As a case study, we simulate a three-tier
+Each tier decides whether to answer a query or pass it up from the confidence of its
+answer and also from the energy expected to be spent at each tier. As a case study, we simulate a three-tier
 hierarchy over a PON, formed by the user device, the ONU and the OLT, each running a
 larger model than the one below. We evaluate two energy-aware strategies: one follows
 a fixed timetable of the OLT's cost, while the other takes advantage of the PON
 downstream broadcast, with the OLT periodically announcing its current cost to every
-ONU. Both are compared with RecServe at the same target accuracy, in energy per query
+ONU. Both are compared with escalation by confidence alone at the same target accuracy, in energy per query
 and in communication burden, under recorded conversation traffic with and without
 unforeseen surges. \todo{one or two sentences with the main results, once the Results
 chapter is settled.}
@@ -172,8 +171,8 @@ The contributions of this work are:
   \item An offloading strategy that uses the PON downstream broadcast to share the
   OLT's current cost with every ONU;
   \item A simulation study on recorded conversation traffic, with and without
-  unforeseen surges, comparing the energy-aware strategies with RecServe in energy per
-  query and communication burden.
+  unforeseen surges, comparing the energy-aware strategies with confidence-only
+  escalation in energy per query and communication burden.
 \end{itemize}
 
 The remainder of this work is organized as follows. Chapter~\ref{chap:review}
@@ -294,10 +293,14 @@ the answer, the lower its perplexity~\cite[ch.~3]{jurafsky2026speech}.
 Ideally, a score is calibrated, meaning that answers given with 80\% confidence are
 correct 80\% of the time. Modern neural networks, however, are often poorly calibrated,
 and tend to be more confident than they are accurate~\cite{guo2017calibration}.
-RecServe does not rely on a fixed threshold, which would have to be tuned by hand for each
-task, model and network condition. It uses a normalized perplexity as the confidence of
-its generation tasks and compares it with the confidences each tier has seen
-recently~\cite{wu2025recserve} (Section~\ref{sec:recserve}).
+A fixed threshold on such a score would have to be tuned by hand for each task, model
+and network condition. A model can instead compare each confidence with the ones it has
+seen recently. It keeps the confidences of its last $k$ answers and accepts an answer
+whose confidence reaches their $\beta$-quantile, so about a fraction $\beta$ of its
+answers are rejected by construction, whatever the scale of the score. This test was
+proposed by \citeonline{wu2025recserve}, with a normalized perplexity, the geometric
+mean of the probabilities of the answer's tokens, as the confidence of generated text,
+and we refer to it as the quantile test.
 
 \subsection{Model Cascades and Tiered Inference}
 \label{sec:cascades-tiers}
@@ -318,9 +321,10 @@ from the user's own device, through the edge and the fog, up to the cloud, with 
 more capable LLM at each step up~\cite{pakpahan2026continuum}. A query then climbs the
 tiers only as far as it needs, so simpler queries are answered
 before they reach the cloud. Answering closer to the user shortens the network path and
-lowers latency~\cite{chen2026network}, and fewer queries crossing the network means less traffic. RecServe, for instance,
-reduces the communication burden by over 50\% compared
-with serving every query in the cloud~\cite{wu2025recserve}.
+lowers latency~\cite{chen2026network}, and fewer queries crossing the network means less
+traffic. A cascade over the device, the edge and the cloud that escalates with the
+quantile test reduces the communication burden by over 50\% compared with serving every
+query in the cloud~\cite{wu2025recserve}.
 
 \subsection{Measuring LLM Inference Energy}
 \label{sec:metrics}
@@ -487,8 +491,8 @@ The first is that energy has no part in recursive tiered inference. In RecServe 
 the architecture of \citeonline{pakpahan2026continuum}, every tier decides from the
 confidence of its answer alone. PerLLM and CR$^2$ do bring energy into the decision, but
 over two tiers and with a single decision per query, made before any model has
-answered~\cite{yang2024perllm,xue2026cr2}. In this work, each tier keeps RecServe's
-confidence test and also weighs the energy it expects to be spent until the query is
+answered~\cite{yang2024perllm,xue2026cr2}. In this work, each tier keeps a confidence
+test and also weighs the energy it expects to be spent until the query is
 answered. It does so both when a query arrives and when an answer escalates, so a query
 can skip a tier whose answer is likely to cost more than it saves.
 
@@ -517,7 +521,7 @@ system spends to reach a given accuracy. A policy that sends more queries to lar
 models is also more accurate, so comparing policies at the same $\beta$ would mix the two
 effects. We compare every policy at the same target accuracy, under recorded
 conversation traffic with and without departures from its daily pattern, against
-RecServe, a timetable and each tier answering every query alone.
+escalation by confidence alone, a timetable and each tier answering every query alone.
 
 %==============================================================================
 \chapter{Methodology}
@@ -537,15 +541,16 @@ policies are compared.
 The case study places a three-tier hierarchy on a PON. The user tier is the device the
 query is typed on, the middle tier is the ONU in the home, and the top tier is the OLT at
 the operator's central office, shared by every home on the PON. Each tier runs a larger
-model than the one below, as in RecServe and in the architecture of
-\citeonline{pakpahan2026continuum}, and Table~\ref{tab:tiers} lists them. The user tier is
+model than the one below, as in earlier tiered
+architectures~\cite{wu2025recserve,pakpahan2026continuum}, and Table~\ref{tab:tiers}
+lists them. The user tier is
 a phone running a model of about one billion parameters, and the ONU a single-board
 computer with a neural accelerator, the class of device an AI-capable home gateway could
 carry. Their energy comes from published measurements~\cite{cai2026npu,renney2026cloud},
 while the OLT's is measured by us on a GPU (Section~\ref{sec:energy-model}).
 
-The hierarchy stops at the OLT, without the cloud tier that RecServe and
-\citeonline{pakpahan2026continuum} place above it. The access network is where the
+The hierarchy stops at the OLT, without the cloud tier that those architectures place
+above it. The access network is where the
 downstream broadcast exists, and so where the strategies this work compares differ. A
 cloud tier was also beyond the resources of this work, since, like the other tiers, it
 would need the answers of its model, of more than 70 billion parameters, to every test
@@ -577,19 +582,20 @@ number~\cite{cobbe2021training}. Each answer is graded exactly, by comparing its
 number with the reference, so no judge model is needed. The problems take between two
 and eight steps to solve, which spreads the accuracies of the three models far apart.
 Every tier answered each of the 1,319 test problems once, and the simulation replays
-these recorded answers, with the confidence RecServe computes from them, instead of
-running the models again.
+these recorded answers, with the confidence computed from the probabilities of their
+tokens (Section~\ref{sec:llm-background}), instead of running the models again.
 
 \section{Energy-Aware Recursive Offloading}
 \label{sec:policy}
 
-The policy we propose keeps RecServe's recursive structure and its confidence test
-unchanged (Section~\ref{sec:recserve}). A query starts at the user device, and each tier that runs
-it returns its answer to the user if the answer's confidence reaches the $\beta$-quantile
-of the confidences the tier has seen recently, or escalates the query otherwise. The
-policy adds only a choice of which tier runs the query, made from the energy each tier
-is expected to spend. It never judges whether an answer is good enough, so the accuracy
-delivered still comes only from the models and from RecServe's test.
+In the policy we propose, a query starts at the user device, and each tier that runs it
+applies the quantile test of \citeonline{wu2025recserve}
+(Section~\ref{sec:llm-background}). The tier returns its answer to the user if the
+answer's confidence reaches the $\beta$-quantile of the confidences it has seen
+recently, and escalates the query otherwise. On top of this recursion, the policy
+chooses which tier runs the query from the energy each tier is expected to spend. It
+never judges whether an answer is good enough, so the accuracy delivered still comes
+only from the models and from the quantile test.
 
 The choice rests on $C_j$, the expected energy spent from the moment a query is handed
 to tier $j$ until some tier returns an answer. Tier $j$ always runs the query, and with
@@ -604,14 +610,16 @@ rates, and $E_j$ is the first rate times the length of the prompt plus the secon
 the average length of the tier's past answers. The average stands in
 for the length of this answer, which is only known after the tier runs.
 Equation~\eqref{eq:cost-to-completion} also assumes that, after tier $j$, the query
-climbs one tier at a time, as it does in RecServe.
+climbs one tier at a time, as it does when confidence alone decides.
 
-Since RecServe's test escalates the answers whose confidence falls below the
+Since the quantile test escalates the answers whose confidence falls below the
 $\beta$-quantile of the tier's recent confidences, about a fraction $\beta$ of a tier's
-answers escalate by construction, and the policy sets $p_j = \beta$. An escalation test
-whose rate is not fixed in advance would need $p_j$ to be learned from the answers
-instead, and Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$ for
-that reason.
+answers escalate by construction, and the policy sets $p_j = \beta$. The policy does not
+depend on this test, though. Equation~\eqref{eq:cost-to-completion} needs only the
+probability that a tier escalates, so it works with any escalation test, such as a fixed
+threshold or a separate scoring model~\cite{chen2024frugalgpt}. A test whose rate is not
+fixed in advance would need $p_j$ to be learned from the answers, and
+Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$ for that reason.
 
 The policy uses $C_j$ at two points of Algorithm~\ref{alg:decision}. The first is when a
 query arrives at a tier $i < J$ (lines 1 to 4). Running the query there costs $E_i$ and,
@@ -624,9 +632,14 @@ lowest $C_k$ if
 \end{equation}
 and runs it otherwise. The second is when an answer escalates (lines 9 to 11). The query
 then goes to tier $i+1$, or skips directly to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$.
-The margin $\delta$ keeps a tier from moving a query for a negligible saving and is set
-to zero in this work. The top tier has nowhere to send a query and always returns its
-answer.
+The top tier has nowhere to send a query and always returns its answer.
+
+The margin $\delta$ keeps a tier from moving a query for a negligible saving, and it also
+sets how far the policy departs from escalation by confidence alone. With $\delta = 0$, a
+tier takes any route that is expected to cost less. With $\delta = 1$, neither inequality
+can hold, since every energy is positive, so each tier runs every query that reaches it
+and passes it to the next tier, which is confidence-only escalation exactly. The main
+results use $\delta = 0$, and Chapter~\ref{chap:results} sweeps the values in between.
 
 With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} reduces to
 $C_{k^*} < E_i / (1-\beta)$. A tier therefore runs a query only if the cheapest tier
@@ -636,7 +649,7 @@ often a tier escalates, the more often the energy it spends running a query is w
 \begin{algorithm}[htb]
   \caption{The decision of tier $i < J$ on a query $q$}
   \label{alg:decision}
-  \KwIn{the query $q$; RecServe's $\beta$; the window $W_i$ of tier $i$'s recent
+  \KwIn{the query $q$; the quantile $\beta$; the window $W_i$ of tier $i$'s recent
     confidences; the learned averages; the energy rates of every tier above}
   \If{tier $i$ can decide}{
     $k^* \leftarrow \arg\min_{k>i} C_k$ \tcp*{Equation~\eqref{eq:cost-to-completion}}
@@ -665,10 +678,10 @@ every tier that ran the query, and each tier below replaces the values it holds 
 ones it hears. The OLT's mean covers every household on the PON, while those of the user
 device and the ONU cover only their own household, so households with different models
 would each hold their own values. A tier can decide once it has an estimate of the OLT's
-energy rate, and until then it follows RecServe, running every query that reaches it and
-escalating to the next tier. Each device also keeps its own confidence window for
-RecServe's test, started from the confidences of its model on the benchmark, so the
-threshold is right from the first query.
+energy rate, and until then it escalates by confidence alone, running every query that
+reaches it and passing it to the next tier. Each device also keeps its own confidence
+window for the quantile test, started from the confidences of its model on the
+benchmark, so the threshold is right from the first query.
 
 The energy rates of the user device and the ONU do not change, so the rates a tier hears
 on past answers stay valid. The OLT's rate, however, depends on how many other queries
@@ -727,8 +740,10 @@ the main uncertainty it faces is the OLT's load.
 \section{Evaluation}
 \label{sec:evaluation}
 
-\todo{reading every policy at the same accuracy; the baselines; the metrics; the
-sensitivity runs.}
+\todo{reading every policy at the same accuracy; the baselines: confidence-only
+escalation, cited as the rule of \citeonline{wu2025recserve}, with and without the ONU,
+and each tier answering alone; the metrics; the sensitivity runs and the sweep of
+$\delta$.}
 
 %==============================================================================
 \chapter{Results}
