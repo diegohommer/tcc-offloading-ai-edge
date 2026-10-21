@@ -842,22 +842,18 @@ decision changes only what the query adds, and repeats its main runs under avera
 accounting as a sensitivity analysis.
 
 The cost the OLT reports, on its broadcast and on the answers it returns, follows the
-same accounting. Under marginal accounting it is what one more query would add. While the
-OLT is busy, this is the slope of a batch's energy against its size, about 9~J per query,
-and while it is idle it is the cost of a query alone. The OLT reports the average of
-the two, weighted by the share of its last 5 minutes it spent busy. The slope is a single
-value for every batch size, fitted by least squares over batches 1 to 64, for two
-reasons. The energy one more query adds, read between adjacent batch sizes, is too noisy
-to route on at small batches. At the GPU, for a query generating 300 tokens, it is 6.9~J
-from one query to two, 0.4~J from two to three and 7.1~J from three to four, while from
-four queries upward it stays between 3.5 and 4.9~J, which a single slope describes well.
-A tier also cannot know the size of the batch its query will meet, because the OLT's
-batch changes in the seconds before the query arrives, so the report relies only on the
-share of time the OLT spent busy. The slope is fitted on the GPU's total energy rather
-than on its energy above idle, which makes it about 9~J instead of about 5~J at the system
-boundary and so errs slightly against the policy. Under average accounting, the OLT instead reports the mean
-cost per token of its work over the same 5 minutes. In either case, the timetable holds
-the same quantity for each hour of a weekday and of a weekend day.
+same accounting. Under marginal accounting it is what one more query would add, about 9~J
+while the OLT is busy and the cost of a query alone while it is idle. The OLT reports the
+average of the two, weighted by the share of its last 5 minutes it spent busy. The 9~J is
+a single slope fitted over batches 1 to 64, because the energy measured between adjacent
+batch sizes varies too much at small batches, from 0.4~J to 7.1~J at the GPU, and stays
+between 3.5 and 4.9~J above four queries. A single value also spares the tiers from
+predicting the batch their query will meet. The slope is fitted on the GPU's total energy,
+which gives about 9~J instead of the 5~J of its energy above idle and so, if anything,
+makes the policy look slightly worse than it is. Under average accounting, the OLT
+instead reports the mean cost per token of its work over the same 5 minutes, and in
+either case the timetable holds the same quantity for each hour of a weekday and of a
+weekend day.
 
 \section{Simulation}
 \label{sec:simulation}
