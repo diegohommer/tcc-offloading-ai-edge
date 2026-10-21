@@ -714,9 +714,9 @@ building that houses them. The energy of carrying queries and answers over the P
 the home network is left out, as are relaying the OLT's broadcast inside the home and
 manufacturing the hardware. The sources of the three tiers count different parts of their
 systems
-(Section~\ref{sec:measurements}), so Table~\ref{tab:energy} lists what each one counts
-and how it is brought to this boundary, with the energy of a query of each tier's mean
-prompt and answer lengths on GSM8K. The OLT's energy depends on how many queries it
+(Section~\ref{sec:measurements}), so Table~\ref{tab:energy} lists what each one measures
+and how it is brought to this boundary. It also gives the energy each tier spends on a
+query of its mean prompt and answer lengths on GSM8K. The OLT's energy depends on how many queries it
 batches, so the table gives its range, explained in Section~\ref{sec:olt-energy}.
 
 \begin{table}[htb]
@@ -726,11 +726,11 @@ batches, so the table gives its range, explained in Section~\ref{sec:olt-energy}
   \begin{tabular}{lllrr}
     \hline
     & & & \multicolumn{2}{c}{Joules per query} \\
-    Tier & Source counts & Conversion & Average & Marginal \\
+    Tier & Source measures & Conversion & Average & Marginal \\
     \hline
     User & the chip & none & 15.7 & 15.7 \\
     ONU & the board at the plug & none & 243 & 91 \\
-    OLT & the GPU card & $\times 2.47$, or $\times 2.20$ & 34--1,541 & 9--793 \\
+    OLT & the GPU card & $\times 2.47$ or $\times 2.20$ & 34--1,541 & 9--793 \\
     \hline
   \end{tabular}
   \legend{Source: The author}
@@ -739,25 +739,27 @@ batches, so the table gives its range, explained in Section~\ref{sec:olt-energy}
 \subsection{User Device and ONU}
 \label{sec:user-onu-energy}
 
-The user device is priced as the phone that \citeonline{cai2026npu} measured with
+The energy of the user device comes from the phone that \citeonline{cai2026npu} measured with
 Qualcomm's power telemetry, running Llama-3.2-1B on its CPU. It spends 0.016~J per
 prompt token and 0.074~J per generated token, or 15.7~J for a query of the mean lengths.
 The telemetry covers the whole chip but not the memory, the display or the radio, so
 this figure is a lower bound. Escalation by confidence alone runs every query on the
-user device, so a dearer device would raise its energy more than the policy's, and the
-lower bound is more likely to understate the saving than to overstate it.
+user device, while the policy often skips it. A device that spends more than this figure
+would therefore add more energy to the baseline than to the policy, so the lower bound
+can only understate the saving.
 
-The ONU is priced as the Raspberry Pi 5 with a Hailo-10H accelerator that
+The energy of the ONU comes from the Raspberry Pi 5 with a Hailo-10H accelerator that
 \citeonline{renney2026cloud} measured with a meter at the power input, running
 Qwen2.5-1.5B. It spends 0.88~J per generated token at 6.34 tokens per second, or 243~J
 for an answer of the mean length. This figure includes the board's idle draw of
 about 3.5~W~\cite{tummalapalli2026edge}, and without it the ONU spends 0.33~J per token.
 \citeonline{tummalapalli2026edge} measured the same model on the same hardware at 0.27~J
-per token above idle, so the two sources agree. The source gives a single figure per
-generated token, measured with a prompt of about 12 tokens, so its prefill is inside that
-figure and the model charges the ONU nothing more for a longer prompt. This underprices
-long prompts at the ONU, and the follow-ups that carry their conversation are the
-longest prompts in the simulation.
+per token above idle, so the two sources agree. \citeonline{renney2026cloud} give a
+single figure per generated token, measured with a prompt of about 12 tokens, so the
+prefill of that prompt is already included in it. Our energy model therefore charges the
+ONU nothing more for a longer prompt. This underestimates the energy of long prompts at
+the ONU, and the follow-ups that carry their conversation are the longest prompts in the
+simulation.
 
 \subsection{OLT}
 \label{sec:olt-energy}
@@ -779,7 +781,7 @@ computed.
 
 Batching makes each query much cheaper. The GPU draws about 72~W whatever the batch
 size, while the number of tokens it generates per second grows almost in proportion to
-the batch. The energy per generated token therefore falls 51 times, from 2.47~J for a
+the batch. The energy per generated token therefore falls by a factor of 51, from 2.47~J for a
 query alone to 0.048~J in a batch of 64. The energy per prompt token falls until a batch
 of about 12, and then stays near 0.015~J.
 
@@ -788,14 +790,14 @@ serves with continuous batching, where queries join and leave at any moment
 (Section~\ref{sec:measurements}). The simulator we built for the case study
 (Section~\ref{sec:simulation}) runs no model. It follows how many queries the OLT is
 serving at each moment, as continuous batching does, and charges each moment the energy
-per token measured for that batch size. Before collecting data, we set a criterion for this
-difference. The simulator had to predict the energy and the mean latency of real runs
+per token measured for that batch size. Before collecting data, we set a criterion to
+check that this combination is valid. The simulator had to predict the energy and the mean latency of real runs
 with continuous batching within 10\%. We first ran the GPU with a fixed number of
 requests in flight, from 1 to 64, and its energy per token was within 3.2\% of the
-batches above (Figure~\ref{fig:batching}a). We then sent the GPU 15 runs of requests
+fixed batches (Figure~\ref{fig:batching}a). We then sent the GPU 15 runs of requests
 arriving at random times and gave the same arrival times to the simulator. A first
-version of the simulator, which approximated a busy GPU with a straight line in the
-batch size, overestimated its energy above idle by up to 14\% at the highest load and
+version of the simulator, which modelled the energy of a busy GPU as a straight line in
+the batch size, overestimated its energy above idle by up to 14\% at the highest load and
 failed the criterion. The current version reads the measured values at each batch size instead, and
 it predicts the GPU's energy within 3\% and its mean latency within 2\%, under both ways
 of charging energy described in Section~\ref{sec:accounting}
@@ -827,19 +829,21 @@ Since the OLT batches, the energy of a query depends on how it is charged
 batch's energy, read off the sweep at the batch's size. A query alone on the OLT then
 costs 1,541~J, and one in a batch of 64 costs 34~J. Under marginal accounting, a query
 pays only what it adds. A batch draws the energy above idle measured at its size, shared
-equally among its queries. The idle machines are no longer charged, so the conversion
-falls to 2.20, and the ONU loses its idle draw and costs 91~J. The phone is charged the
-same under both. The first query on an idle OLT then costs about 793~J, which is mostly
-the work of keeping the card busy, while one more query on a busy OLT adds about 9~J.
-The study uses marginal accounting, because what a routing decision changes is what the
-query adds, and average accounting is a sensitivity run.
+equally among its queries. The spare machines in Google's accounting are not charged
+either, so the conversion falls to 2.20. The ONU's idle draw is also removed, so it costs
+91~J, and the phone is charged the same under both. The first query on an idle OLT then
+costs about 793~J, because it keeps the whole GPU working for itself, while one more
+query on a busy OLT adds about 9~J. The study uses marginal accounting, because what a
+routing decision changes is what the query adds, and repeats its main runs under average
+accounting as a sensitivity analysis.
 
 The cost the OLT reports, on its broadcast and on the answers it returns, follows the
-same accounting. Under marginal accounting it is what one more query would add. That is
-the slope of the batch's energy against its size while the OLT is busy and the cost of a
-query alone while it is idle, weighted by the share of its last 5 minutes the OLT spent
-busy. The slope is fitted by least squares over batches 1 to 64, since the differences
-between adjacent batch sizes are too noisy to route on. Under average accounting, the OLT
+same accounting. Under marginal accounting it is what one more query would add. While
+the OLT is busy, this is the slope of a batch's energy against its size, about 9~J per
+query. While the OLT is idle, it is the cost of a query alone. The OLT reports the
+average of the two, weighted by the share of its last 5 minutes it spent busy. The slope
+is fitted by least squares over batches 1 to 64, since the differences between adjacent
+batch sizes are too noisy to route on. Under average accounting, the OLT
 reports the mean cost per token of its work over the same 5 minutes. The timetable holds
 the same quantity, one value per hour of the day.
 
