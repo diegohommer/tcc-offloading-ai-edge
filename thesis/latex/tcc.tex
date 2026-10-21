@@ -641,9 +641,11 @@ can hold, since every energy is positive, so each tier runs every query that rea
 and passes it to the next tier, which is confidence-only escalation exactly. The main
 results use $\delta = 0$, and Chapter~\ref{chap:results} sweeps the values in between.
 
-With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} reduces to
-$C_{k^*} < E_i / (1-\beta)$. A tier therefore runs a query only if the cheapest tier
-above it costs at least $E_i/(1-\beta)$. This threshold rises with $\beta$, because the more
+With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} becomes
+$(1-\beta)\,C_{k^*} < E_i$, or $C_{k^*} < E_i / (1-\beta)$. Running the query costs
+$E_i$, and it avoids the cost $C_{k^*}$ of the tiers above only when the answer passes
+the test, which happens with probability $1-\beta$. A tier therefore runs a query only
+if the cheapest tier above it costs at least $E_i/(1-\beta)$. This threshold rises with $\beta$, because the more
 often a tier escalates, the more often the energy it spends running a query is wasted.
 
 \begin{algorithm}[htb]
