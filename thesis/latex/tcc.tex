@@ -861,8 +861,89 @@ weekend day.
 \section{Simulation}
 \label{sec:simulation}
 
-\todo{the households and their traffic; the drift and how it is measured; the OLT serving
-with continuous batching; calibration and test months; seeds.}
+The simulator we built for the case study follows one PON through time, from the moment
+each household sends a message until some tier returns its answer. It runs no model,
+since every answer is the one recorded for its question (Section~\ref{sec:overview}), and
+it charges each tier the energy of Section~\ref{sec:energy-model}, so what it reproduces
+is when the queries arrive, where each policy sends them and how busy the OLT is when
+they get there. Each run covers a test month of 28 days, preceded by a calibration month
+of the same length in which the timetable is learned, and every run is repeated with
+three random seeds, which change the households' conversations and the questions they
+ask.
+
+\subsection{Households and Their Traffic}
+\label{sec:traffic}
+
+Each run places between 1,000 and 20,000 households on the PON. On average, a household
+has one person who uses an LLM every week, and that person sends 3.6 messages a day,
+which is the average of the 700 million weekly users of ChatGPT in July 2025, who sent 18
+billion messages a week~\cite{chatterji2025how}. Some people chat far more than others,
+and in WildChat, the logs of a free ChatGPT service used around the
+world~\cite{zhao2024wildchat}, the busiest 10\% of the users who came back over two
+weeks or more send 59\% of the messages. Each user in the simulation is therefore given
+a random level of activity, chosen so that the busiest 10\% send the same share while
+the average stays at 3.6 messages a day.
+
+People send their messages in conversations, a few questions a couple of minutes apart,
+and the simulation copies from WildChat when conversations start, how many messages
+they hold and how long people pause between them. WildChat records its times on the
+server's clock, and its users are spread over the world, so each user's times are first
+moved to their own time zone. Every simulated household then shares that one local day,
+as the homes on one OLT share a time zone. A conversation is a run of messages less than 10 minutes apart, and it holds
+3.2 messages on average. Conversations start about seven times more often at the busiest
+hour of a weekday, in the afternoon, than at the quietest, before dawn, and a weekend day
+has three quarters of the conversations of a weekday. Users who sent a single message
+are left out, because WildChat's sudden traffic spikes are made mostly of them, which
+suggests automated traffic rather than people, and so are the messages whose time zone
+cannot be told. Every message asks a question drawn at random from GSM8K. A follow-up is sent a
+pause after the previous answer arrives, and its prompt carries the earlier turns of its
+conversation, so prompts grow longer as a conversation goes on.
+
+\subsection{Drift in the Load}
+\label{sec:drift}
+
+If every day followed the average day, a timetable would predict the OLT's load almost
+perfectly, since only the randomness of the arrivals would move an hour away from it.
+Real load drifts, with hours that run busier or quieter than usual, so the study has
+three scenarios. With no drift, every day follows the average day. With mild and strong
+drift, the load of all households is multiplied by a common random factor that changes
+slowly over time. Its average is one, so the month carries the same number of messages,
+but at a given hour the PON can be, for example, a quarter busier than the timetable
+says, and it stays so for some hours before returning to it.
+
+How large and how long these departures are was measured on BurstGPT, whose more than
+3,000 users reached the models through one regional provider of the kind that serves
+companies and campuses~\cite{wang2025burstgpt}. It is used for the drift because
+WildChat's users are spread over the world and do not share one access network, while
+BurstGPT's share one provider, closer to the users of a single OLT. Once each week's
+overall level is taken out, a typical hour of BurstGPT runs about 26\% busier or 21\%
+quieter than its timetable, and such a departure lasts about three hours, which gives
+the mild drift. Without taking each week's level out, a typical hour departs by 58\% or
+37\% and the departure lasts about 12 hours, which gives the strong drift. Most of this
+larger departure comes from BurstGPT's traffic growing over its 110 days, which the
+simulation turns into random swings of about 12 hours, so the strong drift is best read
+as a demanding case. In both, the factor follows a log-normal distribution, with a
+standard deviation on the log scale of 0.235 for the mild drift and 0.457 for the strong
+one, and correlation times of 3.2 and 12.3 hours. The calibration month drifts as well,
+so the timetable learns an average that includes the drift.
+
+\subsection{Serving the Queries}
+\label{sec:serving}
+
+The user device and the ONU answer at the speeds their sources measured. The phone reads
+the prompt at 288 tokens per second and generates 72 tokens per second, while the ONU
+generates 6.3 tokens per second and so takes about 44 seconds for an answer of the mean
+length. Each household's ONU answers one query at a time, in the order they were sent,
+so a second query from the same home waits for the first. The OLT serves with continuous
+batching (Section~\ref{sec:olt-energy}), with 64 slots, the largest batch measured, and a
+query that finds every slot busy waits for one. A query reaches the OLT only after the
+seconds the tiers below spent on it, so the batch it meets is the one actually running
+at that moment. Its prefill is charged at the size of the batch it joins but is taken to
+take no time, since it is short next to the decode, and the time spent crossing the
+network, a few milliseconds, is also left out.
+
+\subsection{What the Simulation Leaves Out}
+\label{sec:simulation-limits}
 
 The simulation reproduces how the OLT's cost changes over time, following the load of
 the households and its drift, and holds the other quantities the policy reads still. The
@@ -870,23 +951,16 @@ user device and the ONU spend a fixed energy per token, while a real phone or ga
 spends more or less depending on its temperature, its battery and whatever else it is
 running. Every household has the same three models and asks questions drawn at random
 from the same benchmark, so the answer lengths each tier publishes barely move, while
-real households would differ in their models and in what they ask. A follow-up is sent
-some time after the previous answer arrives, and its prompt carries the earlier turns of
-its conversation, but its answer is still the one recorded for its question alone.
+real households would differ in their models and in what they ask. A follow-up's answer
+is also the one recorded for its question alone, even though its prompt carries the
+conversation.
 
-The hours at which conversations open, their length, the pauses between messages and how
-unevenly people chat come from WildChat, the logs of a free ChatGPT service used around
-the world~\cite{zhao2024wildchat}, with each user's times taken in their own time zone.
-Its users chose to try a free chatbot, and a user there is an address and a browser
-rather than a household, so they may not chat as a typical household does. Its pauses
-also run from one answer to the next, so they include the time the next answer took. How
-the load drifts comes instead from BurstGPT, whose more than 3,000 users reached the
-models through one regional provider of the kind that serves companies and
-campuses~\cite{wang2025burstgpt}. It is used for the drift because WildChat's users are
-spread over the world and do not share one access network, while BurstGPT's share one
-provider, closer to the users of a single OLT. The policy uses one mean answer length per model, although the standard
-deviation of a single answer's length is 30 to 40\% of that mean and the length could be
-predicted from the query itself~\cite{zheng2023response}. The results therefore show what
+WildChat's users chose to try a free chatbot, and a user there is an address and a
+browser rather than a household, so they may not chat as a typical household does. Its
+pauses also run from one answer to the next, so they include the time the next answer
+took. The policy uses one mean answer length per model, although the standard deviation
+of a single answer's length is 30 to 40\% of that mean and the length could be predicted
+from the query itself~\cite{zheng2023response}. The results therefore show what
 the policy does when the main uncertainty it faces is the OLT's load.
 
 \section{Evaluation}
