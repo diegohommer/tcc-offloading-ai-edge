@@ -730,7 +730,7 @@ batches, so the table gives its range, explained in Section~\ref{sec:olt-energy}
     \hline
     User & the chip & none & 15.7 & 15.7 \\
     ONU & the board at the plug & none & 243 & 91 \\
-    OLT & the GPU card & $\times 2.47$ or $\times 2.20$ & 34--1,541 & 9--793 \\
+    OLT & the GPU card & $\times 2.47$ or $\times 2.20$ & 34--1,541 & 18--793 \\
     \hline
   \end{tabular}
   \legend{Source: The author}
@@ -825,16 +825,18 @@ than Google's large machines do, so this figure is more likely too low than too 
 \label{sec:accounting}
 
 Since the OLT batches, the energy of a query depends on how it is charged
-(Section~\ref{sec:measurements}). Under average accounting, a query pays its share of its
-batch's energy, read off the sweep at the batch's size. A query alone on the OLT then
-costs 1,541~J, and one in a batch of 64 costs 34~J. Under marginal accounting, nothing
-is charged for keeping the hardware on, so a batch's energy above idle, measured at its
-size, is shared equally among its queries. The spare machines in Google's accounting are not charged
-either, so the conversion falls to 2.20. The ONU's idle draw is also removed, so it costs
-91~J, and the phone is charged the same under both. The first query on an idle OLT then
-costs about 793~J, because it keeps the whole GPU working for itself, while one more
-query on a busy OLT adds about 9~J. The study uses marginal accounting, because what a
-routing decision changes is what the query adds, and repeats its main runs under average
+(Section~\ref{sec:measurements}). Under average accounting, a query pays its share of
+its batch's energy, read off the sweep at the batch's size. Under marginal accounting,
+nothing is charged for keeping the hardware on, and a batch's energy above idle,
+measured at its size, is shared equally among its queries. A query alone on the OLT
+costs 1,541~J under average accounting and 793~J under marginal accounting, and one in
+a batch of 64 costs 34~J and 18~J respectively.
+
+Marginal accounting also changes the other figures. Google's share for spare machines
+is no longer charged, which lowers the OLT's conversion from 2.47 to 2.20, and the
+ONU's idle draw is removed, which lowers its energy from 243~J to 91~J. The phone is
+charged the same under both. The study uses marginal accounting, because a routing
+decision changes only what the query adds, and repeats its main runs under average
 accounting as a sensitivity analysis.
 
 The cost the OLT reports, on its broadcast and on the answers it returns, follows the
