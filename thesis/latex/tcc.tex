@@ -707,13 +707,17 @@ tier a current estimate of it.
 \label{sec:energy-model}
 
 The energy of every tier is counted at the same boundary, everything the system draws to
-answer a query, as in Google's accounting of a prompt~\cite{elsworth2025measuring}. The
-sources of the three tiers count different parts of their systems
+answer a query, as in Google's accounting of a prompt~\cite{elsworth2025measuring}. For
+the user device and the ONU, this is the whole device. For the OLT, it is the GPU
+together with the rest of its server, the spare machines kept ready for peaks and the
+building that houses them. The energy of carrying queries and answers over the PON and
+the home network is left out, as are relaying the OLT's broadcast inside the home and
+manufacturing the hardware. The sources of the three tiers count different parts of their
+systems
 (Section~\ref{sec:measurements}), so Table~\ref{tab:energy} lists what each one counts
 and how it is brought to this boundary, with the energy of a query of each tier's mean
 prompt and answer lengths on GSM8K. The OLT's energy depends on how many queries it
-batches, so the table gives its range, explained in Section~\ref{sec:olt-energy}. Energy
-is not counted for carrying queries and answers over the PON or the home network.
+batches, so the table gives its range, explained in Section~\ref{sec:olt-energy}.
 
 \begin{table}[htb]
   \centering
