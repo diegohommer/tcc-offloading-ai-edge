@@ -762,29 +762,40 @@ longest prompts in the simulation.
 \subsection{OLT}
 \label{sec:olt-energy}
 
-We measured the OLT ourselves, running Qwen2.5-7B in 8-bit on one NVIDIA L4 GPU with
-vLLM 0.21.0~\cite{kwon2023vllm} and the NVIDIA driver 580.95.05. NVML's cumulative energy counter was read before and after each pass, since
-sampling the power misses part of the runtime~\cite{yang2023part}. The sweep ran static
-batches from 1 to 64 queries, each generating 300 tokens, with a pass of one token per
-batch to separate the prefill from the decode. Each point is the median of five repeats
-after a discarded warm-up, and the idle power of the card, 30.5~W with the model loaded,
-was measured so it could be subtracted. Decode energy per token falls 51 times from
-batch 1 to batch 64, from 2.47~J to 0.048~J, because the card draws about 72~W at any
-batch size while its throughput grows almost in proportion to the batch. Prefill energy
-falls until a batch of about 12 and then stays near 0.015~J per token.
+We measured the energy of the OLT ourselves. Its model, Qwen2.5-7B in 8-bit, ran on one
+NVIDIA L4 GPU and was served with vLLM 0.21.0~\cite{kwon2023vllm}, under the NVIDIA
+driver 580.95.05. The GPU keeps a running total of the energy it has used, which NVML
+reports, so we read this total before and after each run and took the difference. This is
+more reliable than sampling the power, which misses part of the
+runtime~\cite{yang2023part}.
 
-The simulation serves the OLT with continuous batching (Section~\ref{sec:simulation}),
-while the sweep timed static batches. We checked the difference on the same GPU and
-settings, with vLLM serving requests as they arrive, against a criterion written before
-the data were collected. The simulator had to predict the energy and the mean latency of
-each run within 10\%. With a fixed number of requests always in flight, from 1 to 64, the
-energy per token is within $-1.4\%$ and $+3.2\%$ of the static sweep
-(Figure~\ref{fig:batching}a). We then replayed the arrivals of 15 runs with random
-arrivals through the simulator's OLT. A first version of the simulator charged a busy OLT
-along a straight line in the batch size, and it overstated the energy above idle by up to
-14\% at the highest load, failing the criterion there. The simulator now reads the
-measured curve at each batch size. Its energy is within $+1.0\%$ to $+3.0\%$ of what the
-GPU spent, and its mean latency within $-1.8\%$ to $-0.2\%$
+We gave the GPU batches of 1 to 64 queries at once, each query generating 300 tokens.
+To separate the two phases of inference (Section~\ref{sec:llm-background}), each batch
+was also run generating a single token, which measures the prefill alone, and the decode
+is the difference between the two runs. Every measurement was repeated five times after
+one warm-up run, and we kept the median. We also measured the GPU at rest, at 30.5~W
+with the model loaded, so that the energy a query adds above this idle power could be
+computed.
+
+Batching makes each query much cheaper. The GPU draws about 72~W whatever the batch
+size, while the number of tokens it generates per second grows almost in proportion to
+the batch. The energy per generated token therefore falls 51 times, from 2.47~J for a
+query alone to 0.048~J in a batch of 64. The energy per prompt token falls until a batch
+of about 12, and then stays near 0.015~J.
+
+In these batches every query starts and ends together, while the OLT in the simulation
+serves with continuous batching, where queries join and leave at any moment
+(Section~\ref{sec:measurements}). Before collecting data, we set a criterion for this
+difference. The simulator had to predict the energy and the mean latency of real runs
+with continuous batching within 10\%. We first ran the GPU with a fixed number of
+requests in flight, from 1 to 64, and its energy per token was within 3.2\% of the
+batches above (Figure~\ref{fig:batching}a). We then sent the GPU 15 runs of requests
+arriving at random times and gave the same arrival times to the simulator. A first
+version of the simulator, which approximated a busy GPU with a straight line in the
+batch size, overestimated its energy above idle by up to 14\% at the highest load and
+failed the criterion. The current version reads the measured values at each batch size instead, and
+it predicts the GPU's energy within 3\% and its mean latency within 2\%, under both ways
+of charging energy described in Section~\ref{sec:accounting}
 (Figure~\ref{fig:batching}b).
 
 \begin{figure}[htb]
@@ -795,14 +806,15 @@ GPU spent, and its mean latency within $-1.8\%$ to $-0.2\%$
   \legend{Source: The author}
 \end{figure}
 
-The card is only part of the OLT's server. In Google's accounting of a median prompt, the
-accelerators take 58\% of the energy, the host's CPU and memory 25\%, idle machines 10\%
-and the building 8\%~\cite{elsworth2025measuring}. The server therefore spends
-$(58+25+10)/58 = 1.60$ times what its accelerators do, and an operator's site adds the
-industry's average PUE of 1.54~\cite{uptime2025survey} in place of Google's own building
-overhead, so the OLT's energy is its card's times 2.47. A central office holding a single
-72~W card may well spend a larger share on its host than Google's servers, so this figure
-is more likely low than high.
+The GPU is only part of what the OLT's server consumes. In Google's measurements, the
+accelerators account for 58\% of a prompt's energy, the server's CPU and memory for 25\%,
+the spare machines kept ready for peaks for 10\% and the building for
+8\%~\cite{elsworth2025measuring}. Counting the first three, a server spends
+$(58+25+10)/58 = 1.60$ times the energy of its accelerators. In place of Google's own
+building overhead, we use the industry's average PUE of 1.54~\cite{uptime2025survey}, so
+the OLT's energy is the GPU's multiplied by $1.60 \times 1.54 = 2.47$. A central office
+server with a single 72~W GPU probably spends a larger share on the rest of the server
+than Google's large machines do, so this figure is more likely too low than too high.
 
 \subsection{Average and Marginal Accounting}
 \label{sec:accounting}
