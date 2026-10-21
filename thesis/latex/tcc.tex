@@ -634,20 +634,6 @@ and runs it otherwise. The second is when an answer escalates (lines 9 to 11). T
 then goes to tier $i+1$, or skips directly to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$.
 The top tier has nowhere to send a query and always returns its answer.
 
-The margin $\delta$ keeps a tier from moving a query for a negligible saving, and it also
-sets how far the policy departs from escalation by confidence alone. With $\delta = 0$, a
-tier takes any route that is expected to cost less. With $\delta = 1$, neither inequality
-can hold, since every energy is positive, so each tier runs every query that reaches it
-and passes it to the next tier, which is confidence-only escalation exactly. The main
-results use $\delta = 0$, and Chapter~\ref{chap:results} sweeps the values in between.
-
-With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} becomes
-$(1-\beta)\,C_{k^*} < E_i$, or $C_{k^*} < E_i / (1-\beta)$. Running the query costs
-$E_i$, and it avoids the cost $C_{k^*}$ of the tiers above only when the answer passes
-the test, which happens with probability $1-\beta$. A tier therefore runs a query only
-if the cheapest tier above it costs at least $E_i/(1-\beta)$. This threshold rises with $\beta$, because the more
-often a tier escalates, the more often the energy it spends running a query is wasted.
-
 \begin{algorithm}[htb]
   \caption{The decision of tier $i < J$ on a query $q$}
   \label{alg:decision}
@@ -670,6 +656,20 @@ often a tier escalates, the more often the energy it spends running a query is w
   }
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
+
+The margin $\delta$ keeps a tier from moving a query for a negligible saving, and it also
+sets how far the policy departs from escalation by confidence alone. With $\delta = 0$, a
+tier takes any route that is expected to cost less. With $\delta = 1$, neither inequality
+can hold, since every energy is positive, so each tier runs every query that reaches it
+and passes it to the next tier, which is confidence-only escalation exactly. The main
+results use $\delta = 0$, and Chapter~\ref{chap:results} sweeps the values in between.
+
+With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} becomes
+$(1-\beta)\,C_{k^*} < E_i$, or $C_{k^*} < E_i / (1-\beta)$. Running the query costs
+$E_i$, and it avoids the cost $C_{k^*}$ of the tiers above only when the answer passes
+the test, which happens with probability $1-\beta$. A tier therefore runs a query only
+if the cheapest tier above it costs at least $E_i/(1-\beta)$. This threshold rises with $\beta$, because the more
+often a tier escalates, the more often the energy it spends running a query is wasted.
 
 To compute $C_k$, a tier also needs the average answer length of every tier above it.
 Each tier ships with the mean answer length of its model, measured on the benchmark
@@ -706,9 +706,123 @@ tier a current estimate of it.
 \section{Energy Model}
 \label{sec:energy-model}
 
-\todo{the boundary; the user and ONU figures; the OLT's measurement against batch size
-and its check under continuous batching; average and marginal accounting; what the OLT
-reports.}
+The energy of every tier is counted at the same boundary, everything the system draws to
+answer a query, as in Google's accounting of a prompt~\cite{elsworth2025measuring}. The
+sources of the three tiers count different parts of their systems
+(Section~\ref{sec:measurements}), so Table~\ref{tab:energy} lists what each one counts
+and how it is brought to this boundary, with the energy of a query of each tier's mean
+prompt and answer lengths on GSM8K. The OLT's energy depends on how many queries it
+batches, so the table gives its range, explained in Section~\ref{sec:olt-energy}. Energy
+is not counted for carrying queries and answers over the PON or the home network.
+
+\begin{table}[htb]
+  \centering
+  \caption{Energy of the three tiers at the system boundary}
+  \label{tab:energy}
+  \begin{tabular}{lllrr}
+    \hline
+    & & & \multicolumn{2}{c}{Joules per query} \\
+    Tier & Source counts & Conversion & Average & Marginal \\
+    \hline
+    User & the chip & none & 15.7 & 15.7 \\
+    ONU & the board at the plug & none & 243 & 91 \\
+    OLT & the GPU card & $\times 2.47$, or $\times 2.20$ & 34--1,541 & 9--793 \\
+    \hline
+  \end{tabular}
+  \legend{Source: The author}
+\end{table}
+
+\subsection{User Device and ONU}
+\label{sec:user-onu-energy}
+
+The user device is priced as the phone that \citeonline{cai2026npu} measured with
+Qualcomm's power telemetry, running Llama-3.2-1B on its CPU. It spends 0.016~J per
+prompt token and 0.074~J per generated token, or 15.7~J for a query of the mean lengths.
+The telemetry covers the whole chip but not the memory, the display or the radio, so
+this figure is a lower bound. Escalation by confidence alone runs every query on the
+user device, so a dearer device would raise its energy more than the policy's, and the
+lower bound is more likely to understate the saving than to overstate it.
+
+The ONU is priced as the Raspberry Pi 5 with a Hailo-10H accelerator that
+\citeonline{renney2026cloud} measured with a meter at the power input, running
+Qwen2.5-1.5B. It spends 0.88~J per generated token at 6.34 tokens per second, or 243~J
+for an answer of the mean length. This figure includes the board's idle draw of
+about 3.5~W~\cite{tummalapalli2026edge}, and without it the ONU spends 0.33~J per token.
+\citeonline{tummalapalli2026edge} measured the same model on the same hardware at 0.27~J
+per token above idle, so the two sources agree. The source gives a single figure per
+generated token, measured with a prompt of about 12 tokens, so its prefill is inside that
+figure and the model charges the ONU nothing more for a longer prompt. This underprices
+long prompts at the ONU, and the follow-ups that carry their conversation are the
+longest prompts in the simulation.
+
+\subsection{OLT}
+\label{sec:olt-energy}
+
+We measured the OLT ourselves, running Qwen2.5-7B in 8-bit on one NVIDIA L4 GPU with
+vLLM 0.21.0~\cite{kwon2023vllm} and the NVIDIA driver 580.95.05. NVML's cumulative energy counter was read before and after each pass, since
+sampling the power misses part of the runtime~\cite{yang2023part}. The sweep ran static
+batches from 1 to 64 queries, each generating 300 tokens, with a pass of one token per
+batch to separate the prefill from the decode. Each point is the median of five repeats
+after a discarded warm-up, and the idle power of the card, 30.5~W with the model loaded,
+was measured so it could be subtracted. Decode energy per token falls 51 times from
+batch 1 to batch 64, from 2.47~J to 0.048~J, because the card draws about 72~W at any
+batch size while its throughput grows almost in proportion to the batch. Prefill energy
+falls until a batch of about 12 and then stays near 0.015~J per token.
+
+The simulation serves the OLT with continuous batching (Section~\ref{sec:simulation}),
+while the sweep timed static batches. We checked the difference on the same GPU and
+settings, with vLLM serving requests as they arrive, against a criterion written before
+the data were collected. The simulator had to predict the energy and the mean latency of
+each run within 10\%. With a fixed number of requests always in flight, from 1 to 64, the
+energy per token is within $-1.4\%$ and $+3.2\%$ of the static sweep
+(Figure~\ref{fig:batching}a). We then replayed the arrivals of 15 runs with random
+arrivals through the simulator's OLT. A first version of the simulator charged a busy OLT
+along a straight line in the batch size, and it overstated the energy above idle by up to
+14\% at the highest load, failing the criterion there. The simulator now reads the
+measured curve at each batch size. Its energy is within $+1.0\%$ to $+3.0\%$ of what the
+GPU spent, and its mean latency within $-1.8\%$ to $-0.2\%$
+(Figure~\ref{fig:batching}b).
+
+\begin{figure}[htb]
+  \centering
+  \caption{The OLT's energy under static and continuous batching}
+  \label{fig:batching}
+  \includegraphics[width=\textwidth]{figures/batching_validation.pdf}
+  \legend{Source: The author}
+\end{figure}
+
+The card is only part of the OLT's server. In Google's accounting of a median prompt, the
+accelerators take 58\% of the energy, the host's CPU and memory 25\%, idle machines 10\%
+and the building 8\%~\cite{elsworth2025measuring}. The server therefore spends
+$(58+25+10)/58 = 1.60$ times what its accelerators do, and an operator's site adds the
+industry's average PUE of 1.54~\cite{uptime2025survey} in place of Google's own building
+overhead, so the OLT's energy is its card's times 2.47. A central office holding a single
+72~W card may well spend a larger share on its host than Google's servers, so this figure
+is more likely low than high.
+
+\subsection{Average and Marginal Accounting}
+\label{sec:accounting}
+
+Since the OLT batches, the energy of a query depends on how it is charged
+(Section~\ref{sec:measurements}). Under average accounting, a query pays its share of its
+batch's energy, read off the sweep at the batch's size. A query alone on the OLT then
+costs 1,541~J, and one in a batch of 64 costs 34~J. Under marginal accounting, a query
+pays only what it adds. A batch draws the energy above idle measured at its size, shared
+equally among its queries. The idle machines are no longer charged, so the conversion
+falls to 2.20, and the ONU loses its idle draw and costs 91~J. The phone is charged the
+same under both. The first query on an idle OLT then costs about 793~J, which is mostly
+the work of keeping the card busy, while one more query on a busy OLT adds about 9~J.
+The study uses marginal accounting, because what a routing decision changes is what the
+query adds, and average accounting is a sensitivity run.
+
+The cost the OLT reports, on its broadcast and on the answers it returns, follows the
+same accounting. Under marginal accounting it is what one more query would add. That is
+the slope of the batch's energy against its size while the OLT is busy and the cost of a
+query alone while it is idle, weighted by the share of its last 5 minutes the OLT spent
+busy. The slope is fitted by least squares over batches 1 to 64, since the differences
+between adjacent batch sizes are too noisy to route on. Under average accounting, the OLT
+reports the mean cost per token of its work over the same 5 minutes. The timetable holds
+the same quantity, one value per hour of the day.
 
 \section{Simulation}
 \label{sec:simulation}
