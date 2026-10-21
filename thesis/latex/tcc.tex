@@ -550,12 +550,12 @@ carry. Their energy comes from published measurements~\cite{cai2026npu,renney202
 while the OLT's is measured by us on a GPU (Section~\ref{sec:energy-model}).
 
 The hierarchy stops at the OLT, without the cloud tier that those architectures place
-above it. The access network is where the
-downstream broadcast exists, and so where the strategies this work compares differ. A
-cloud tier was also beyond the resources of this work, since, like the other tiers, it
-would need the answers of its model, of more than 70 billion parameters, to every test
-problem with the probabilities of their tokens, and that model's energy measured against
-batch size on a cluster of GPUs~\cite{pakpahan2026continuum}.
+above it. The downstream broadcast exists only in the access network, so that is where
+the strategies compared in this work differ. A cloud tier was also beyond the resources
+of this work. Like the other tiers, it would need its model's answer to every test
+problem, with the probabilities of their tokens, and that model would have more than 70
+billion parameters. Its energy would also have to be measured against batch size on a
+cluster of GPUs~\cite{pakpahan2026continuum}.
 Without it, the OLT is the top tier and returns its answer to every query that reaches
 it, so its accuracy is the highest any policy can deliver. The decision rule itself does
 not depend on the number of tiers (Section~\ref{sec:policy}), and a cloud tier would
@@ -612,9 +612,8 @@ for the length of this answer, which is only known after the tier runs.
 Equation~\eqref{eq:cost-to-completion} also assumes that, after tier $j$, the query
 climbs one tier at a time, as it does when confidence alone decides.
 
-Since the quantile test escalates the answers whose confidence falls below the
-$\beta$-quantile of the tier's recent confidences, about a fraction $\beta$ of a tier's
-answers escalate by construction, and the policy sets $p_j = \beta$. The policy does not
+The quantile test escalates about a fraction $\beta$ of a tier's answers by
+construction (Section~\ref{sec:llm-background}), so the policy sets $p_j = \beta$. The policy does not
 depend on this test, though. Equation~\eqref{eq:cost-to-completion} needs only the
 probability that a tier escalates, so it works with any escalation test, such as a fixed
 threshold or a separate scoring model~\cite{chen2024frugalgpt}. A test whose rate is not
@@ -677,11 +676,11 @@ before deployment, and then keeps a running mean of the lengths of its own answe
 answer that is returned travels back to the user through every tier below the one that
 produced it, so it can carry, at no extra cost, the energy rates and the running mean of
 every tier that ran the query, and each tier below replaces the values it holds with the
-ones it hears. The OLT's mean covers every household on the PON, while those of the user
-device and the ONU cover only their own household, so households with different models
-would each hold their own values. A tier can decide once it has an estimate of the OLT's
-energy rate, and until then it escalates by confidence alone, running every query that
-reaches it and passing it to the next tier. Each device also keeps its own confidence
+ones it hears. The OLT's running mean covers every household on the PON, while the user
+device's and the ONU's cover only their own household. Households with different models
+would therefore each hold their own values for these two tiers. A tier can decide once
+it has an estimate of the OLT's energy rate. Until then, it runs every query that
+reaches it and escalates by confidence alone. Each device also keeps its own confidence
 window for the quantile test, started from the confidences of its model on the
 benchmark, so the threshold is right from the first query.
 
@@ -698,7 +697,8 @@ tier a current estimate of it.
   the policy runs with it, and relearned three times, each from the load the previous
   version produced, so that it settles.
   \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream the energy one
-  more query would add to its consumption, averaged over its last 5 minutes. A single
+  more query would add to its consumption, averaged over its last 5 minutes
+  (Section~\ref{sec:accounting}). A single
   message reaches every ONU on the PON, and each ONU passes it on to the devices in its
   home.
 \end{itemize}
@@ -845,7 +845,7 @@ average of the two, weighted by the share of its last 5 minutes it spent busy. T
 is fitted by least squares over batches 1 to 64, since the differences between adjacent
 batch sizes are too noisy to route on. Under average accounting, the OLT
 reports the mean cost per token of its work over the same 5 minutes. The timetable holds
-the same quantity, one value per hour of the day.
+the same quantity for each hour of a weekday and of a weekend day.
 
 \section{Simulation}
 \label{sec:simulation}
@@ -853,27 +853,30 @@ the same quantity, one value per hour of the day.
 \todo{the households and their traffic; the drift and how it is measured; the OLT serving
 with continuous batching; calibration and test months; seeds.}
 
-Of the quantities the policy reads, only the OLT's cost changes over time in a way the
-simulation tries to reproduce, following the load of the households and its drift, and
-the others are held still. The user device and the ONU spend a fixed energy per token,
+The simulation reproduces how the OLT's cost changes over time, following the load of
+the households and its drift, and holds the other quantities the policy reads still. The
+user device and the ONU spend a fixed energy per token,
 while a real phone or gateway spends more or less depending on its temperature, its
 battery and whatever else it is running. Every household has the same three models and
 asks questions drawn at random from the same benchmark, so the answer lengths each tier
 publishes barely move, while real households would differ in their models and in what
-they ask. A follow-up is sent a pause after the previous answer arrives and carries the
-earlier turns of its conversation in its prompt, but its answer is still the one recorded
-for its question alone. The hours at which
-conversations open, their length, the pauses between messages and how unevenly people
+they ask. A follow-up is sent some time after the previous answer arrives, and its
+prompt carries the earlier turns of its conversation, but its answer is still the one
+recorded for its question alone.
+
+The hours at which conversations open, their length, the pauses between messages and how unevenly people
 chat come from WildChat, the logs of a free ChatGPT service used around the
-world~\cite{zhao2024wildchat}, with each user's times taken in their own time zone. Its
-users chose to try a free chatbot, a user there is an address and a browser rather than
-a household, and its pauses run from one answer to the next, so they include the time
-the next answer took. How the load drifts comes instead from BurstGPT, whose more than 3,000 users
+world~\cite{zhao2024wildchat}, with each user's times taken in their own time zone.
+WildChat's users chose to try a free chatbot, so they may not chat as a typical
+household does. A user there is also an address and a browser rather than a household.
+Its pauses run from one answer to the next, so they include the time the next answer
+took. How the load drifts comes instead from BurstGPT, whose more than 3,000 users
 reached the models through one regional provider of the kind that serves companies and
-campuses~\cite{wang2025burstgpt}, since WildChat's users, spread over the world, do not
-share one access network. The policy uses one mean answer length per model, while the standard deviation of a single answer's length is 30
-to 40\% of that mean, and the length could be predicted from the query
-itself~\cite{zheng2023response}. The results therefore show what the policy does when
+campuses~\cite{wang2025burstgpt}. WildChat's users are spread over the world and do not
+share one access network, while BurstGPT's share one provider, closer to the users of a
+single OLT. The policy uses one mean answer length per model, although the standard
+deviation of a single answer's length is 30 to 40\% of that mean, and the length could
+be predicted from the query itself~\cite{zheng2023response}. The results therefore show what the policy does when
 the main uncertainty it faces is the OLT's load.
 
 \section{Evaluation}
