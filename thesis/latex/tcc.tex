@@ -678,9 +678,9 @@ produced it, so it can carry, at no extra cost, the energy rates and the running
 every tier that ran the query, and each tier below replaces the values it holds with the
 ones it hears. The OLT's running mean covers every household on the PON, while the user
 device's and the ONU's cover only their own household. Households with different models
-would therefore each hold their own values for these two tiers. A tier can decide once
-it has an estimate of the OLT's energy rate. Until then, it runs every query that
-reaches it and escalates by confidence alone. Each device also keeps its own confidence
+would therefore each hold their own values for these two tiers. Until a tier has an
+estimate of the OLT's energy rate, it runs every query that reaches it and escalates by
+confidence alone. Each device also keeps its own confidence
 window for the quantile test, started from the confidences of its model on the
 benchmark, so the threshold is right from the first query.
 
@@ -827,9 +827,9 @@ than Google's large machines do, so this figure is more likely too low than too 
 Since the OLT batches, the energy of a query depends on how it is charged
 (Section~\ref{sec:measurements}). Under average accounting, a query pays its share of its
 batch's energy, read off the sweep at the batch's size. A query alone on the OLT then
-costs 1,541~J, and one in a batch of 64 costs 34~J. Under marginal accounting, a query
-pays only what it adds. A batch draws the energy above idle measured at its size, shared
-equally among its queries. The spare machines in Google's accounting are not charged
+costs 1,541~J, and one in a batch of 64 costs 34~J. Under marginal accounting, nothing
+is charged for keeping the hardware on, so a batch's energy above idle, measured at its
+size, is shared equally among its queries. The spare machines in Google's accounting are not charged
 either, so the conversion falls to 2.20. The ONU's idle draw is also removed, so it costs
 91~J, and the phone is charged the same under both. The first query on an idle OLT then
 costs about 793~J, because it keeps the whole GPU working for itself, while one more
