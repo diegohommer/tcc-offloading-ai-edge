@@ -866,7 +866,16 @@ each household sends a message until some tier returns its answer. It runs no mo
 since every answer is the one recorded for its question (Section~\ref{sec:overview}), and
 it charges each tier the energy of Section~\ref{sec:energy-model}, so what it reproduces
 is when the queries arrive, where each policy sends them and how busy the OLT is when
-they get there. Each run covers a test month of 28 days, preceded by a calibration month
+they get there. It keeps the messages waiting to be sent in time order and takes them
+one at a time. Before each message, it brings the OLT up to that moment, admitting the
+queries that have reached it, finishing the answers it completes and, under the broadcast
+strategy, sending the broadcast every 10 seconds. The message then climbs from the user
+device as Algorithm~\ref{alg:decision} decides, and a query that leaves for the OLT joins
+it after the seconds the tiers below spent on it. When an answer reaches the user, the
+next message of its conversation, if there is one, is queued a pause later. The code of
+the simulator and of the measurements is
+public\footnote{\url{https://github.com/diegohommer/tcc-offloading-ai-edge}}. Each run
+covers a test month of 28 days, preceded by a calibration month
 of the same length in which the timetable is learned, and every run is repeated with
 three random seeds, which change the households' conversations and the questions they
 ask.
