@@ -841,8 +841,10 @@ charged the same under both. The study uses marginal accounting, because a routi
 decision changes only what the query adds, and repeats its main runs under average
 accounting as a sensitivity analysis.
 
-The cost the OLT reports, on its broadcast and on the answers it returns, follows the
-same accounting. Under marginal accounting it is what one more query would add, about 9~J
+The cost the OLT reports follows the same accounting. The OLT sends it on its broadcast
+and also stamps it on the answers it returns, but under the broadcast strategy the tiers
+take the OLT's cost only from the broadcast, and the answers are its only source in the
+ablation described in Section~\ref{sec:evaluation}. Under marginal accounting it is what one more query would add, about 9~J
 while the OLT is busy and the cost of a query alone while it is idle. The OLT reports the
 average of the two, weighted by the share of its last 5 minutes it spent busy. The 9~J is
 a single slope fitted over batches 1 to 64, because the energy measured between adjacent
@@ -891,7 +893,8 @@ the policy does when the main uncertainty it faces is the OLT's load.
 
 \todo{reading every policy at the same accuracy; the baselines: confidence-only
 escalation, cited as the rule of \citeonline{wu2025recserve}, with and without the ONU,
-and each tier answering alone; the metrics; the sensitivity runs and the sweep of
+and each tier answering alone; the piggyback ablation, where a household hears the
+OLT's cost only on its own answers; the metrics; the sensitivity runs and the sweep of
 $\delta$.}
 
 %==============================================================================
