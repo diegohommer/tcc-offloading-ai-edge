@@ -785,7 +785,10 @@ of about 12, and then stays near 0.015~J.
 
 In these batches every query starts and ends together, while the OLT in the simulation
 serves with continuous batching, where queries join and leave at any moment
-(Section~\ref{sec:measurements}). Before collecting data, we set a criterion for this
+(Section~\ref{sec:measurements}). The simulator we built for the case study
+(Section~\ref{sec:simulation}) runs no model. It follows how many queries the OLT is
+serving at each moment, as continuous batching does, and charges each moment the energy
+per token measured for that batch size. Before collecting data, we set a criterion for this
 difference. The simulator had to predict the energy and the mean latency of real runs
 with continuous batching within 10\%. We first ran the GPU with a fixed number of
 requests in flight, from 1 to 64, and its energy per token was within 3.2\% of the
