@@ -675,17 +675,19 @@ running a query is wasted.
 
 To compute $C_k$, a tier also needs the average answer length of every tier above it.
 Each tier ships with the mean answer length of its model, measured on the benchmark
-before deployment, and then keeps a running mean of the lengths of its own answers. Since
-an answer travels back to the user through every tier below the one that produced it, it
-can carry, at no extra cost, the energy rates and the running mean of every tier that ran
-the query, and each tier below replaces the values it holds with the ones it hears. The
-OLT's running mean covers every household on the PON, while those of the user device and
-the ONU cover only their own household, so households with different models would each
+before deployment, and then keeps an average of the lengths of its recent answers,
+weighted toward the latest so that it follows about its last 20 answers. Since an answer
+travels back to the user through every tier below the one that produced it, it can
+carry, at no extra cost, the energy rates and the average answer length of every tier
+that ran the query, and each tier below replaces the answer lengths it holds with the
+ones it hears. The OLT's average covers every household on the PON, while those of the
+user device and the ONU cover only their own household, so households with different models would each
 hold their own values for these two tiers. Until a tier has an estimate of the OLT's
 energy rate, it runs every query that reaches it and escalates by confidence alone. For
-the quantile test, each device also keeps its own confidence window, started from the
-confidences of its model on the benchmark so that the threshold is right from the first
-query.
+the quantile test, each device also keeps its own window of its last 1,000 confidences,
+within the 300 to 1,000 that \citeonline{wu2025recserve} find sufficient, started from
+the confidences of its model on the benchmark so that the threshold is right from the
+first query.
 
 The energy rates of the user device and the ONU do not change, so the rates a tier hears
 on past answers stay valid. The OLT's rate, however, depends on how many other queries
@@ -942,7 +944,9 @@ so the timetable learns an average that includes the drift.
 The user device and the ONU answer at the speeds their sources measured. The phone reads
 the prompt at 288 tokens per second and generates 72 tokens per second, while the ONU
 generates 6.3 tokens per second and so takes about 44 seconds for an answer of the mean
-length. Each household's ONU answers one query at a time, in the order they were sent,
+length. The ONU's source gives no speed for reading the prompt, so, as with its energy
+(Section~\ref{sec:user-onu-energy}), a longer prompt takes it no longer. Each household's
+ONU answers one query at a time, in the order they were sent,
 so a second query from the same home waits for the first. The OLT serves with continuous
 batching (Section~\ref{sec:olt-energy}), with 64 slots, the largest batch measured, and a
 query that finds every slot busy waits for one. A query reaches the OLT only after the
@@ -978,7 +982,8 @@ the policy does when the main uncertainty it faces is the OLT's load.
 \todo{reading every policy at the same accuracy; the baselines: confidence-only
 escalation, cited as the rule of \citeonline{wu2025recserve}, with and without the ONU,
 and each tier answering alone; the piggyback ablation, where a household hears the
-OLT's cost only on its own answers; the metrics; the sensitivity runs and the sweep of
+OLT's cost only on its own answers and blends each one it hears into its estimate with a
+weight of 0.3; the metrics; the sensitivity runs and the sweep of
 $\delta$.}
 
 %==============================================================================
