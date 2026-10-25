@@ -885,13 +885,15 @@ ask.
 \subsection{Households and Their Traffic}
 \label{sec:traffic}
 
-Each run places between 1,000 and 20,000 households on the PON. On average, a household
-has one person who uses an LLM every week, and that person sends 3.6 messages a day,
-which is the average of the 700 million weekly users of ChatGPT in July 2025, who sent 18
-billion messages a week~\cite{chatterji2025how}. Some people chat far more than others,
-and in WildChat, the logs of a free ChatGPT service used around the
-world~\cite{zhao2024wildchat}, the busiest 10\% of the users who came back over two
-weeks or more send 59\% of the messages. Each user in the simulation is therefore given
+Each run places between 1,000 and 20,000 households on the PON. We assume that a
+household has, on average, one person who uses an LLM every week, because we found no
+measured figure for Brazilian homes, and the study repeats its runs with two such people
+to see how much this choice matters. That person sends 3.6 messages a day, the average
+of ChatGPT's users in July 2025, when more than 700 million people used it every week
+and together sent more than 2.5 billion messages a day~\cite{chatterji2025how}. Some
+people chat far more than others, and in WildChat, the logs of a free ChatGPT service
+used around the world~\cite{zhao2024wildchat}, we found that the busiest 10\% of the
+users who came back over two weeks or more send 59\% of the messages. Each user in the simulation is therefore given
 a random level of activity, chosen so that the busiest 10\% send the same share while
 the average stays at 3.6 messages a day.
 
@@ -923,13 +925,21 @@ The factor's mean is one, so the month carries the same number of messages, but 
 can run, for example, a quarter busier than the timetable says and stay so for some
 hours before returning to it.
 
-A busyness factor of this kind is the standard way to simulate the requests that people
-send to a service, because their counts vary more than a Poisson process with a fixed
-timetable allows and their busy periods persist. The requests are then drawn from a
-Poisson process whose rate is the timetable multiplied by the
-factor~\cite{ibrahim2012modeling}.
-LLM traffic behaves the same way, as the burstiness of BurstGPT's conversations varies
-sharply during working hours~\cite{wang2025burstgpt}. In our simulation the factor $F_k$
+Both scenarios follow the way the arrivals of people's requests are usually modelled. In
+wide-area networks, packets arrive in bursts at every time scale, but the sessions that
+users start, such as remote logins and file transfers, are well modelled as a Poisson
+process whose rate is fixed within each hour~\cite{paxson1995wide}. The conversations of
+our households are sessions of this kind, so with no drift they are drawn from a Poisson
+process that follows the timetable. The rate of the same hour still changes from one day
+to the next, and in call centres, whose arrivals have been studied most closely, the
+count of a period varies more than a Poisson process with a fixed timetable allows and
+busy periods persist. The usual model there multiplies the timetable by a random
+busyness factor whose mean is one and draws the arrivals from a Poisson process at that
+rate~\cite{ibrahim2012modeling}. The factor can be one for the whole day or change from
+one period to the next while depending on the periods before it, and ours is of the
+second kind. Our measurement below finds the same excess over Poisson counts in
+BurstGPT's conversations, whose arrivals also grow more or less bursty within
+twenty-minute windows during working hours~\cite{wang2025burstgpt}. In our simulation the factor $F_k$
 changes every hour $k$ and is shared by the whole PON, which makes the arrivals a
 log-Gaussian Cox process~\cite{moller1998log}, and it is built from a number $z_k$ that
 keeps part of the previous hour's departure and receives a small random kick each hour,
@@ -960,8 +970,11 @@ We measured $\sigma$ and $\tau$ on BurstGPT, whose more than 3,000 users reached
 models through one regional provider of the kind that serves companies and
 campuses~\cite{wang2025burstgpt}. These users share one provider, which brings them
 closer to the users of a single OLT than WildChat's, who are spread over the world and do
-not share one access network. We compared the number of conversations that start in each
-hour of BurstGPT's 110 days with its timetable, the mean count of that hour over the days
+not share one access network. They reach the models from work or study rather than from
+home, though, so their load may drift differently from that of a household. We used the
+conversation log of one file of BurstGPT's second release, which spans 110 of the 213
+days the dataset covers, and compared the number of conversations that start in each
+hour with its timetable, the mean count of that hour over the days
 of the same type, weekday or weekend. The size $\sigma$ comes from how far the hours
 depart from the timetable once the randomness of counting alone is subtracted, since a
 Poisson count with a random rate varies by the variance of its rate plus its
@@ -978,7 +991,7 @@ as drift. This gives $\sigma = 0.235$ and $\tau = 3.2$ hours, so a typical hour 
 departure lasts about three hours. Without the weekly level, $\sigma = 0.457$ and
 $\tau = 12.3$ hours, so a typical hour departs by 58\% or 37\% for about 12 hours, which
 gives the strong drift. Most of this larger departure comes from BurstGPT's traffic
-growing over its 110 days, which the simulation turns into random swings of about 12
+growing over those 110 days, which the simulation turns into random swings of about 12
 hours, so the strong drift is best read as a demanding case. The calibration month
 drifts as well, so the timetable learns an average that includes the drift.
 
@@ -1015,8 +1028,8 @@ conversation.
 WildChat's users chose to try a free chatbot, and a user there is an address and a
 browser rather than a household, so they may not chat as a typical household does. Its
 pauses also run from one answer to the next, so they include the time the next answer
-took. The policy uses one mean answer length per model, although the standard deviation
-of a single answer's length is 30 to 40\% of that mean and the length could be predicted
+took. The policy uses one mean answer length per model, although in our runs on GSM8K the
+standard deviation of a single answer's length is 30 to 40\% of that mean, and the length could be predicted
 from the query itself~\cite{zheng2023response}. The results therefore show what
 the policy does when the main uncertainty it faces is the OLT's load.
 
