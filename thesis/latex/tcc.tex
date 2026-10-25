@@ -123,16 +123,16 @@ cost are some of the broad topics that need to be taken into account as both of 
 changes happen in parallel.
 
 On the models' side, cost is a concern as well, since LLM inference is
-expensive~\cite{chen2026network}. One way of making it cheaper is the model cascade: a
-smaller model answers what it can, and the query is only passed to a larger one when
+expensive~\cite{chen2026network}, and one way of making it cheaper is the model cascade,
+in which a smaller model answers what it can and passes a query to a larger one only when
 its answer is not reliable enough~\cite{chen2024frugalgpt}. What counts as expensive
 depends on the setting, from the price of an API call to the energy spent answering
 each query, and energy is the cost this work is concerned with. Treating it as a cost
 of its own is the idea behind Green AI, which argues that efficiency should be reported alongside
 accuracy~\cite{schwartz2020green}, and some serving systems already use it to decide
-which model answers a query: GreenServ picks a model from a heterogeneous pool based on
-the accuracy and energy it has observed, and uses 31\% less energy than routing at
-random~\cite{ziller2026greenserv}.
+which model answers a query. GreenServ, for instance, picks a model from a heterogeneous
+pool based on the accuracy and energy it has observed, and uses 31\% less energy than
+routing at random~\cite{ziller2026greenserv}.
 
 These systems choose which model answers, but not where it runs, which is a separate
 question. With edge computing, inference is no longer confined to the cloud, but spread
@@ -149,12 +149,12 @@ from confidence alone, and the energy spent at each tier plays no part in that
 decision.
 
 In this work, we propose the integration of energy awareness into recursive tiered LLM
-inference.
-Each tier decides whether to answer a query or pass it up from the confidence of its
-answer and also from the energy expected to be spent at each tier. As a case study, we simulate a three-tier
+inference, so that each tier decides whether to answer a query or pass it up from the
+confidence of its answer and also from the energy expected to be spent at each tier. As a
+case study, we simulate a three-tier
 hierarchy over a PON, formed by the user device, the ONU and the OLT, each running a
-larger model than the one below. We evaluate two energy-aware strategies: one follows
-a fixed timetable of the OLT's cost, while the other takes advantage of the PON
+larger model than the one below. We evaluate two energy-aware strategies, one that
+follows a fixed timetable of the OLT's cost and one that takes advantage of the PON
 downstream broadcast, with the OLT periodically announcing its current cost to every
 ONU. Both are compared with escalation by confidence alone at the same target accuracy, in energy per query
 and in communication burden, under recorded conversation traffic with and without
@@ -218,17 +218,18 @@ closes the chapter with the gaps this work addresses.
 \label{sec:pon}
 A PON is an access network technology that uses a shared fiber architecture, where a
 single fiber coming out of an OLT is split passively to serve several dozen ONUs at the
-subscribers' premises, up to 128 of them in Gigabit-capable PON
-(G-PON). Because the fiber is shared, the OLT downstream works as a broadcast,
-transmitting a data signal that the splitters passively replicate across all the ONUs
-connected to it. Each ONU looks at the frame headers and extracts only the data that is
-addressed to it, discarding the rest~\cite{effenberger2007introduction}.
+subscribers' premises, up to 128 of them in Gigabit-capable PON (G-PON). Because the
+fiber is shared, the OLT downstream works as a broadcast, with the splitters passively
+replicating its signal across all the ONUs connected to it, and each ONU looks at the
+frame headers and keeps only the data addressed to it, discarding the
+rest~\cite{effenberger2007introduction}.
 
-In the opposite direction, since the fiber is shared between multiple ONUs, the upstream
-operates using Time Division Multiple Access (TDMA) to avoid collisions. The OLT assigns
-strictly synchronized time slots to each ONU via Dynamic Bandwidth Allocation (DBA), so
-each ONU can take turns bursting data back~\cite{effenberger2007introduction}. The two directions are therefore not symmetric: anything the OLT sends reaches every ONU
-at once, while each ONU can only speak in its own slot, as Figure~\ref{fig:pon} shows.
+In the opposite direction, the ONUs share the fiber through Time Division Multiple
+Access (TDMA) to avoid collisions, with the OLT assigning each ONU strictly synchronized
+time slots through Dynamic Bandwidth Allocation (DBA), so that the ONUs take turns
+bursting data back~\cite{effenberger2007introduction}. The two directions are therefore
+not symmetric, because anything the OLT sends reaches every ONU at once while each ONU
+can only speak in its own slot (Figure~\ref{fig:pon}).
 
 \begin{figure}[htb]
   \centering
@@ -250,15 +251,14 @@ extra upstream traffic (Chapter~\ref{chap:methodology}).
 \subsection{LLM Inference}
 \label{sec:llm-background}
 
-LLMs are scaled Pre-trained Language Models (PLMs): Transformer models with
-self-attention mechanisms~\cite{vaswani2017attention}, pre-trained on large-scale
-text corpora, that solve a wide range of tasks using natural
-language. Researchers noticed that the more a PLM is scaled,
-in model size or in training data, the more capable it tends to become at problem
-solving. Large PLMs also show abilities that smaller ones lack, such as solving a new
-task from a few examples given in the prompt~\cite{zhao2023survey}. However, the
-size of these models places heavy demands on memory, computation and energy when serving
-them~\cite{chen2026network}.
+LLMs are scaled Pre-trained Language Models (PLMs), Transformer models with
+self-attention mechanisms~\cite{vaswani2017attention} that are pre-trained on large-scale
+text corpora and solve a wide range of tasks using natural language. Researchers noticed
+that the more a PLM is scaled, in model size or in training data, the more capable it
+tends to become at problem solving, and large PLMs also show abilities that smaller ones
+lack, such as solving a new task from a few examples given in the
+prompt~\cite{zhao2023survey}. The same size, however, places heavy demands on memory,
+computation and energy when these models are served~\cite{chen2026network}.
 
 These demands come from how an LLM answers a query, which happens in two
 phases~\cite{zhou2024survey}. In the prefill phase, the LLM processes the whole user prompt at once, storing
@@ -283,7 +283,7 @@ reported separately for each phase (Section~\ref{sec:metrics}).
 To generate each token, the LLM assigns a probability to every token in its vocabulary,
 and a low probability on the tokens it picks is a sign that it is unsure of the
 answer~\cite{zhao2023survey}. A confidence score turns these probabilities into
-a single number per answer. For generated text, the most common scores combine the
+a single number per answer, and for generated text the most common scores combine the
 probabilities of all the generated tokens, for example through their average, their
 minimum, or the likelihood of the whole answer normalized by its
 length~\cite{geng2023survey}. Perplexity, closely related to the last one, is the
@@ -291,11 +291,11 @@ inverse probability of a sequence normalized by its number of tokens, so the mor
 the answer, the lower its perplexity~\cite[ch.~3]{jurafsky2026speech}.
 
 Ideally, a score is calibrated, meaning that answers given with 80\% confidence are
-correct 80\% of the time. Modern neural networks, however, are often poorly calibrated,
-and tend to be more confident than they are accurate~\cite{guo2017calibration}.
-A fixed threshold on such a score would have to be tuned by hand for each task, model
-and network condition. A model can instead compare each confidence with the ones it has
-seen recently. It keeps the confidences of its last $k$ answers and accepts an answer
+correct 80\% of the time, but modern neural networks are often poorly calibrated and
+tend to be more confident than they are accurate~\cite{guo2017calibration}. A fixed
+threshold on such a score would therefore have to be tuned by hand for each task, model
+and network condition, so a model can instead compare each confidence with the ones it
+has seen recently. It keeps the confidences of its last $k$ answers and accepts an answer
 whose confidence reaches their $\beta$-quantile, so about a fraction $\beta$ of its
 answers are rejected by construction, whatever the scale of the score. This test was
 proposed by \citeonline{wu2025recserve}, with a normalized perplexity, the geometric
@@ -306,23 +306,23 @@ and we refer to it as the quantile test.
 \label{sec:cascades-tiers}
 
 A model cascade places several models one after the other, from the cheapest to the most
-expensive. The query is sent to the cheapest one first, and if its answer is reliable,
-that answer is returned and the more expensive models are never queried; otherwise, the query moves on to the next model
-in the list. FrugalGPT judges reliability with a separate scoring function that gives
+expensive, and sends each query to the cheapest one first. If that model's answer is
+reliable, it is returned and the more expensive models are never queried, and otherwise
+the query moves on to the next model in the list. FrugalGPT judges reliability with a separate scoring function that gives
 each answer a score between 0 and 1, and with it matches the performance of GPT-4 at up
 to 98\% lower cost~\cite{chen2024frugalgpt}. Cascades also differ in how that
-judgement is made. In AutoMix, the smaller model checks its own answer through few-shot self-verification,
-without extensive training. Since this check can be noisy, a router then decides from the
+judgement is made, and in AutoMix the smaller model checks its own answer through
+few-shot self-verification, without extensive training. Since this check can be noisy, a router then decides from the
 resulting confidence whether to move up to a larger model, reducing the computational
 cost by over 50\% at comparable performance~\cite{aggarwal2023automix}.
 
 The idea of a model cascade was also brought into the network itself, whose tiers go
 from the user's own device, through the edge and the fog, up to the cloud, with a larger,
 more capable LLM at each step up~\cite{pakpahan2026continuum}. A query then climbs the
-tiers only as far as it needs, so simpler queries are answered
-before they reach the cloud. Answering closer to the user shortens the network path and
-lowers latency~\cite{chen2026network}, and fewer queries crossing the network means less
-traffic. A cascade over the device, the edge and the cloud that escalates with the
+tiers only as far as it needs, so simpler queries are answered before they reach the
+cloud, closer to the user, where the shorter network path lowers
+latency~\cite{chen2026network}. Fewer queries crossing the network also means less
+traffic, and a cascade over the device, the edge and the cloud that escalates with the
 quantile test reduces the communication burden by over 50\% compared with serving every
 query in the cloud~\cite{wu2025recserve}.
 
@@ -340,8 +340,9 @@ energy is still built from the two phases, as the energy per prompt token in the
 plus the energy per generated token in the decode (Chapter~\ref{chap:methodology}).
 
 What a figure means depends on its measurement boundary, the set of components whose
-energy it counts. It can cover only the accelerator, or also the host's CPU and memory,
-the idle machines kept ready for peaks, and the overhead of the building itself. That
+energy it counts, and a boundary can cover only the accelerator or also the host's CPU
+and memory, the idle machines kept ready for peaks, and the overhead of the building
+itself. That
 overhead is measured by the Power Usage Effectiveness (PUE), the ratio between a
 facility's total energy and the energy of its computing equipment. In Google's
 accounting of a median prompt, the accelerators take 58\% of the energy, the host's CPU
@@ -375,11 +376,12 @@ The boundary also depends on the tool, since each class of hardware is measured
 differently. GPUs report their own energy in software, read through the NVIDIA
 Management Library (NVML) on the NVIDIA GPUs this work uses, while libraries such as
 Zeus, used by \citeonline{chung2025mlenergy}, read it on both NVIDIA and AMD GPUs.
-These readings have limits of their own. On the A100 and H100, the power that nvidia-smi
-reports samples only a quarter of the runtime, which can lead to a large under- or
-overestimate of the energy spent~\cite{yang2023part}. Phones expose on-chip telemetry that reports the energy of the whole chip~\cite{cai2026npu}.
-Single-board edge devices are measured with a power meter at the plug, which includes the
-whole system~\cite{renney2026cloud}, or with current sensors on the board's power
+These readings have limits of their own, since on the A100 and H100 the power that
+nvidia-smi reports samples only a quarter of the runtime, which can lead to a large
+under- or overestimate of the energy spent~\cite{yang2023part}. Phones expose on-chip
+telemetry that reports the energy of the whole chip~\cite{cai2026npu}, while single-board
+edge devices are measured either at the plug, with a power meter that includes the whole
+system~\cite{renney2026cloud}, or with current sensors on the board's power
 rails~\cite{tummalapalli2026edge}. Since each tool covers a different part of the
 system, Chapter~\ref{chap:methodology} converts every tier of this work to a single
 boundary.
@@ -395,9 +397,9 @@ The works closest to ours place a cascade of LLMs on the tiers of a network.
 RecServe~\cite{wu2025recserve} deploys progressively larger models on the end device,
 the edge node and the cloud, and every query starts at the device. Each tier keeps the
 confidence scores of its last $k$ answers and sets its threshold at their
-$\beta$-quantile. If an answer's confidence reaches the threshold, it goes back to the
-user. Otherwise, the query moves to the next tier, which repeats the test, until it
-reaches the cloud. The threshold follows each tier's own recent scores, so it needs no
+$\beta$-quantile. An answer whose confidence reaches the threshold goes back to the
+user, and otherwise the query moves to the next tier, which repeats the test until the
+query reaches the cloud. The threshold follows each tier's own recent scores, so it needs no
 manual tuning, and each tier passes up roughly a fraction $\beta$ of its queries. On
 sentiment classification and translation tasks, RecServe reaches accuracies close to
 those of the cloud alone, with a better trade-off between accuracy and communication
@@ -437,8 +439,8 @@ although every block needs a round trip to the cloud.
 
 Of the works above, only RecServe and the architecture of
 \citeauthoronline{pakpahan2026continuum} decide at every tier whether to answer a query
-or pass it up, and both decide from confidence alone. None of these works, including
-those two, uses the energy spent at each tier to decide where a query is answered.
+or pass it up, and both decide from confidence alone, so none of these works, those two
+included, uses the energy spent at each tier to decide where a query is answered.
 
 \subsection{Energy-Aware LLM Serving and Routing}
 \label{sec:energy-routing}
@@ -461,8 +463,8 @@ baseline router. Energy is modeled as each platform's profiled power times its l
 so the cost of the edge changes with the wireless channel, but not with how busy the
 edge is.
 
-Energy-aware routing has also been applied within a single system. GreenServ learns
-online which of 16 LLMs gives the best trade-off between accuracy and measured GPU
+Energy-aware routing has also been applied within a single system, where GreenServ
+learns online which of 16 LLMs gives the best trade-off between accuracy and measured GPU
 energy for each kind of query, and uses 31\% less energy than routing at
 random~\cite{ziller2026greenserv}. EcoThink sends simple queries to a small model that
 answers directly and complex ones to a larger model that reasons step by step, using
@@ -470,15 +472,15 @@ answers directly and complex ones to a larger model that reasons step by step, u
 \citeonline{wilkins2024offline} model the energy and runtime of each LLM from the lengths
 of its prompts and answers, and assign a workload's queries offline among Llama-2 models
 of 7, 13 and 70 billion parameters, with a parameter that trades energy for accuracy.
-All three choose among models on a single system rather than across network tiers.
-GreenServ serves one query at a time, and the energy models of
-\citeauthoronline{wilkins2024offline} are measured at a fixed batch size, so in neither
-does the energy of a query depend on the others being served. The latter also score each
+All three choose among models on a single system rather than across network tiers, and
+in two of them the energy of a query does not depend on the others being served, since
+GreenServ serves one query at a time and the energy models of
+\citeauthoronline{wilkins2024offline} are measured at a fixed batch size. The latter also score each
 model by a single accuracy figure, so the answer to a particular query plays no part in
 their decision.
 
 In the tiered works, the decision is made at every tier from the confidence of an
-answer, but energy is left out of it. The energy-aware works use energy, but decide once
+answer but leaves energy out, while the energy-aware works use energy but decide once
 per query, over two tiers at most, before any model has answered.
 
 \section{Challenges Addressed in This Work}
@@ -487,32 +489,31 @@ per query, over two tiers at most, before any model has answered.
 The works reviewed above leave four gaps, and each contribution listed in
 Chapter~\ref{chap:introduction} addresses one of them.
 
-The first is that energy has no part in recursive tiered inference. In RecServe and in
-the architecture of \citeonline{pakpahan2026continuum}, every tier decides from the
+The first is that energy has no part in recursive tiered inference, since in RecServe
+and in the architecture of \citeonline{pakpahan2026continuum} every tier decides from the
 confidence of its answer alone. PerLLM and CR$^2$ do bring energy into the decision, but
 over two tiers and with a single decision per query, made before any model has
 answered~\cite{yang2024perllm,xue2026cr2}. In this work, each tier keeps a confidence
-test and also weighs the energy it expects to be spent until the query is
-answered. It does so both when a query arrives and when an answer escalates, so a query
-can skip a tier whose answer is likely to cost more than it saves.
+test and also weighs the energy it expects to be spent until the query is answered,
+both when a query arrives and when an answer escalates, so a query can skip a tier whose answer is likely to cost more than it saves.
 
-The second is that the energy of the tiers is not measured under a common boundary. The
-figures available for a phone, an edge board and a GPU server each count a different part
-of the system, and estimates for similar tasks can be an order of magnitude
-apart~\cite{elsworth2025measuring}. The energy of a server also depends on the queries it
-batches together. CR$^2$ models energy as power times latency, which leaves this out,
-and neither GreenServ nor the models of \citeonline{wilkins2024offline} let it vary with
-the load (Section~\ref{sec:energy-routing}). We build an
-energy model of the user device, the ONU and the OLT under a single boundary. The OLT's
-energy is measured by us on a GPU as a function of batch size, and checked against the
-same GPU serving with continuous batching.
+The second is that the energy of the tiers is not measured under a common boundary,
+since the figures available for a phone, an edge board and a GPU server each count a
+different part of the system, and estimates for similar tasks can be an order of
+magnitude apart~\cite{elsworth2025measuring}. The energy of a server also depends on the
+queries it batches together, a dependence that CR$^2$ leaves out by modeling energy as power times
+latency, and neither GreenServ nor the models of \citeonline{wilkins2024offline} let it
+vary with the load (Section~\ref{sec:energy-routing}). We build an energy model of the
+user device, the ONU and the OLT under a single boundary, in which the OLT's energy is
+measured by us on a GPU as a function of batch size and checked against the same GPU
+serving with continuous batching.
 
 The third is that the cost of the OLT changes with its load, and the tiers below cannot
 observe it. One more query joining a busy batch costs far less than a query that finds
 the OLT idle, so the same decision can save or waste energy depending on the moment. A
-timetable learned in advance follows the daily pattern of the load, but not the moments
-that depart from it. We use the PON downstream broadcast (Section~\ref{sec:pon}) to let
-the OLT announce its current cost to every ONU at once, with no extra upstream traffic.
+timetable learned in advance follows the daily pattern of the load but not the moments
+that depart from it, so we use the PON downstream broadcast (Section~\ref{sec:pon}) to
+let the OLT announce its current cost to every ONU at once, with no extra upstream traffic.
 
 The fourth is how such policies are compared. RecServe is evaluated on the trade-off
 between accuracy and communication~\cite{wu2025recserve}, and the network-side work of
