@@ -799,7 +799,7 @@ energy and the mean latency of real runs with continuous batching within 10\%. W
 ran the GPU with a fixed number of requests in flight, from 1 to 64, and its energy per
 token was within 3.2\% of the fixed batches (Figure~\ref{fig:batching}a). We then sent
 the GPU 15 runs of requests arriving at random times and gave the same arrival times to
-the simulator. A first version of the simulator, which modelled the energy of a busy GPU
+the simulator. A first version of the simulator, which modeled the energy of a busy GPU
 as a straight line in the batch size, overestimated its energy above idle by up to 14\%
 at the highest load and failed the criterion. The current version reads the measured
 values at each batch size instead, and it predicts the GPU's energy within 3\% and its
@@ -925,13 +925,13 @@ The factor's mean is one, so the month carries the same number of messages, but 
 can run, for example, a quarter busier than the timetable says and stay so for some
 hours before returning to it.
 
-Both scenarios follow the way the arrivals of people's requests are usually modelled. In
+Both scenarios follow the way the arrivals of people's requests are usually modeled. In
 wide-area networks, packets arrive in bursts at every time scale, but the sessions that
-users start, such as remote logins and file transfers, are well modelled as a Poisson
+users start, such as remote logins and file transfers, are well modeled as a Poisson
 process whose rate is fixed within each hour~\cite{paxson1995wide}. The conversations of
 our households are sessions of this kind, so with no drift they are drawn from a Poisson
 process that follows the timetable. The rate of the same hour still changes from one day
-to the next, and in call centres, whose arrivals have been studied most closely, the
+to the next, and in call centers, whose arrivals have been studied most closely, the
 count of a period varies more than a Poisson process with a fixed timetable allows and
 busy periods persist. The usual model there multiplies the timetable by a random
 busyness factor whose mean is one and draws the arrivals from a Poisson process at that
