@@ -906,9 +906,9 @@ hour of a weekday, in the afternoon, than at the quietest, before dawn, and a we
 has three quarters of the conversations of a weekday. Users who sent a single message
 are left out, because WildChat's sudden traffic spikes are made mostly of them, which
 suggests automated traffic rather than people, and so are the messages whose time zone
-cannot be told. Every message asks a question drawn at random from GSM8K. A follow-up is sent a
-pause after the previous answer arrives, and its prompt carries the earlier turns of its
-conversation, so prompts grow longer as a conversation goes on.
+cannot be told. Every message asks a question drawn at random from GSM8K, and a follow-up is sent
+a pause after the previous answer arrives, with a prompt that carries the earlier turns
+of its conversation, so prompts grow longer as a conversation goes on.
 
 \subsection{Drift in the Load}
 \label{sec:drift}
@@ -917,21 +917,23 @@ If every day followed the average day, a timetable would predict the OLT's load 
 perfectly, since only the randomness of the arrivals would move an hour away from it.
 Real load drifts, with hours that run busier or quieter than usual, so the study has
 three scenarios, of which Figure~\ref{fig:traffic-week} shows one test week. With no
-drift, every day follows the average day. With mild and strong drift, the load of all
-households is multiplied by a common random factor that changes slowly over time. Its
-average is one, so the month carries the same number of messages, but at a given hour
-the PON can be, for example, a quarter busier than the timetable says, and it stays so
-for some hours before returning to it.
+drift every day follows the average day, while with mild and strong drift the load of
+all households is multiplied by a common busyness factor that changes slowly over time.
+The factor's mean is one, so the month carries the same number of messages, but an hour
+can run, for example, a quarter busier than the timetable says and stay so for some
+hours before returning to it.
 
-Requests that people send to a service behave this way. Their counts vary more than a
-Poisson process with a fixed timetable allows, and busy periods persist, so the standard
-way to simulate them is a Poisson process whose rate is the timetable multiplied by a
-random busyness factor with a mean of one~\cite{ibrahim2012modeling}. LLM traffic shows
-the same, since the burstiness of BurstGPT's conversations varies sharply during working
-hours~\cite{wang2025burstgpt}. In our simulation the factor $F_k$ changes every hour $k$
-and is shared by the whole PON, which makes the arrivals a log-Gaussian Cox
-process~\cite{moller1998log}. It is built from a number $z_k$ that keeps part of the
-previous hour's departure and receives a small random kick each hour, as
+A busyness factor of this kind is the standard way to simulate the requests that people
+send to a service, because their counts vary more than a Poisson process with a fixed
+timetable allows and their busy periods persist. The requests are then drawn from a
+Poisson process whose rate is the timetable multiplied by the
+factor~\cite{ibrahim2012modeling}.
+LLM traffic behaves the same way, as the burstiness of BurstGPT's conversations varies
+sharply during working hours~\cite{wang2025burstgpt}. In our simulation the factor $F_k$
+changes every hour $k$ and is shared by the whole PON, which makes the arrivals a
+log-Gaussian Cox process~\cite{moller1998log}, and it is built from a number $z_k$ that
+keeps part of the previous hour's departure and receives a small random kick each hour,
+as
 \begin{equation}
   z_k = \phi\, z_{k-1} + \varepsilon_k, \qquad F_k = e^{\,z_k - \sigma^2/2},
   \label{eq:drift}
@@ -956,17 +958,17 @@ followed by hours 21\% and then 14\% above it if no new kick arrives.
 
 We measured $\sigma$ and $\tau$ on BurstGPT, whose more than 3,000 users reached the
 models through one regional provider of the kind that serves companies and
-campuses~\cite{wang2025burstgpt}. It is used for the drift because WildChat's users are
-spread over the world and do not share one access network, while BurstGPT's share one
-provider, closer to the users of a single OLT. We compared the number of conversations
-that start in each hour of its 110 days with its timetable, the mean count of that hour
-over the days of the same type, weekday or weekend. The size $\sigma$ comes from how far
-the hours depart from the timetable once the randomness of counting alone is subtracted,
-since a Poisson count with a random rate varies by the variance of its rate plus its
-mean~\cite{cox1955some}. Only hours with at least 20 conversations expected are used,
-because in quieter hours the departure is mostly counting noise. The duration $\tau$
-comes from how closely the departures of consecutive hours follow each other, and the
-code that computes both is part of the public repository.
+campuses~\cite{wang2025burstgpt}. These users share one provider, which brings them
+closer to the users of a single OLT than WildChat's, who are spread over the world and do
+not share one access network. We compared the number of conversations that start in each
+hour of BurstGPT's 110 days with its timetable, the mean count of that hour over the days
+of the same type, weekday or weekend. The size $\sigma$ comes from how far the hours
+depart from the timetable once the randomness of counting alone is subtracted, since a
+Poisson count with a random rate varies by the variance of its rate plus its
+mean~\cite{cox1955some}, and only the hours with at least 20 conversations expected are
+used, because in quieter hours the departure is mostly counting noise. The duration
+$\tau$ comes from how closely the departures of consecutive hours follow each other, and
+the code that computes both is part of the public repository.
 
 For the mild drift, each day's timetable is first multiplied by the level of its week,
 the mean ratio between the day's count and its timetable over the seven days around it,
