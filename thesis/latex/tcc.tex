@@ -923,21 +923,27 @@ average is one, so the month carries the same number of messages, but at a given
 the PON can be, for example, a quarter busier than the timetable says, and it stays so
 for some hours before returning to it.
 
-The expected number of conversations starting in hour $k$ is multiplied by the factor
-$F_k$, so the number that actually starts follows a Poisson distribution whose mean is
-itself random, a doubly stochastic Poisson process~\cite{cox1955some}. The factor is
-built on a log scale, where a load twice as high as the timetable and one half as high
-lie at the same distance from it, as
+Requests that people send to a service behave this way. Their counts vary more than a
+Poisson process with a fixed timetable allows, and busy periods persist, so the standard
+way to simulate them is a Poisson process whose rate is the timetable multiplied by a
+random busyness factor with a mean of one~\cite{ibrahim2012modeling}. LLM traffic shows
+the same, since the burstiness of BurstGPT's conversations varies sharply during working
+hours~\cite{wang2025burstgpt}. In our simulation the factor $F_k$ changes every hour $k$
+and is shared by the whole PON, which makes the arrivals a log-Gaussian Cox
+process~\cite{moller1998log}. It is built from a number $z_k$ that keeps part of the
+previous hour's departure and receives a small random kick each hour, as
 \begin{equation}
   z_k = \phi\, z_{k-1} + \varepsilon_k, \qquad F_k = e^{\,z_k - \sigma^2/2},
   \label{eq:drift}
 \end{equation}
-where $\phi = e^{-1/\tau}$ and $\varepsilon_k$ is a normal random variable with a mean of
-zero and a variance of $\sigma^2(1-\phi^2)$. The logarithm $z_k$ is then an
-autoregressive process of order one, whose standard deviation is $\sigma$ and whose
-correlation between hours $k$ and $k+\ell$ is $\phi^\ell$~\cite{brockwell2016introduction},
-so a departure fades over a correlation time of $\tau$ hours. The factor $F_k$ is
-log-normal, and subtracting $\sigma^2/2$ makes its mean one~\cite{aitchison1957lognormal}.
+where $\phi = e^{-1/\tau}$ is the share of the departure that the next hour keeps,
+$\varepsilon_k$ is the random kick, drawn from a normal distribution with a mean of zero,
+$\sigma$ sets how large a typical departure is and $\tau$, in hours, how long it lasts.
+The exponential turns $z_k$ into a multiplier, so that equal steps up and down in $z_k$
+make the load equally many times higher or lower, and subtracting $\sigma^2/2$ keeps the
+mean of $F_k$ at one. With the values of the mild drift given below, for example,
+$\phi = 0.73$, so an hour with $z_k = 0.30$, whose load is 31\% above the timetable, is
+followed by hours 21\% and then 14\% above it if no new kick arrives.
 
 \begin{figure}[htb]
   \centering
@@ -952,25 +958,15 @@ We measured $\sigma$ and $\tau$ on BurstGPT, whose more than 3,000 users reached
 models through one regional provider of the kind that serves companies and
 campuses~\cite{wang2025burstgpt}. It is used for the drift because WildChat's users are
 spread over the world and do not share one access network, while BurstGPT's share one
-provider, closer to the users of a single OLT. We counted the conversations $c_{d,h}$
-that start in hour $h$ of day $d$ over its 110 days and compared each count with its
-timetable $e_{d,h}$, the mean count of that hour over the days of the same type, weekday
-or weekend. A count then departs from its timetable by $x_{d,h} = c_{d,h}/e_{d,h} - 1$,
-but part of this departure is only the randomness of a Poisson count, whose variance
-adds to that of the factor~\cite{cox1955some}. The variance of the factor alone, and the
-$\sigma$ of a log-normal factor with that variance~\cite{aitchison1957lognormal}, are
-therefore
-\begin{equation}
-  \mathrm{Var}(F) = \overline{x_{d,h}^2 - 1/e_{d,h}}, \qquad
-  \sigma = \sqrt{\ln\left(1 + \mathrm{Var}(F)\right)},
-  \label{eq:drift-size}
-\end{equation}
-where the bar is the mean over the hours with at least 20 conversations expected, since in
-quieter hours the departure is mostly counting noise. The correlation of consecutive
-hours, $\rho_F = \overline{x_{d,h}\,x_{d,h+1}}/\mathrm{Var}(F)$, is carried to the log
-scale as $\rho = \ln\left(1 + \rho_F (e^{\sigma^2} - 1)\right)/\sigma^2$, which holds for a
-log-normal factor~\cite{aitchison1957lognormal}, and the correlation time is
-$\tau = -1/\ln\rho$.
+provider, closer to the users of a single OLT. We compared the number of conversations
+that start in each hour of its 110 days with its timetable, the mean count of that hour
+over the days of the same type, weekday or weekend. The size $\sigma$ comes from how far
+the hours depart from the timetable once the randomness of counting alone is subtracted,
+since a Poisson count with a random rate varies by the variance of its rate plus its
+mean~\cite{cox1955some}. Only hours with at least 20 conversations expected are used,
+because in quieter hours the departure is mostly counting noise. The duration $\tau$
+comes from how closely the departures of consecutive hours follow each other, and the
+code that computes both is part of the public repository.
 
 For the mild drift, each day's timetable is first multiplied by the level of its week,
 the mean ratio between the day's count and its timetable over the seven days around it,
