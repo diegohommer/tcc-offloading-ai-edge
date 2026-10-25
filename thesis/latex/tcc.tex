@@ -916,27 +916,73 @@ conversation, so prompts grow longer as a conversation goes on.
 If every day followed the average day, a timetable would predict the OLT's load almost
 perfectly, since only the randomness of the arrivals would move an hour away from it.
 Real load drifts, with hours that run busier or quieter than usual, so the study has
-three scenarios. With no drift, every day follows the average day. With mild and strong
-drift, the load of all households is multiplied by a common random factor that changes
-slowly over time. Its average is one, so the month carries the same number of messages,
-but at a given hour the PON can be, for example, a quarter busier than the timetable
-says, and it stays so for some hours before returning to it.
+three scenarios, of which Figure~\ref{fig:traffic-week} shows one test week. With no
+drift, every day follows the average day. With mild and strong drift, the load of all
+households is multiplied by a common random factor that changes slowly over time. Its
+average is one, so the month carries the same number of messages, but at a given hour
+the PON can be, for example, a quarter busier than the timetable says, and it stays so
+for some hours before returning to it.
 
-How large and how long these departures are was measured on BurstGPT, whose more than
-3,000 users reached the models through one regional provider of the kind that serves
-companies and campuses~\cite{wang2025burstgpt}. It is used for the drift because
-WildChat's users are spread over the world and do not share one access network, while
-BurstGPT's share one provider, closer to the users of a single OLT. Once each week's
-overall level is taken out, a typical hour of BurstGPT runs about 26\% busier or 21\%
-quieter than its timetable, and such a departure lasts about three hours, which gives
-the mild drift. Without taking each week's level out, a typical hour departs by 58\% or
-37\% and the departure lasts about 12 hours, which gives the strong drift. Most of this
-larger departure comes from BurstGPT's traffic growing over its 110 days, which the
-simulation turns into random swings of about 12 hours, so the strong drift is best read
-as a demanding case. In both, the factor follows a log-normal distribution, with a
-standard deviation on the log scale of 0.235 for the mild drift and 0.457 for the strong
-one, and correlation times of 3.2 and 12.3 hours. The calibration month drifts as well,
-so the timetable learns an average that includes the drift.
+The expected number of conversations starting in hour $k$ is multiplied by the factor
+$F_k$, so the number that actually starts follows a Poisson distribution whose mean is
+itself random, a doubly stochastic Poisson process~\cite{cox1955some}. The factor is
+built on a log scale, where a load twice as high as the timetable and one half as high
+lie at the same distance from it, as
+\begin{equation}
+  z_k = \phi\, z_{k-1} + \varepsilon_k, \qquad F_k = e^{\,z_k - \sigma^2/2},
+  \label{eq:drift}
+\end{equation}
+where $\phi = e^{-1/\tau}$ and $\varepsilon_k$ is a normal random variable with a mean of
+zero and a variance of $\sigma^2(1-\phi^2)$. The logarithm $z_k$ is then an
+autoregressive process of order one, whose standard deviation is $\sigma$ and whose
+correlation between hours $k$ and $k+\ell$ is $\phi^\ell$~\cite{brockwell2016introduction},
+so a departure fades over a correlation time of $\tau$ hours. The factor $F_k$ is
+log-normal, and subtracting $\sigma^2/2$ makes its mean one~\cite{aitchison1957lognormal}.
+
+\begin{figure}[htb]
+  \centering
+  \caption{Messages per hour over one test week of 10,000 households, with no, mild and
+  strong drift}
+  \label{fig:traffic-week}
+  \includegraphics[width=\textwidth]{figures/traffic_week.pdf}
+  \legend{Source: The author}
+\end{figure}
+
+We measured $\sigma$ and $\tau$ on BurstGPT, whose more than 3,000 users reached the
+models through one regional provider of the kind that serves companies and
+campuses~\cite{wang2025burstgpt}. It is used for the drift because WildChat's users are
+spread over the world and do not share one access network, while BurstGPT's share one
+provider, closer to the users of a single OLT. We counted the conversations $c_{d,h}$
+that start in hour $h$ of day $d$ over its 110 days and compared each count with its
+timetable $e_{d,h}$, the mean count of that hour over the days of the same type, weekday
+or weekend. A count then departs from its timetable by $x_{d,h} = c_{d,h}/e_{d,h} - 1$,
+but part of this departure is only the randomness of a Poisson count, whose variance
+adds to that of the factor~\cite{cox1955some}. The variance of the factor alone, and the
+$\sigma$ of a log-normal factor with that variance~\cite{aitchison1957lognormal}, are
+therefore
+\begin{equation}
+  \mathrm{Var}(F) = \overline{x_{d,h}^2 - 1/e_{d,h}}, \qquad
+  \sigma = \sqrt{\ln\left(1 + \mathrm{Var}(F)\right)},
+  \label{eq:drift-size}
+\end{equation}
+where the bar is the mean over the hours with at least 20 conversations expected, since in
+quieter hours the departure is mostly counting noise. The correlation of consecutive
+hours, $\rho_F = \overline{x_{d,h}\,x_{d,h+1}}/\mathrm{Var}(F)$, is carried to the log
+scale as $\rho = \ln\left(1 + \rho_F (e^{\sigma^2} - 1)\right)/\sigma^2$, which holds for a
+log-normal factor~\cite{aitchison1957lognormal}, and the correlation time is
+$\tau = -1/\ln\rho$.
+
+For the mild drift, each day's timetable is first multiplied by the level of its week,
+the mean ratio between the day's count and its timetable over the seven days around it,
+so that a week that runs high or low as a whole counts as part of the timetable and not
+as drift. This gives $\sigma = 0.235$ and $\tau = 3.2$ hours, so a typical hour runs about
+26\% busier or 21\% quieter than its timetable, since $e^{0.235} = 1.26$, and such a
+departure lasts about three hours. Without the weekly level, $\sigma = 0.457$ and
+$\tau = 12.3$ hours, so a typical hour departs by 58\% or 37\% for about 12 hours, which
+gives the strong drift. Most of this larger departure comes from BurstGPT's traffic
+growing over its 110 days, which the simulation turns into random swings of about 12
+hours, so the strong drift is best read as a demanding case. The calibration month
+drifts as well, so the timetable learns an average that includes the drift.
 
 \subsection{Serving the Queries}
 \label{sec:serving}
