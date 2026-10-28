@@ -778,26 +778,21 @@ Table~\ref{tab:user-onu} (the ONU's prompt rows, and 246 and 92~J and 44.1~s per
     \hline
     & User device & ONU \\
     \hline
-    \multicolumn{3}{l}{\textit{Read from the sources}} \\
-    Energy per prompt token (J) & 0.016 & -- \\
-    Energy per generated token (J) & 0.074 & 0.88 \\
-    Prompt tokens per second & 287.6 & -- \\
-    Generated tokens per second & 72.2 & 6.34 \\
-    Idle power (W) & -- & 3.5 \\
-    \hline
-    \multicolumn{3}{l}{\textit{Measured on GSM8K}} \\
-    Mean prompt tokens & 125.7 & 122.0 \\
-    Mean generated tokens & 184.9 & 276.0 \\
-    \hline
-    \multicolumn{3}{l}{\textit{Derived}} \\
-    Energy per generated token, marginal accounting (J) & 0.074 & 0.33 \\
-    Energy per query, average accounting (J) & 15.7 & 243 \\
-    Energy per query, marginal accounting (J) & 15.7 & 91 \\
-    Time per query (s) & 3.0 & 43.5 \\
+    Energy per prompt token (J) & 0.016$^{a}$ & -- \\
+    Energy per generated token (J) & 0.074$^{a}$ & 0.88$^{b}$ \\
+    Energy per generated token, marginal (J) & 0.074$^{a}$ & 0.33$^{*}$ \\
+    Prompt tokens per second & 287.6$^{a}$ & -- \\
+    Generated tokens per second & 72.2$^{a}$ & 6.34$^{b}$ \\
+    Idle power (W) & -- & 3.5$^{c}$ \\
+    Mean prompt tokens on GSM8K & 125.7$^{d}$ & 122.0$^{d}$ \\
+    Mean generated tokens on GSM8K & 184.9$^{d}$ & 276.0$^{d}$ \\
+    Energy per query, average (J) & 15.7$^{*}$ & 243$^{*}$ \\
+    Energy per query, marginal (J) & 15.7$^{*}$ & 91$^{*}$ \\
+    Time per query (s) & 3.0$^{*}$ & 43.5$^{*}$ \\
     \hline
   \end{tabular}
-  \legend{Source: The author, with data from \citeonline{cai2026npu},
-  \citeonline{renney2026cloud} and \citeonline{tummalapalli2026edge}}
+  \legend{Source: The author. $^{a}$\citeonline{cai2026npu}; $^{b}$\citeonline{renney2026cloud};
+  $^{c}$\citeonline{tummalapalli2026edge}; $^{d}$our runs on GSM8K; $^{*}$derived in the text.}
 \end{table}
 
 \subsection{OLT}
