@@ -768,31 +768,28 @@ for $3.5/6.34 = 0.55$~J of each token, so above idle the ONU spends $0.88 - 0.55
 board read a 258-token prompt in 1.287~s, about 200 tokens per second. At the 5.58~W that
 Renney et al.'s figures imply, a prompt token then costs 0.028~J, or 0.010~J above idle,
 assuming the board draws the same power while reading as while generating. Update
-Table~\ref{tab:user-onu} (the ONU's prompt rows, and 246 and 92~J and 44.1~s per query).}
+Table~\ref{tab:user-onu} (the ONU's prompt rows), and the ONU's 246 and 92~J and 44.1~s per
+query in the text, Table~\ref{tab:energy} and Section~\ref{sec:serving}.}
 
 \begin{table}[htb]
   \centering
-  \caption{Energy and speed of the user device and the ONU}
+  \caption{Measured values behind the energy of the user device and the ONU}
   \label{tab:user-onu}
   \begin{tabular}{lrr}
     \hline
     & User device & ONU \\
+    & \citeonline{cai2026npu} & \citeonline{renney2026cloud} \\
     \hline
-    Energy per prompt token (J) & 0.016$^{a}$ & -- \\
-    Energy per generated token (J) & 0.074$^{a}$ & 0.88$^{b}$ \\
-    Energy per generated token, marginal (J) & 0.074$^{a}$ & 0.33$^{*}$ \\
-    Prompt tokens per second & 287.6$^{a}$ & -- \\
-    Generated tokens per second & 72.2$^{a}$ & 6.34$^{b}$ \\
-    Idle power (W) & -- & 3.5$^{c}$ \\
-    Mean prompt tokens on GSM8K & 125.7$^{d}$ & 122.0$^{d}$ \\
-    Mean generated tokens on GSM8K & 184.9$^{d}$ & 276.0$^{d}$ \\
-    Energy per query, average (J) & 15.7$^{*}$ & 243$^{*}$ \\
-    Energy per query, marginal (J) & 15.7$^{*}$ & 91$^{*}$ \\
-    Time per query (s) & 3.0$^{*}$ & 43.5$^{*}$ \\
+    Energy per prompt token (J) & 0.016 & -- \\
+    Energy per generated token (J) & 0.074 & 0.88 \\
+    Prompt tokens per second & 287.6 & -- \\
+    Generated tokens per second & 72.2 & 6.34 \\
+    Idle power (W) & -- & 3.5$^{a}$ \\
+    Mean prompt tokens on GSM8K$^{b}$ & 125.7 & 122.0 \\
+    Mean generated tokens on GSM8K$^{b}$ & 184.9 & 276.0 \\
     \hline
   \end{tabular}
-  \legend{Source: The author. $^{a}$\citeonline{cai2026npu}; $^{b}$\citeonline{renney2026cloud};
-  $^{c}$\citeonline{tummalapalli2026edge}; $^{d}$our runs on GSM8K; $^{*}$derived in the text.}
+  \legend{Source: The author. $^{a}$\citeonline{tummalapalli2026edge}. $^{b}$Our runs.}
 \end{table}
 
 \subsection{OLT}
