@@ -735,7 +735,7 @@ Section~\ref{sec:olt-energy} explains.
     Tier & Source measures & Conversion & Average & Marginal \\
     \hline
     User & the chip & none & 15.7 & 15.7 \\
-    ONU & the board at the plug & none & 243 & 91 \\
+    ONU & the board at the plug & none & 246 & 92 \\
     OLT & the GPU card & $\times 2.47$ or $\times 2.20$ & 34--1,541 & 18--793 \\
     \hline
   \end{tabular}
@@ -762,34 +762,36 @@ generated token at 6.34 tokens per second, or 243~J for an answer of the mean le
 3.5~W~\cite{tummalapalli2026edge}. Since a token takes 1/6.34~s, the idle draw accounts
 for $3.5/6.34 = 0.55$~J of each token, so above idle the ONU spends $0.88 - 0.55 =
 0.33$~J per token, or 91~J per answer (Table~\ref{tab:user-onu}).
-\todo{after the final re-run, which charges the ONU for reading the prompt:
-\citeonline{renney2026cloud} give one figure per generated token, with the reading of their
-12-token prompt folded in, so the prefill comes from \citeonline{tummalapalli2026edge}, whose
-board read a 258-token prompt in 1.287~s, about 200 tokens per second. At the 5.58~W that
-Renney et al.'s figures imply, a prompt token then costs 0.028~J, or 0.010~J above idle,
-assuming the board draws the same power while reading as while generating. Update
-Table~\ref{tab:user-onu} (the ONU's prompt rows), and the ONU's 246 and 92~J and 44.1~s per
-query in the text, Table~\ref{tab:energy} and Section~\ref{sec:serving}.}
+\citeonline{renney2026cloud} give a single figure per generated token, with the reading
+of their 12-token prompt folded in, so reading a longer prompt has to be priced
+separately. \citeonline{tummalapalli2026edge} timed the same board reading a prompt of
+258 tokens in 1.287~s, about 200 tokens per second. The board draws $0.88 \times 6.34 =
+5.58$~W while working, so a prompt token costs $5.58/200 = 0.028$~J, or $(5.58 -
+3.5)/200 = 0.010$~J above idle, assuming the board draws the same power while reading as
+while generating. With the mean prompt of 122 tokens, a query then costs the ONU 246~J,
+or 92~J above idle. \todo{take every result from the final re-run, which adds this prefill
+to the code.}
 
 \begin{table}[htb]
   \centering
-  \caption{Measured values behind the energy of the user device and the ONU}
+  \caption{Values behind the energy of the user device and the ONU}
   \label{tab:user-onu}
   \begin{tabular}{lrr}
     \hline
     & User device & ONU \\
     & \citeonline{cai2026npu} & \citeonline{renney2026cloud} \\
     \hline
-    Energy per prompt token (J) & 0.016 & -- \\
+    Energy per prompt token (J) & 0.016 & 0.028$^{c}$ \\
     Energy per generated token (J) & 0.074 & 0.88 \\
-    Prompt tokens per second & 287.6 & -- \\
+    Prompt tokens per second & 287.6 & 200$^{a}$ \\
     Generated tokens per second & 72.2 & 6.34 \\
-    Idle power (W) & -- & 3.5$^{a}$ \\
+    Idle power (W) & \ldots & 3.5$^{a}$ \\
     Mean prompt tokens on GSM8K$^{b}$ & 125.7 & 122.0 \\
     Mean generated tokens on GSM8K$^{b}$ & 184.9 & 276.0 \\
     \hline
   \end{tabular}
-  \legend{Source: The author. $^{a}$\citeonline{tummalapalli2026edge}. $^{b}$Our runs.}
+  \legend{Source: The author. $^{a}$From \citeonline{tummalapalli2026edge}. $^{b}$Our runs.
+  $^{c}$Derived in the text. \ldots{} Not reported by the source.}
 \end{table}
 
 \subsection{OLT}
@@ -865,7 +867,7 @@ one in a batch of 64 costs 34~J and 18~J respectively.
 
 Marginal accounting also changes the other figures. Google's share for spare machines is
 no longer charged, which lowers the OLT's conversion from 2.47 to 2.20, and the ONU's
-idle draw is removed, which lowers its energy from 243~J to 91~J, while the phone is
+idle draw is removed, which lowers its energy per query from 246~J to 92~J, while the phone is
 charged the same under both. The study uses marginal accounting, because a routing
 decision changes only what the query adds, and repeats its main runs under average
 accounting as a sensitivity analysis.
@@ -1028,8 +1030,8 @@ drifts as well, so the timetable learns an average that includes the drift.
 The user device and the ONU answer at the speeds their sources measured. The phone reads
 the prompt at 288 tokens per second and generates 72 tokens per second, while the ONU
 generates 6.3 tokens per second and so takes about 44 seconds for an answer of the mean
-length. \todo{after the final re-run: the ONU reads the prompt at about 200 tokens per second
-(Section~\ref{sec:user-onu-energy}), so a longer prompt also takes it longer.} Each household's
+length. It reads the prompt at about 200 tokens per second
+(Section~\ref{sec:user-onu-energy}), so a longer prompt also takes it longer. Each household's
 ONU answers one query at a time, in the order they were sent,
 so a second query from the same home waits for the first. The OLT serves with continuous
 batching (Section~\ref{sec:olt-energy}), with 64 slots, the largest batch measured, and a
