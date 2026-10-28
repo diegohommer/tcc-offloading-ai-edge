@@ -748,17 +748,20 @@ Section~\ref{sec:olt-energy} explains.
 The energy of the user device comes from the phone that \citeonline{cai2026npu} measured
 with Qualcomm's power telemetry, running Llama-3.2-1B on its CPU, and the phone spends
 0.016~J per prompt token and 0.074~J per generated token, or 15.7~J for a query of the mean
-lengths. The telemetry covers the whole chip but not the memory, the display or the
-radio, so this figure is a lower bound. Since escalation by confidence alone runs every
+lengths on GSM8K, 126 prompt and 185 generated tokens (Table~\ref{tab:user-onu}). The telemetry covers the whole chip but not the memory, the display or the
+radio, so this figure is a lower bound, and it is charged in full under both accountings. Since escalation by confidence alone runs every
 query on the user device while the policy often skips it, a device that spends more than
 this figure would add more energy to the baseline than to the policy, so the lower bound
 can only understate the saving.
 
 The energy of the ONU comes from the Raspberry Pi 5 with a Hailo-10H accelerator that
-\citeonline{renney2026cloud} measured with a meter at the power input, running
-Qwen2.5-1.5B, and the board spends 0.88~J per generated token at 6.34 tokens per second,
-or 243~J for an answer of the mean length. This figure includes the board's idle draw of
-about 3.5~W~\cite{tummalapalli2026edge}, without which the ONU spends 0.33~J per token.
+\citeonline{renney2026cloud} measured with a plug-in power meter while it ran
+Qwen2.5-1.5B, so their figure covers the whole board. The board spends 0.88~J per
+generated token at 6.34 tokens per second, or 243~J for an answer of the mean length of
+276 tokens. This figure includes the board's idle draw of about
+3.5~W~\cite{tummalapalli2026edge}. Since a token takes 1/6.34~s, the idle draw accounts
+for $3.5/6.34 = 0.55$~J of each token, so above idle the ONU spends $0.88 - 0.55 =
+0.33$~J per token, or 91~J per answer (Table~\ref{tab:user-onu}).
 \citeonline{renney2026cloud} report a
 single figure per generated token, measured while the board answered a prompt of about
 12 tokens, so the energy of reading that short prompt is folded into it and nothing in the
@@ -771,6 +774,36 @@ to about 500 in the second and 850 in the third. The energy and time of these me
 the ONU are therefore underestimated, under escalation by confidence alone and under the
 policy alike, and the policy, which compares the tiers by these figures, may also send
 long follow-ups to the ONU more often than it would if their prefill were charged.
+
+\begin{table}[htb]
+  \centering
+  \caption{Energy and speed of the user device and the ONU}
+  \label{tab:user-onu}
+  \begin{tabular}{lrr}
+    \hline
+    & User device & ONU \\
+    \hline
+    \multicolumn{3}{l}{\textit{Read from the sources}} \\
+    Energy per prompt token (J) & 0.016 & -- \\
+    Energy per generated token (J) & 0.074 & 0.88 \\
+    Prompt tokens per second & 287.6 & -- \\
+    Generated tokens per second & 72.2 & 6.34 \\
+    Idle power (W) & -- & 3.5 \\
+    \hline
+    \multicolumn{3}{l}{\textit{Measured on GSM8K}} \\
+    Mean prompt tokens & 125.7 & 122.0 \\
+    Mean generated tokens & 184.9 & 276.0 \\
+    \hline
+    \multicolumn{3}{l}{\textit{Derived}} \\
+    Energy per generated token, marginal accounting (J) & 0.074 & 0.33 \\
+    Energy per query, average accounting (J) & 15.7 & 243 \\
+    Energy per query, marginal accounting (J) & 15.7 & 91 \\
+    Time per query (s) & 3.0 & 43.5 \\
+    \hline
+  \end{tabular}
+  \legend{Source: The author, with data from \citeonline{cai2026npu},
+  \citeonline{renney2026cloud} and \citeonline{tummalapalli2026edge}}
+\end{table}
 
 \subsection{OLT}
 \label{sec:olt-energy}
