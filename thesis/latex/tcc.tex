@@ -762,18 +762,13 @@ generated token at 6.34 tokens per second, or 243~J for an answer of the mean le
 3.5~W~\cite{tummalapalli2026edge}. Since a token takes 1/6.34~s, the idle draw accounts
 for $3.5/6.34 = 0.55$~J of each token, so above idle the ONU spends $0.88 - 0.55 =
 0.33$~J per token, or 91~J per answer (Table~\ref{tab:user-onu}).
-\citeonline{renney2026cloud} report a
-single figure per generated token, measured while the board answered a prompt of about
-12 tokens, so the energy of reading that short prompt is folded into it and nothing in the
-figure grows with the length of the prompt. Our energy model therefore charges the ONU the
-same for a prompt of 12 tokens as for one of a thousand, although reading a prompt costs
-energy in proportion to its length, as the phone's separate figure of 0.016~J per prompt
-token shows. The gap is largest for follow-ups, whose prompts carry every earlier question
-and answer of their conversation and so grow from about 125 tokens in the first message
-to about 500 in the second and 850 in the third. The energy and time of these messages at
-the ONU are therefore underestimated, under escalation by confidence alone and under the
-policy alike, and the policy, which compares the tiers by these figures, may also send
-long follow-ups to the ONU more often than it would if their prefill were charged.
+\todo{after the final re-run, which charges the ONU for reading the prompt:
+\citeonline{renney2026cloud} give one figure per generated token, with the reading of their
+12-token prompt folded in, so the prefill comes from \citeonline{tummalapalli2026edge}, whose
+board read a 258-token prompt in 1.287~s, about 200 tokens per second. At the 5.58~W that
+Renney et al.'s figures imply, a prompt token then costs 0.028~J, or 0.010~J above idle,
+assuming the board draws the same power while reading as while generating. Update
+Table~\ref{tab:user-onu} (the ONU's prompt rows, and 246 and 92~J and 44.1~s per query).}
 
 \begin{table}[htb]
   \centering
@@ -1041,8 +1036,8 @@ drifts as well, so the timetable learns an average that includes the drift.
 The user device and the ONU answer at the speeds their sources measured. The phone reads
 the prompt at 288 tokens per second and generates 72 tokens per second, while the ONU
 generates 6.3 tokens per second and so takes about 44 seconds for an answer of the mean
-length. The ONU's source gives no speed for reading the prompt, so, as with its energy
-(Section~\ref{sec:user-onu-energy}), a longer prompt takes it no longer. Each household's
+length. \todo{after the final re-run: the ONU reads the prompt at about 200 tokens per second
+(Section~\ref{sec:user-onu-energy}), so a longer prompt also takes it longer.} Each household's
 ONU answers one query at a time, in the order they were sent,
 so a second query from the same home waits for the first. The OLT serves with continuous
 batching (Section~\ref{sec:olt-energy}), with 64 slots, the largest batch measured, and a
