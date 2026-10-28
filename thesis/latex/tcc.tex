@@ -712,15 +712,19 @@ every tier a current estimate of it.
 \section{Energy Model}
 \label{sec:energy-model}
 
-The energy of every tier is counted at the same boundary, everything the system draws to
-answer a query, as in Google's accounting of a prompt~\cite{elsworth2025measuring}. For
-the user device and the ONU this is the whole device, and for the OLT it is the GPU
-together with the rest of its server, the spare machines kept ready for peaks and the
-building that houses them. The energy of carrying queries and answers over the PON and
-the home network is left out, as are relaying the OLT's broadcast inside the home and
-manufacturing the hardware. Since the sources of the three tiers count different parts
-of their systems (Section~\ref{sec:measurements}), Table~\ref{tab:energy} lists what each
-one measures and how it is brought to this boundary, together with the energy each tier
+The energy of every tier is meant to be counted at the same boundary, everything the
+system draws to answer a query, as in Google's accounting of a
+prompt~\cite{elsworth2025measuring}. The ONU's source measures it directly, at the plug
+of the whole board, and the OLT's GPU card is brought to it with Google's shares of a
+prompt's energy and the industry's average PUE, which add an estimate of the rest of its
+server, the spare machines kept ready for peaks and the building that houses them. The
+phone's source covers only its chip, so the user device is counted below this boundary
+and its figure is a lower bound (Section~\ref{sec:user-onu-energy}). The energy of
+carrying queries and answers over the PON and the home network is left out, as are
+relaying the OLT's broadcast inside the home and manufacturing the hardware. Since the
+sources of the three tiers count different parts of their systems
+(Section~\ref{sec:measurements}), Table~\ref{tab:energy} lists what each one measures and
+how close it comes to this boundary, together with the energy each tier
 spends on a query of its mean prompt and answer lengths on GSM8K. The OLT's energy
 depends on how many queries it batches, so the table gives its range, which
 Section~\ref{sec:olt-energy} explains.
