@@ -429,7 +429,8 @@ the decision rests on confidence alone.
 The other edge--cloud methods compared by \citeauthoronline{pakpahan2026continuum} split the
 work differently. Tabi~\cite{wang2023tabi} is a two-model cascade within one server,
 passing a query to the larger model when the smaller one's calibrated confidence falls
-below a threshold profiled offline for each task. EdgeShard~\cite{zhang2024edgeshard}
+below a cut-off profiled offline for each task, and with a probability that falls as the
+confidence approaches one above it. EdgeShard~\cite{zhang2024edgeshard}
 splits a single LLM into shards of layers placed on edge devices and a cloud server, so
 every query runs the whole model and there is no decision to make per query. In the
 draft--verify method of \citeonline{hao2024hybrid}, a small model at the edge generates
