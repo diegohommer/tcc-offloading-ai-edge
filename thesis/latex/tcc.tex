@@ -761,19 +761,19 @@ can only understate the saving.
 The energy of the ONU comes from the Raspberry Pi 5 with a Hailo-10H accelerator that
 \citeonline{renney2026cloud} measured with a plug-in power meter while it ran
 Qwen2.5-1.5B, so their figure covers the whole board. The board spends 0.88~J per
-generated token at 6.34 tokens per second, or 243~J for an answer of the mean length of
-276 tokens. This figure includes the board's idle draw of about
-3.5~W~\cite{tummalapalli2026edge}. Since a token takes 1/6.34~s, the idle draw accounts
-for $3.5/6.34 = 0.55$~J of each token, so above idle the ONU spends $0.88 - 0.55 =
-0.33$~J per token, or 91~J per answer (Table~\ref{tab:user-onu}).
+generated token at 6.34 tokens per second, so it draws $0.88 \times 6.34 = 5.58$~W while
+working, and an answer of the mean length of 276 tokens costs $0.88 \times 276 = 243$~J.
+This power includes the board's idle draw of about 3.5~W~\cite{tummalapalli2026edge}, so
+the work itself adds $5.58 - 3.5 = 2.08$~W, and above idle a generated token costs
+$2.08/6.34 = 0.33$~J, or 91~J per answer (Table~\ref{tab:user-onu}).
 \citeonline{renney2026cloud} give a single figure per generated token, with the reading
 of their 12-token prompt folded in, so reading a longer prompt has to be priced
 separately. \citeonline{tummalapalli2026edge} timed the same board reading a prompt of
-258 tokens in 1.287~s, about 200 tokens per second. The board draws $0.88 \times 6.34 =
-5.58$~W while working, so a prompt token costs $5.58/200 = 0.028$~J, or $(5.58 -
-3.5)/200 = 0.010$~J above idle, assuming the board draws the same power while reading as
-while generating. With the mean prompt of 122 tokens, a query then costs the ONU 246~J,
-or 92~J above idle. \todo{take every result from the final re-run, which adds this prefill
+258 tokens in 1.287~s, about 200 tokens per second, and assuming the board draws the same
+power while reading as while generating, a prompt token costs $5.58/200 = 0.028$~J, or
+$2.08/200 = 0.010$~J above idle. With the mean prompt of 122 tokens, a query then costs
+the ONU $243 + 122 \times 0.028 = 246$~J, or $91 + 122 \times 0.010 = 92$~J above idle.
+\todo{take every result from the final re-run, which adds this prefill
 to the code.}
 
 \begin{table}[htb]
