@@ -759,8 +759,7 @@ The energy of the ONU comes from the Raspberry Pi 5 with a Hailo-10H accelerator
 Qwen2.5-1.5B, and the board spends 0.88~J per generated token at 6.34 tokens per second,
 or 243~J for an answer of the mean length. This figure includes the board's idle draw of
 about 3.5~W~\cite{tummalapalli2026edge}, without which the ONU spends 0.33~J per token.
-\citeonline{tummalapalli2026edge} measured the same model on the same hardware at 0.27~J
-per token above idle, so the two sources agree. \citeonline{renney2026cloud} report a
+\citeonline{renney2026cloud} report a
 single figure per generated token, measured while the board answered a prompt of about
 12 tokens, so the energy of reading that short prompt is folded into it and nothing in the
 figure grows with the length of the prompt. Our energy model therefore charges the ONU the
