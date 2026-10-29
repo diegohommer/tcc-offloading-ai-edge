@@ -744,7 +744,7 @@ Section~\ref{sec:olt-energy} explains.
     \hline
     User & the chip & none & 15.7 & 15.7 \\
     ONU & the board at the plug & none & 246 & 92 \\
-    OLT & the GPU card & $\times 2.44$ & 34--1,524 & 20--879 \\
+    OLT & the GPU card & $\times 2.44$ & 33--1,523 & 19--843 \\
     \hline
   \end{tabular}
   \legend{Source: The author}
@@ -804,15 +804,10 @@ to the code.}
 
 We measured the energy of the OLT ourselves, running its model, Qwen2.5-7B in 8-bit, on
 one NVIDIA L4 GPU served with vLLM 0.21.0~\cite{kwon2023vllm} under the NVIDIA driver
-580.95.05. The GPU keeps a running total of the energy it has used, which NVML reports,
+610.57.04. The GPU keeps a running total of the energy it has used, which NVML reports,
 and we read this total before and after each run and took the difference, which is more
 reliable than sampling the power, since sampling misses part of the
-runtime~\cite{yang2023part}. \todo{the one-card re-measurement is done (static sweep and
-continuous batching on the same L4, driver 610.57.04): take the driver, the idle power,
-Table~\ref{tab:olt-sweep}, the clock values and Figure~\ref{fig:batching} with the
-validation results from it, and the OLT's range in Table~\ref{tab:energy} and the costs in
-Section~\ref{sec:accounting} from the final re-run that prices on it; then say both were
-measured on the same GPU.}
+runtime~\cite{yang2023part}.
 
 We gave the GPU static batches of 1 to 64 queries, in which every query starts and ends
 together, drawn from 64 GSM8K problems whose prompts average 92 tokens, and each query
@@ -820,22 +815,20 @@ generated an answer of 300 tokens. To separate the two
 phases of inference (Section~\ref{sec:llm-background}), each batch was also run
 generating a single token, which measures the prefill alone, and the decode is the
 difference between the two runs. Every measurement was repeated five times after one
-warm-up run, and we kept the median. We also measured the GPU at rest, at 30.5~W with the
+warm-up run, and we kept the median. We also measured the GPU at rest, at 32.1~W with the
 model loaded, so that the energy a query adds above this idle power could be computed.
 
 Batching makes each query much cheaper, because the L4 draws its power limit of 72~W
 whatever the batch size, while the number of tokens it generates per second grows from
-29.2 for a query alone to 1,367.5 in a batch of 64 (Table~\ref{tab:olt-sweep}). The GPU
+29.1 for a query alone to 1,394.2 in a batch of 64 (Table~\ref{tab:olt-sweep}). The GPU
 already reaches this limit with a single query, so for a larger batch it cannot draw more
-power and runs its cores more slowly instead. In our runs with continuous batching,
-described below, its clock fell from about 1,485~MHz with one request to 1,095~MHz with
-64, about a quarter slower, which is why the speed grows 47 times for a batch 64 times
-larger. Dividing the power
-by this speed, a generated token costs $72.0/29.2 = 2.47$~J alone and
-$71.7/1{,}367.5 = 0.052$~J in a batch of 64, 47 times less (Figure~\ref{fig:batching}a).
-These figures still include the reading of the prompts, and once the prefill, measured
-separately, is taken out, the decode costs 2.465~J per token alone and 0.048~J in a
-batch of 64. The energy per prompt token falls to about 0.015~J by a batch of 16 and
+power and runs its cores more slowly instead. In the sweep, its clock fell from about
+1,290~MHz for a query alone to 930~MHz in a batch of 64, about 28\% slower, which is why
+the speed grows 48 times for a batch 64 times larger. Dividing the power by this speed, a
+generated token costs $71.9/29.1 = 2.47$~J alone and $72.0/1{,}394.2 = 0.052$~J in a batch
+of 64, 48 times less (Figure~\ref{fig:batching}a). These figures still include the reading
+of the prompts, and once the prefill, measured separately, is taken out, the decode costs
+2.464~J per token alone and 0.047~J in a batch of 64. The energy per prompt token falls to about 0.015~J by a batch of 16 and
 stays there.
 
 \begin{table}[htb]
@@ -847,18 +840,18 @@ stays there.
     & & Generated & \multicolumn{2}{c}{Joules per token} \\
     Batch & Power (W) & tokens/s & Prompt & Generated \\
     \hline
-    1 & 72.0 & 29.2 & 0.034 & 2.465 \\
-    2 & 72.0 & 57.9 & 0.039 & 1.239 \\
-    3 & 71.7 & 86.3 & 0.029 & 0.825 \\
-    4 & 72.2 & 114.9 & 0.024 & 0.625 \\
-    6 & 71.8 & 169.8 & 0.020 & 0.419 \\
-    8 & 72.0 & 225.0 & 0.018 & 0.316 \\
-    12 & 71.8 & 329.7 & 0.017 & 0.213 \\
-    16 & 71.8 & 433.4 & 0.015 & 0.161 \\
-    24 & 71.6 & 618.1 & 0.016 & 0.111 \\
-    32 & 71.9 & 801.4 & 0.015 & 0.085 \\
-    48 & 71.9 & 1{,}099.5 & 0.015 & 0.061 \\
-    64 & 71.7 & 1{,}367.5 & 0.015 & 0.048 \\
+    1 & 71.9 & 29.1 & 0.033 & 2.464 \\
+    2 & 71.6 & 58.0 & 0.039 & 1.228 \\
+    3 & 71.9 & 86.6 & 0.029 & 0.825 \\
+    4 & 71.8 & 115.3 & 0.024 & 0.618 \\
+    6 & 71.8 & 171.3 & 0.019 & 0.415 \\
+    8 & 72.0 & 227.0 & 0.017 & 0.313 \\
+    12 & 71.8 & 332.9 & 0.016 & 0.211 \\
+    16 & 72.1 & 438.0 & 0.015 & 0.160 \\
+    24 & 71.9 & 626.2 & 0.015 & 0.110 \\
+    32 & 71.8 & 811.4 & 0.015 & 0.084 \\
+    48 & 71.8 & 1{,}123.4 & 0.014 & 0.060 \\
+    64 & 72.0 & 1{,}394.2 & 0.014 & 0.047 \\
     \hline
   \end{tabular}
   \legend{Source: The author}
@@ -870,17 +863,17 @@ of its batch keeps changing. The simulator we built for the case study
 (Section~\ref{sec:simulation}) runs no model, and instead follows this size over time and
 charges each moment the energy per token of a static batch of the same size, interpolated
 between the sizes we measured.
-We checked this against runs with continuous batching, requiring the simulator to come
+We checked this against runs with continuous batching on the same GPU, requiring the simulator to come
 within 10\% of them, in two steps. First, we kept a fixed number of requests generating at
 once, from 1 to 64, replacing each one with a new request the moment it finished, and the
-energy per token was within 3.2\% of the static batch of that size
+energy per token was within 2.9\% of the static batch of that size
 (Figure~\ref{fig:batching}a), well inside the 10\%, so a batch costs about the same
 whether or not its queries started together. Then we sent the GPU 15 runs of about five
 minutes with requests arriving at random times, three aimed at each average of 1, 2, 4, 8
 and 16 requests in flight, and gave the simulator the same requests at the same times.
 Under both ways of charging energy described in Section~\ref{sec:accounting}, it
-overestimated the GPU's energy by 1 to 3\% and underestimated its mean latency by less
-than 2\% (Figure~\ref{fig:batching}b).
+predicted the GPU's energy within 3\% and underestimated its mean latency by less than
+2.5\% (Figure~\ref{fig:batching}b).
 
 \begin{figure}[htb]
   \centering
@@ -909,8 +902,8 @@ Since the OLT batches, the energy of a query depends on how it is charged
 batch's energy, read off the sweep at the batch's size, while under marginal accounting
 nothing is charged for keeping the hardware on, and a batch's energy above idle,
 measured at its size, is shared equally among its queries. A query alone on the OLT
-therefore costs 1,524~J under average accounting and 879~J under marginal accounting, and
-one in a batch of 64 costs 34~J and 20~J respectively.
+therefore costs 1,523~J under average accounting and 843~J under marginal accounting, and
+one in a batch of 64 costs 33~J and 19~J respectively.
 
 Marginal accounting also removes the ONU's idle draw, which lowers its energy per query
 from 246~J to 92~J, while the phone is charged the same under both, since its source gives
@@ -926,13 +919,13 @@ The cost the OLT reports follows the same accounting. The OLT sends it on its br
 and also stamps it on the answers it returns, but under the broadcast strategy the tiers
 take the OLT's cost only from the broadcast. A household relying on its own answers
 alone would hear this cost only a few times a day, and Section~\ref{sec:evaluation} tests
-this variant to show what the broadcast adds. Under marginal accounting it is what one more query would add, about 6~J
+this variant to show what the broadcast adds. Under marginal accounting it is what one more query would add, about 5~J
 while the OLT is busy and the cost of a query alone while it is idle. The OLT reports the
-average of the two, weighted by the share of its last 5 minutes it spent busy. The 6~J is
+average of the two, weighted by the share of its last 5 minutes it spent busy. The 5~J is
 a single slope of the GPU's energy above idle, fitted over batches 1 to 64, because the
 energy added between adjacent batch sizes is noisy at small batches and nearly constant
 above four queries, and a single value also spares the tiers from predicting the batch
-their query will meet. \todo{take the 6~J from the final re-run, which fits the slope on
+their query will meet. \todo{take the 5~J from the final re-run, which fits the slope on
 the energy above idle instead of the total energy.} Under average accounting, the OLT
 instead reports the mean cost per token of its work over the same 5 minutes, and in
 either case the timetable holds the same quantity for each hour of a weekday and of a
