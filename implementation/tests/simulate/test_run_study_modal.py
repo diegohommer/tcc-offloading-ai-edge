@@ -34,12 +34,12 @@ def _simulate(tmp_path, name, subscribers, flags=()):
 def test_study_jobs_are_the_runs_run_study_sh_lists():
     """Every scenario runs at three seeds, each with the flags run_study.sh gives it."""
     jobs = study_jobs()
-    assert len(jobs) == 42
+    assert len(jobs) == 21
     assert {seed for _, seed, _ in jobs} == {7, 8, 9}
     flags = {tag: tag_flags for tag, _, tag_flags in jobs}
     assert flags["main"] == []
     assert flags["burst_all"] == ["--burst-sigma", "0.457", "--burst-hours", "12.3"]
-    assert flags["perhousehold"] == ["--stats", "household"]
+    assert flags["olt0.41"] == ["--olt-scale", "0.4094"]
 
 
 def test_study_sizes_are_the_household_counts_of_the_study():

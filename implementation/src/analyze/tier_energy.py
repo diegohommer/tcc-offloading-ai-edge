@@ -289,15 +289,15 @@ def main() -> int:
     curve = OltCurve(ref_rows, 1.0)
     idle_q = curve.pf1_net * pin + curve.dec1_net * gout
     busy_q = curve.pf_slope * pin + curve.dec_slope * gout
-    adj = [r["marginal_J_per_query"] for r in ref_rows if r["batch"] >= 16]
+    adj = [r["marginal_J_per_query_net"] for r in ref_rows if r["batch"] >= 16]
     lines += [
         "## 6. Marginal cost: what one more query adds",
         "",
         "A query that finds the OLT idle adds the energy above idle (net rates at batch 1). "
-        "One that joins a running batch adds the slope of the batch's energy per step against "
+        "One that joins a running batch adds the slope of the batch's energy above idle per step against "
         f"batch size (least squares over batches {batch_sizes[0]}–{batch_sizes[-1]}). "
         "Whole system under marginal "
-        f"accounting: × {k_marg:.2f} (the idle-machines share left out).",
+        f"accounting: × {k_marg:.2f}, the same factor as average accounting.",
         "",
     ]
     lines += table(
@@ -330,7 +330,7 @@ def main() -> int:
         f"For comparison, the slope measured between adjacent batches from 16 up (table 1, "
         f"{ref_rows[0]['input_tokens'] // ref_rows[0]['batch']} in / "
         f"{ref_run['output_tokens_per_sequence']} out "
-        f"tokens): {', '.join(f'{a:.1f}' for a in adj)} J at the card.",
+        f"tokens): {', '.join(f'{a:.1f}' for a in adj)} J above idle at the card.",
         "",
     ]
 

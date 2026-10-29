@@ -38,9 +38,10 @@ def published_rates(accounting: str = "average") -> dict:
     """Return J per prompt token (pf) and per generated token (dec) for the phone and the ONU.
 
     The phone (Cai et al.) prices prefill and decode separately. The ONU (Cloud to Edge)
-    has one all-in figure per generated token, its short prompt's prefill included, so its
-    prefill rate is 0. Under marginal accounting the ONU board's idle draw comes off, since
-    the board is on whether or not a query arrives; the phone's figure is kept under both.
+    has one all-in figure per generated token, its ~12-token prompt included; a prompt token
+    is priced on top as the board's working power over its prefill speed (Tummalapalli et
+    al.). Under marginal accounting the ONU board's idle draw comes off both, since the
+    board is on whether or not a query arrives; the phone's figure is kept under both.
 
     Args:
         accounting: "average" (the figures as published) or "marginal".
@@ -50,26 +51,34 @@ def published_rates(accounting: str = "average") -> dict:
     """
     src = _sources()
     user, onu = src["user"], src["onu"]
-    dec = float(onu["J_per_generated_token_all_in"])
+    dec, speed = float(onu["J_per_generated_token_all_in"]), float(onu["tokens_per_s"])
+    power = dec * speed  # the board's draw while working, idle included
     if accounting == "marginal":
-        dec -= float(onu["idle_W"]) / float(onu["tokens_per_s"])
+        power -= float(onu["idle_W"])
+        dec = power / speed
+    pf = power / _onu_prefill_speed(onu)
     return {
         "user": {
             "pf": float(user["prefill_J_per_prompt_token"]),
             "dec": float(user["decode_J_per_generated_token"]),
         },
-        "onu": {"pf": 0.0, "dec": dec},
+        "onu": {"pf": pf, "dec": dec},
     }
+
+
+def _onu_prefill_speed(onu: dict) -> float:
+    """Return the ONU's prompt tokens per second (Tummalapalli et al., Table 6)."""
+    return float(onu["prefill_prompt_tokens"]) / float(onu["prefill_seconds"])
 
 
 def published_speeds() -> dict:
     """Return the phone's and the ONU's tokens per second, for latency only.
 
-    The phone has prefill and decode speeds (Cai et al., Table 5); the ONU has one speed,
-    generated tokens over the whole inference time (Cloud to Edge, Table 3).
+    The phone has prefill and decode speeds (Cai et al., Table 5); the ONU generates at
+    Cloud to Edge's speed (Table 3) and reads prompts at Tummalapalli et al.'s (Table 6).
 
     Returns:
-        {"user": {"pf": tok/s, "dec": tok/s}, "onu": {"pf": None, "dec": tok/s}}.
+        {"user": {"pf": tok/s, "dec": tok/s}, "onu": {"pf": tok/s, "dec": tok/s}}.
     """
     src = _sources()
     return {
@@ -77,7 +86,7 @@ def published_speeds() -> dict:
             "pf": float(src["user"]["prefill_tokens_per_s"]),
             "dec": float(src["user"]["decode_tokens_per_s"]),
         },
-        "onu": {"pf": None, "dec": float(src["onu"]["tokens_per_s"])},
+        "onu": {"pf": _onu_prefill_speed(src["onu"]), "dec": float(src["onu"]["tokens_per_s"])},
     }
 
 
@@ -112,16 +121,18 @@ def boundary() -> dict:
 def olt_factor(which: str = "system", accounting: str = "average") -> float:
     """Return the multiplier on the OLT's GPU-card figure.
 
-    Under marginal accounting the idle machines held for load spikes are not something a
-    query adds, so their share is left out (x 2.18 instead of x 2.44).
+    The same factor serves both accountings: Google's share for the idle machines held for
+    load spikes stays in under marginal accounting too, for simplicity, which can only make
+    the OLT dearer (config/energy_sources.yaml, olt_boundary).
 
     Args:
         which: "system" (whole server at PUE 1.54: x 2.44), "system-low" (PUE 1.09:
             x 1.73) or "gpu" (the card alone: x 1).
-        accounting: "average" or "marginal".
+        accounting: "average" or "marginal"; kept for callers, the factor is the same.
     """
+    del accounting
     b = boundary()
-    it = b["it_over_accel_marginal"] if accounting == "marginal" else b["it_over_accel"]
+    it = b["it_over_accel"]
     return {"system": it * b["pue_isp"], "system-low": it * b["pue_low"], "gpu": 1.0}[which]
 
 
@@ -187,8 +198,10 @@ class OltCurve:
         self.pf_net = [r["prefill_J_per_input_token_net"] * factor for r in rows]
         self.dec_net = [r["decode_J_per_output_token_net"] * factor for r in rows]
         self.pf1_net, self.dec1_net = self.pf_net[0], self.dec_net[0]
-        self.pf_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.pf)])
-        self.dec_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.dec)])
+        # What one more query adds to a busy OLT: the slope of the batch's energy above
+        # idle against its size, the quantity marginal accounting charges.
+        self.pf_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.pf_net)])
+        self.dec_slope = _slope(self.b, [b * y for b, y in zip(self.b, self.dec_net)])
 
     # ==========================================
     # Rates and times

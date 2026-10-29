@@ -49,15 +49,8 @@ ORDER = [
     "burst_all",
     "average",
     "onu0.5",
-    "onu0.2",
-    "olt1.07",
-    "olt1.75",
-    "users2",
-    "perhousehold",
-    "act0",
-    "act2",
-    "burstgpt",
-    "brazil",
+    "olt0.41",
+    "olt0.70",
 ]
 """Scenarios in run_study.sh's order."""
 

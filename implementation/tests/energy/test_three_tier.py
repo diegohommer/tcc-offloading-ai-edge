@@ -92,15 +92,18 @@ def test_marginal_rates_never_exceed_average_rates(curve, marginal_curve):
 
 
 def test_olt_factor_orders_the_boundaries():
-    """The card alone is x1, a low-PUE site is below the industry PUE, marginal below average."""
+    """The card alone is x1, a low-PUE site is below the industry PUE, one factor for both accountings."""
     assert olt_factor("gpu") == 1.0
     assert 1.0 < olt_factor("system-low") < olt_factor("system")
-    assert olt_factor("system", "marginal") < olt_factor("system", "average")
+    assert olt_factor("system", "marginal") == olt_factor("system", "average")
 
 
-def test_published_rates_price_the_onu_on_generated_tokens_only():
-    """The ONU's figure is all-in per generated token, so its prompt rate is zero."""
-    assert published_rates()["onu"]["pf"] == 0
+def test_published_rates_price_the_onu_prompt_at_its_prefill_speed():
+    """A prompt token costs the board's working power over its prefill speed (5.58 W / 200)."""
+    assert published_rates()["onu"]["pf"] == pytest.approx(0.88 * 6.34 / (258 / 1.287))
+    assert published_rates("marginal")["onu"]["pf"] == pytest.approx(
+        (0.88 * 6.34 - 3.5) / (258 / 1.287)
+    )
 
 
 def test_published_rates_marginal_drops_the_onu_idle_draw():

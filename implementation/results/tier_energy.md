@@ -51,7 +51,7 @@ At each tier's mean real answer length. Marginal accounting charges no tier for 
 | Tier | Prompt tokens | Generated tokens | J/query, average | J/query, marginal |
 |---|---|---|---|---|
 | user | 125.7 | 184.9 | 15.7 | 15.7 |
-| onu | 122.0 | 276.0 | 242.9 | 90.5 |
+| onu | 122.0 | 276.0 | 246.3 | 91.8 |
 
 ## 4. OLT per query, at its real answer length
 
@@ -76,19 +76,19 @@ At each tier's mean real answer length. Marginal accounting charges no tier for 
 
 | Lower tier | Its J/query | Whole system, PUE 1.54 | Whole system, PUE 1.09 | GPU card only | GPU, net of idle |
 |---|---|---|---|---|---|
-| onu | 242.9 | ≈ 6.5 | ≈ 4.5 | ≈ 2.6 | ≈ 1.4 |
+| onu | 246.3 | ≈ 6.4 | ≈ 4.5 | ≈ 2.6 | ≈ 1.4 |
 | user | 15.7 | not within 64 | not within 64 | ≈ 52.6 | ≈ 25.2 |
 
 ## 6. Marginal cost: what one more query adds
 
-A query that finds the OLT idle adds the energy above idle (net rates at batch 1). One that joins a running batch adds the slope of the batch's energy per step against batch size (least squares over batches 1–64). Whole system under marginal accounting: × 2.18 (the idle-machines share left out).
+A query that finds the OLT idle adds the energy above idle (net rates at batch 1). One that joins a running batch adds the slope of the batch's energy above idle per step against batch size (least squares over batches 1–64). Whole system under marginal accounting: × 2.44, the same factor as average accounting.
 
-|  | J per prompt token (card) | J per generated token (card) | J/query, card | J/query, whole system × 2.18 |
+|  | J per prompt token (card) | J per generated token (card) | J/query, card | J/query, whole system × 2.44 |
 |---|---|---|---|---|
-| OLT idle (batch 1) | 0.0180 | 1.365 | 345.3 | 751.8 |
-| OLT busy (slope) | 0.0137 | 0.0090 | 3.9 | 8.6 |
+| OLT idle (batch 1) | 0.0180 | 1.365 | 345.3 | 843.4 |
+| OLT busy (slope) | 0.0076 | 0.0050 | 2.2 | 5.3 |
 
-For comparison, the slope measured between adjacent batches from 16 up (table 1, 96 in / 300 out tokens): 3.5, 4.5, 2.7, 4.5, 4.5 J at the card.
+For comparison, the slope measured between adjacent batches from 16 up (table 1, 96 in / 300 out tokens): 2.3, 2.4, 1.4, 2.5, 2.6 J above idle at the card.
 
 ## 7. Answers: every tier on all GSM8K test questions
 

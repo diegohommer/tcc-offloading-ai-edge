@@ -54,6 +54,15 @@ onu:
     read exclude part of the system and the figure is closest to the energy above
     idle, which agrees with the 0.33 J above. The row used here matches their
     speed; Table 3's other Qwen 2.5 1.5B row (4.37 tok/s, 1.30 J) does not.
+  prefill_prompt_tokens: 258
+  prefill_seconds: 1.287
+  prefill_source: >
+    Tummalapalli et al., section 3.2 and Table 6: the same board and model (Q4_0) read a
+    258-token prompt in 1,287 ms (warm runs 2-20), about 200 prompt tokens per second.
+    Renney et al.'s figure folds in only their ~12-token prompt, so a longer prompt is
+    priced on top: the board is assumed to draw its working power, 0.88 x 6.34 = 5.58 W,
+    while reading, so a prompt token costs 5.58 / 200 = 0.028 J, or (5.58 - 3.5) / 200 =
+    0.010 J above idle, and takes 1/200 s.
 
 olt_boundary:
   source: "Elsworth et al. (Google), Measuring the environmental impact of delivering AI at Google Scale, arXiv:2508.15734, section 4.1, Table 1 and Figure 3"
@@ -71,13 +80,15 @@ olt_boundary:
   conversion: >
     GPU card (NVML) x (accelerators + host + idle) / accelerators x PUE =
     x 1.59 x 1.54 = x 2.44. Google's overhead share is left out and the site's
-    own PUE applied instead.
+    own PUE applied instead. The same factor is used under both accountings.
   marginal: >
     Under marginal accounting (a query pays only what it adds, energy_tests.md
-    §8.4) no tier is charged for being on: the idle-machines share is dropped
-    ((accelerators + host) / accelerators x PUE = x 2.18), the OLT's card
-    figure is its net-of-idle rate at each batch size, and the ONU loses its
-    idle draw (onu.idle_W).
+    §8.4) the OLT's card figure is its net-of-idle rate at each batch size and the
+    ONU loses its idle draw (onu.idle_W). The conversion stays x 2.44: Google's
+    share for spare machines, which one query does not strictly add, is kept for
+    simplicity, and since a dearer OLT only shrinks the saving, it can only
+    understate it (decided with the advisor, 2026-10-29). Sensitivity runs price the
+    OLT at x 1.0 (the card alone) and x 1.72 (Google's own accounting, 1/0.58).
   caveat: >
     Google's shares come from large multi-accelerator hosts. A central-office
     server holding a single 72 W L4 may spend a larger share on its host.
