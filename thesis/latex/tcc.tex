@@ -815,9 +815,13 @@ difference between the two runs. Every measurement was repeated five times after
 warm-up run, and we kept the median. We also measured the GPU at rest, at 30.5~W with the
 model loaded, so that the energy a query adds above this idle power could be computed.
 
-Batching makes each query much cheaper, because the GPU draws about 72~W whatever the
-batch size, while the number of tokens it generates per second grows from 29.2 for a
-query alone to 1,367.5 in a batch of 64 (Table~\ref{tab:olt-sweep}). Dividing the power
+Batching makes each query much cheaper, because the L4 draws its power limit of 72~W
+whatever the batch size, while the number of tokens it generates per second grows from
+29.2 for a query alone to 1,367.5 in a batch of 64 (Table~\ref{tab:olt-sweep}). The GPU
+already reaches this limit with a single query, so it serves a larger batch by lowering
+its clock, which we recorded falling from about 1,485~MHz with one request in flight to
+1,095~MHz with 64 in the runs with continuous batching described below, and the speed
+therefore grows 47 times rather than 64. Dividing the power
 by this speed, a generated token costs $72.0/29.2 = 2.47$~J alone and
 $71.7/1{,}367.5 = 0.052$~J in a batch of 64, 47 times less (Figure~\ref{fig:batching}a).
 These figures still include the reading of the prompts, and once the prefill, measured
@@ -1110,6 +1114,11 @@ $\delta$.}
 %==============================================================================
 \chapter{Conclusion}
 \label{chap:conclusion}
+% Limitations to discuss here:
+% - The OLT's L4 is held at its 72 W power limit at every batch size (Section 3.3.2), so
+%   batching cuts its energy per token by about 51x. A larger GPU that is below its limit
+%   with one query would draw more power as the batch grows and gain less from batching,
+%   so the OLT's figures hold for a small power-capped card like ours, not for every GPU.
 %==============================================================================
 
 %==============================================================================
