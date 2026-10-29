@@ -818,10 +818,11 @@ model loaded, so that the energy a query adds above this idle power could be com
 Batching makes each query much cheaper, because the L4 draws its power limit of 72~W
 whatever the batch size, while the number of tokens it generates per second grows from
 29.2 for a query alone to 1,367.5 in a batch of 64 (Table~\ref{tab:olt-sweep}). The GPU
-already reaches this limit with a single query, so it serves a larger batch by lowering
-its clock, which we recorded falling from about 1,485~MHz with one request in flight to
-1,095~MHz with 64 in the runs with continuous batching described below, and the speed
-therefore grows 47 times rather than 64. Dividing the power
+already reaches this limit with a single query, so for a larger batch it cannot draw more
+power and runs its cores more slowly instead. In our runs with continuous batching,
+described below, its clock fell from about 1,485~MHz with one request to 1,095~MHz with
+64, about a quarter slower, which is why the speed grows 47 times for a batch 64 times
+larger. Dividing the power
 by this speed, a generated token costs $72.0/29.2 = 2.47$~J alone and
 $71.7/1{,}367.5 = 0.052$~J in a batch of 64, 47 times less (Figure~\ref{fig:batching}a).
 These figures still include the reading of the prompts, and once the prefill, measured
