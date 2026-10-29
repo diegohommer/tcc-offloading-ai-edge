@@ -936,8 +936,7 @@ average of the two, weighted by the share of its last 5 minutes it spent busy. T
 a single slope of the GPU's energy above idle, fitted over batches 1 to 64, because the
 energy added between adjacent batch sizes is noisy at small batches and nearly constant
 above four queries, and a single value also spares the tiers from predicting the batch
-their query will meet. \todo{take the 5~J from the final re-run, which fits the slope on
-the energy above idle instead of the total energy.} Under average accounting, the OLT
+their query will meet. Under average accounting, the OLT
 instead reports the mean cost per token of its work over the same 5 minutes, and in
 either case the timetable holds the same quantity for each hour of a weekday and of a
 weekend day.
