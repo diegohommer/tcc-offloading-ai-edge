@@ -723,7 +723,7 @@ of the whole board, and the OLT's GPU card is brought to it with Google's shares
 prompt's energy and the industry's average PUE, which add an estimate of the rest of its
 server, the spare machines kept ready for peaks and the building that houses them. The
 phone's source covers only its chip, so the user device is counted below this boundary
-and its figure is a lower bound (Section~\ref{sec:user-onu-energy}). The energy of
+(Section~\ref{sec:limitations}). The energy of
 carrying queries and answers over the PON and the home network is left out, as are
 relaying the OLT's broadcast inside the home and manufacturing the hardware. Since the
 sources of the three tiers count different parts of their systems
@@ -744,7 +744,7 @@ Section~\ref{sec:olt-energy} explains.
     \hline
     User & the chip & none & 15.7 & 15.7 \\
     ONU & the board at the plug & none & 246 & 92 \\
-    OLT & the GPU card & $\times 2.44$ or $\times 2.18$ & 34--1,524 & 17--783 \\
+    OLT & the GPU card & $\times 2.44$ & 34--1,524 & 20--879 \\
     \hline
   \end{tabular}
   \legend{Source: The author}
@@ -756,11 +756,9 @@ Section~\ref{sec:olt-energy} explains.
 The energy of the user device comes from the phone that \citeonline{cai2026npu} measured
 with Qualcomm's power telemetry, running Llama-3.2-1B on its CPU, and the phone spends
 0.016~J per prompt token and 0.074~J per generated token, or 15.7~J for a query of the mean
-lengths on GSM8K, 126 prompt and 185 generated tokens (Table~\ref{tab:user-onu}). The telemetry covers the whole chip but not the memory, the display or the
-radio, so this figure is a lower bound, and it is charged in full under both accountings. Since escalation by confidence alone runs every
-query on the user device while the policy often skips it, a device that spends more than
-this figure would add more energy to the baseline than to the policy, so the lower bound
-can only understate the joules the policy saves.
+lengths on GSM8K, 126 prompt and 185 generated tokens (Table~\ref{tab:user-onu}). This figure is charged in full under both accountings, since
+the source gives no idle power to subtract, and it covers the chip but not the memory, two
+limitations discussed in Section~\ref{sec:limitations}.
 
 The energy of the ONU comes from the Raspberry Pi 5 with a Hailo-10H accelerator that
 \citeonline{renney2026cloud} measured with a plug-in power meter while it ran
@@ -898,9 +896,10 @@ prompt's energy, the server's CPU and memory for 24\%, the spare machines kept r
 peaks for 10\% and the building for 8\%~\cite{elsworth2025measuring}. Counting the first
 three, a server spends $(58+24+10)/58 = 1.59$ times the energy of its accelerators, and
 using the industry's average PUE of 1.54~\cite{uptime2025survey} in place of Google's
-building overhead gives $1.59 \times 1.54 = 2.44$. A server built around a single GPU may
-spend more on the rest of the machine than Google's do, and the sensitivity runs of
-Chapter~\ref{chap:results} raise the OLT's energy to cover this.
+building overhead gives $1.59 \times 1.54 = 2.44$. The same factor is used under both ways
+of charging energy (Section~\ref{sec:accounting}), and Chapter~\ref{chap:results} repeats the
+main runs with the GPU card alone, a factor of 1.0, and with Google's own accounting of a
+prompt, $100/58 = 1.72$, to show how much the results depend on it.
 
 \subsection{Average and Marginal Accounting}
 \label{sec:accounting}
@@ -910,13 +909,16 @@ Since the OLT batches, the energy of a query depends on how it is charged
 batch's energy, read off the sweep at the batch's size, while under marginal accounting
 nothing is charged for keeping the hardware on, and a batch's energy above idle,
 measured at its size, is shared equally among its queries. A query alone on the OLT
-therefore costs 1,524~J under average accounting and 783~J under marginal accounting, and
-one in a batch of 64 costs 34~J and 17~J respectively.
+therefore costs 1,524~J under average accounting and 879~J under marginal accounting, and
+one in a batch of 64 costs 34~J and 20~J respectively.
 
-Marginal accounting also changes the other figures. Google's share for spare machines is
-no longer charged, which lowers the OLT's conversion from 2.44 to 2.18, and the ONU's
-idle draw is removed, which lowers its energy per query from 246~J to 92~J, while the phone is
-charged the same under both. The study uses marginal accounting, because a routing
+Marginal accounting also removes the ONU's idle draw, which lowers its energy per query
+from 246~J to 92~J, while the phone is charged the same under both, since its source gives
+no idle power. The OLT keeps the factor of 2.44 under both accountings, so its marginal
+figure still includes Google's share for the spare machines kept ready for peaks, which a
+single query does not add. We keep it for simplicity, and since a dearer OLT only reduces
+the saving of the policy (Chapter~\ref{chap:results}), it can only understate it. The
+study uses marginal accounting, because a routing
 decision changes only what the query adds, and repeats its main runs under average
 accounting as a sensitivity analysis.
 
@@ -924,15 +926,14 @@ The cost the OLT reports follows the same accounting. The OLT sends it on its br
 and also stamps it on the answers it returns, but under the broadcast strategy the tiers
 take the OLT's cost only from the broadcast. A household relying on its own answers
 alone would hear this cost only a few times a day, and Section~\ref{sec:evaluation} tests
-this variant to show what the broadcast adds. Under marginal accounting it is what one more query would add, about 9~J
+this variant to show what the broadcast adds. Under marginal accounting it is what one more query would add, about 6~J
 while the OLT is busy and the cost of a query alone while it is idle. The OLT reports the
-average of the two, weighted by the share of its last 5 minutes it spent busy. The 9~J is
-a single slope fitted over batches 1 to 64, because the energy measured between adjacent
-batch sizes varies too much at small batches, from 0.4~J to 7.1~J at the GPU, and stays
-between 3.5 and 4.9~J above four queries. A single value also spares the tiers from
-predicting the batch their query will meet. The slope is fitted on the GPU's total energy,
-which gives about 9~J instead of the 5~J of its energy above idle and so, if anything,
-makes the policy look slightly worse than it is. Under average accounting, the OLT
+average of the two, weighted by the share of its last 5 minutes it spent busy. The 6~J is
+a single slope of the GPU's energy above idle, fitted over batches 1 to 64, because the
+energy added between adjacent batch sizes is noisy at small batches and nearly constant
+above four queries, and a single value also spares the tiers from predicting the batch
+their query will meet. \todo{take the 6~J from the final re-run, which fits the slope on
+the energy above idle instead of the total energy.} Under average accounting, the OLT
 instead reports the mean cost per token of its work over the same 5 minutes, and in
 either case the timetable holds the same quantity for each hour of a weekday and of a
 weekend day.
@@ -1092,26 +1093,6 @@ at that moment. Its prefill is charged at the size of the batch it joins but is 
 take no time, since it is short next to the decode, and the time spent crossing the
 network, a few milliseconds, is also left out.
 
-\subsection{What the Simulation Leaves Out}
-\label{sec:simulation-limits}
-
-The simulation reproduces how the OLT's cost changes over time, following the load of
-the households and its drift, and holds the other quantities the policy reads still. The
-user device and the ONU spend a fixed energy per token, while a real phone or gateway
-spends more or less depending on its temperature, its battery and whatever else it is
-running. Every household has the same three models and asks questions drawn at random
-from the same benchmark, so the answer lengths each tier publishes barely move, while
-real households would differ in their models and in what they ask. A follow-up's answer
-is also the one recorded for its question alone, even though its prompt carries the
-conversation.
-
-WildChat's users chose to try a free chatbot, and a user there is an address and a
-browser rather than a household, so they may not chat as a typical household does. Its
-pauses also run from one answer to the next, so they include the time the next answer
-took. The policy uses one mean answer length per model, although in our runs on GSM8K the
-standard deviation of a single answer's length is 30 to 40\% of that mean, and the length could be predicted
-from the query itself~\cite{zheng2023response}. The results therefore show what
-the policy does when the main uncertainty it faces is the OLT's load.
 
 \section{Evaluation}
 \label{sec:evaluation}
@@ -1120,7 +1101,8 @@ the policy does when the main uncertainty it faces is the OLT's load.
 escalation, cited as the rule of \citeonline{wu2025recserve}, with and without the ONU,
 and each tier answering alone; the piggyback ablation, where a household hears the
 OLT's cost only on its own answers and blends each one it hears into its estimate with a
-weight of 0.3; the metrics; the sensitivity runs and the sweep of
+weight of 0.3; the metrics; the sensitivity runs (the OLT's conversion at $\times 1.0$
+and $\times 1.72$, an ONU twice as efficient, average accounting) and the sweep of
 $\delta$.}
 
 %==============================================================================
@@ -1128,14 +1110,65 @@ $\delta$.}
 \label{chap:results}
 %==============================================================================
 
+% The results sections go here, before the limitations.
+
+\section{Limitations}
+\label{sec:limitations}
+
+The results above rest on a few simplifications, gathered here so that the method could be
+described without interrupting it.
+
+The energy of the user device comes from \citeonline{cai2026npu}, whose telemetry has two
+limitations for our use. It covers the chip but not the memory, the display or the radio,
+so the phone's real consumption is higher than the 15.7~J per query we charge, and it gives
+no idle power, so under marginal accounting the phone is charged its full figure, including
+whatever the chip draws at rest, while the ONU and the OLT are charged only their energy
+above idle. The first makes the phone look cheaper than it is and the second more
+expensive, and we found no measurement of the same phone and model that would tell how far
+the two cancel. No commercial ONU runs an LLM today either, so the ONU is represented by a
+single-board computer with a neural accelerator, the class of device an AI-capable home
+gateway could carry, which \citeonline{renney2026cloud} measured with a plug-in meter on
+short answers. Its idle draw of about 3.5~W is an approximate figure~\cite{tummalapalli2026edge},
+and the energy of reading a prompt assumes that the board draws the same power while
+reading as while generating, which neither source measured. The figures of both devices
+come from recent preprints, the only measurements we found of these devices running these
+models.
+
+The factor of 2.44 that brings the OLT's GPU to the whole system combines Google's shares of
+a prompt's energy, measured on servers that share one host among several
+accelerators~\cite{elsworth2025measuring}, with the average PUE of data
+centers~\cite{uptime2025survey}, so it does not necessarily reflect the server and the
+building of a real OLT, whose central office may be more or less efficient. The same factor
+is kept under marginal accounting, where Google's share for spare machines would not
+strictly apply. Chapter~\ref{chap:results} shows how the results change with the GPU card
+alone, a factor of 1.0, and with Google's own accounting of a prompt, a factor of 1.72.
+\todo{point to the section with these sensitivity runs once it is written.} The GPU itself
+is an L4 held at its power limit of 72~W at every batch size, so batching makes its queries
+cheaper by running the card at a lower clock rather than by drawing more power. A larger GPU
+that is below its limit with a single query would draw more as its batch grows and gain
+less from batching, so the OLT's figures hold for a small power-capped card like ours.
+
+The simulation reproduces how the OLT's cost changes over time, following the load of the
+households and its drift, and holds the other quantities the policy reads still. The user
+device and the ONU spend a fixed energy per token, while a real phone or gateway spends more
+or less depending on its temperature, its battery and whatever else it is running. Every
+household has the same three models and asks questions drawn at random from the same
+benchmark, so the answer lengths each tier publishes barely move, while real households
+would differ in their models and in what they ask. A follow-up's answer is also the one
+recorded for its question alone, even though its prompt carries the conversation.
+
+WildChat's users chose to try a free chatbot, and a user there is an address and a browser
+rather than a household, so they may not chat as a typical household does. Its pauses also
+run from one answer to the next, so they include the time the next answer took. The policy
+uses one mean answer length per model, although in our runs on GSM8K the standard deviation
+of a single answer's length is 30 to 40\% of that mean, and the length could be predicted
+from the query itself~\cite{zheng2023response}. The results therefore show what the policy
+does when the main uncertainty it faces is the OLT's load.
+
+
 %==============================================================================
 \chapter{Conclusion}
 \label{chap:conclusion}
-% Limitations to discuss here:
-% - The OLT's L4 is held at its 72 W power limit at every batch size (Section 3.3.2), so
-%   batching cuts its energy per token by about 51x. A larger GPU that is below its limit
-%   with one query would draw more power as the batch grows and gain less from batching,
-%   so the OLT's figures hold for a small power-capped card like ours, not for every GPU.
 %==============================================================================
 
 %==============================================================================
