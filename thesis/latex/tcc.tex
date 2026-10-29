@@ -862,7 +862,8 @@ The OLT in the simulation, however, serves with continuous batching
 (Section~\ref{sec:measurements}), where queries join and leave at any moment, so the size
 of its batch keeps changing. The simulator we built for the case study
 (Section~\ref{sec:simulation}) runs no model, and instead follows this size over time and
-charges each moment the energy per token measured for a static batch of the same size.
+charges each moment the energy per token of a static batch of the same size, interpolated
+between the sizes we measured.
 We checked this against runs with continuous batching, requiring the simulator to come
 within 10\% of them, in two steps. First, we kept a fixed number of requests generating at
 once, from 1 to 64, replacing each one with a new request the moment it finished, and the
