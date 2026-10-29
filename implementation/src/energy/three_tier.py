@@ -113,11 +113,11 @@ def olt_factor(which: str = "system", accounting: str = "average") -> float:
     """Return the multiplier on the OLT's GPU-card figure.
 
     Under marginal accounting the idle machines held for load spikes are not something a
-    query adds, so their share is left out (x 2.20 instead of x 2.47).
+    query adds, so their share is left out (x 2.18 instead of x 2.44).
 
     Args:
-        which: "system" (whole server at PUE 1.54: x 2.47), "system-low" (PUE 1.09:
-            x 1.75) or "gpu" (the card alone: x 1).
+        which: "system" (whole server at PUE 1.54: x 2.44), "system-low" (PUE 1.09:
+            x 1.73) or "gpu" (the card alone: x 1).
         accounting: "average" or "marginal".
     """
     b = boundary()

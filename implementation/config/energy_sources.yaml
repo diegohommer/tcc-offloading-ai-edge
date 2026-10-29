@@ -56,10 +56,11 @@ onu:
     speed; Table 3's other Qwen 2.5 1.5B row (4.37 tok/s, 1.30 J) does not.
 
 olt_boundary:
-  source: "Elsworth et al. (Google), Measuring the environmental impact of delivering AI at Google Scale, arXiv:2508.15734, section 4.1 and Table 1"
-  shares:                          # of a median Gemini Apps text prompt, 0.24 Wh
+  source: "Elsworth et al. (Google), Measuring the environmental impact of delivering AI at Google Scale, arXiv:2508.15734, section 4.1, Table 1 and Figure 3"
+  shares:                          # of a median Gemini Apps text prompt, 0.24 Wh, as in Figure 3
+                                   # (the text says host 25%, from rounded Wh: its shares sum to 101%)
     active_accelerators: 0.58      # 0.14 Wh
-    host_cpu_and_dram: 0.25        # 0.06 Wh
+    host_cpu_and_dram: 0.24        # 0.06 Wh
     idle_machines: 0.10            # 0.02 Wh
     datacenter_overhead: 0.08      # 0.02 Wh, at Google's fleet PUE 1.09
   pue:
@@ -69,12 +70,12 @@ olt_boundary:
     lower_bound: 1.09              # Google's fleet average: a best case, not a central office
   conversion: >
     GPU card (NVML) x (accelerators + host + idle) / accelerators x PUE =
-    x 1.60 x 1.54 = x 2.47. Google's overhead share is left out and the site's
+    x 1.59 x 1.54 = x 2.44. Google's overhead share is left out and the site's
     own PUE applied instead.
   marginal: >
     Under marginal accounting (a query pays only what it adds, energy_tests.md
     §8.4) no tier is charged for being on: the idle-machines share is dropped
-    ((accelerators + host) / accelerators x PUE = x 2.20), the OLT's card
+    ((accelerators + host) / accelerators x PUE = x 2.18), the OLT's card
     figure is its net-of-idle rate at each batch size, and the ONU loses its
     idle draw (onu.idle_W).
   caveat: >
