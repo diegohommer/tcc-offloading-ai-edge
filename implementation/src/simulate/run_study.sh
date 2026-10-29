@@ -5,12 +5,9 @@
 #   bursts        the load drifting around the timetable as BurstGPT's does
 #                 (data/load_traces/burstgpt_sessions.json, "drift"): within each
 #                 week only, and with whole weeks departing too               x 3 seeds
-#   sensitivity   one change each: average accounting; a 2x or 5x cheaper ONU; the
-#                 OLT's energy x1.07 (Latin America's PUE, 1.65) or x1.75; two active
-#                 users per household; statistics learned per household; users all
-#                 alike or far apart in how much they chat; BurstGPT's office-hours
-#                 conversations, or WildChat's Brazilians only, instead of
-#                 WildChat's users worldwide                                 x 3 seeds
+#   sensitivity   one change each: average accounting; an ONU twice as efficient;
+#                 the OLT's conversion at x1.0 (the GPU card alone) or x1.72 (Google's
+#                 own accounting) instead of x2.44                           x 3 seeds
 # Runs already finished are skipped, so the script can be restarted. While it runs,
 # nothing suspends the laptop: neither idle time (GNOME's and logind's) nor closing
 # the lid.
@@ -39,15 +36,8 @@ jobs() {
     echo "burst_all $seed --burst-sigma 0.457 --burst-hours 12.3"
     echo "average $seed --accounting average"
     echo "onu0.5 $seed --onu-scale 0.5"
-    echo "onu0.2 $seed --onu-scale 0.2"
-    echo "olt1.07 $seed --olt-scale 1.0714"
-    echo "olt1.75 $seed --olt-scale 1.75"
-    echo "users2 $seed --users-per-home 2"
-    echo "perhousehold $seed --stats household"
-    echo "act0 $seed --activity-sigma 0"
-    echo "act2 $seed --activity-sigma 2"
-    echo "burstgpt $seed --traffic burstgpt"
-    echo "brazil $seed --traffic wildchat-brazil"
+    echo "olt0.41 $seed --olt-scale 0.4094"
+    echo "olt0.70 $seed --olt-scale 0.7058"
   done
 }
 [ "${1:-}" = "--list" ] && { jobs; exit 0; }

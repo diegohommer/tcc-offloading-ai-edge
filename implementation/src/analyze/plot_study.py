@@ -966,15 +966,8 @@ SCENARIO_LABELS = {
     "burst_all": "Strong drift",
     "average": "Average accounting",
     "onu0.5": "ONU energy \u00d70.5",
-    "onu0.2": "ONU energy \u00d70.2",
-    "olt1.07": "OLT energy \u00d71.07",
-    "olt1.75": "OLT energy \u00d71.75",
-    "users2": "Two users per home",
-    "perhousehold": "Each home learns alone",
-    "act0": "Users alike",
-    "act2": "Users far apart",
-    "burstgpt": "BurstGPT traffic",
-    "brazil": "Brazil's traffic",
+    "olt0.41": "OLT \u00d71.0 (GPU card alone)",
+    "olt0.70": "OLT \u00d71.72 (Google's accounting)",
 }
 """How each scenario is named in the figures."""
 

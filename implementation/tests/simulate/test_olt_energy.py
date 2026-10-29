@@ -28,10 +28,12 @@ def test_seconds_on_the_phone_is_prefill_plus_decode(prices):
     )
 
 
-def test_seconds_on_the_onu_counts_generated_tokens_only(prices):
-    """The ONU's one speed already includes its prefill."""
+def test_seconds_on_the_onu_reads_the_prompt_then_generates(prices):
+    """The ONU reads the prompt at its prefill speed, then generates at its decode speed."""
     speeds = published_speeds()["onu"]
-    assert prices.seconds("onu", 1, 100, 200) == pytest.approx(200 / speeds["dec"])
+    assert prices.seconds("onu", 1, 100, 200) == pytest.approx(
+        100 / speeds["pf"] + 200 / speeds["dec"]
+    )
 
 
 def test_seconds_at_the_olt_depends_on_the_batch(curve, prices):
