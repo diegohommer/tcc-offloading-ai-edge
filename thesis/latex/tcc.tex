@@ -862,11 +862,13 @@ of its batch keeps changing. The simulator we built for the case study
 (Section~\ref{sec:simulation}) runs no model, and instead follows this size over time and
 charges each moment the energy per token measured for a static batch of the same size.
 We checked on the same GPU, in two steps, that this predicts continuous batching within
-10\%. First, we kept a fixed number of requests in flight, from 1 to 64, starting a new
-one as soon as one finished, and the energy per token was within 3.2\% of the static
-batch of that size (Figure~\ref{fig:batching}a), so a batch costs the same whether or not
-its queries started together. Then we sent the GPU 15 runs of requests arriving at random
-times and gave the same arrival times to the simulator, which predicted the GPU's energy
+10\%. First, we kept a fixed number of requests generating at once, from 1 to 64, replacing
+each one with a new request the moment it finished, and the energy per token was within
+3.2\% of the static batch of that size (Figure~\ref{fig:batching}a), so a batch costs the
+same whether or not its queries started together. Then we sent the GPU 15 runs of about
+five minutes with requests arriving at random times, three aimed at each average of 1, 2,
+4, 8 and 16 requests in flight, and gave the same arrival times to the simulator, which
+predicted the GPU's energy
 within 3\% and its mean latency within 2\% under both ways of charging energy described in
 Section~\ref{sec:accounting} (Figure~\ref{fig:batching}b).
 
