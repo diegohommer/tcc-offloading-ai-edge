@@ -559,8 +559,9 @@ also beyond the resources of this work, since it would have required running a m
 more than 70 billion parameters on every test problem, recording the probabilities of its
 tokens, and measuring its energy against batch size on a cluster of
 GPUs~\cite{pakpahan2026continuum}. The OLT is therefore the top tier, and since no tier
-above it can correct its answers, its accuracy of 91.7\% is the highest any policy can
-deliver. The decision rule itself does not depend on the number of tiers
+above it can correct its answers, its accuracy of 91.7\% bounds what a policy delivers in
+practice. A policy could exceed it only on the 2.0\% of problems that a lower tier answers
+correctly and the OLT does not, and none of our policies does. The decision rule itself does not depend on the number of tiers
 (Section~\ref{sec:policy}), so a cloud tier would only add one more term to it.
 
 \begin{table}[htb]
@@ -756,7 +757,7 @@ lengths on GSM8K, 126 prompt and 185 generated tokens (Table~\ref{tab:user-onu})
 radio, so this figure is a lower bound, and it is charged in full under both accountings. Since escalation by confidence alone runs every
 query on the user device while the policy often skips it, a device that spends more than
 this figure would add more energy to the baseline than to the policy, so the lower bound
-can only understate the saving.
+can only understate the joules the policy saves.
 
 The energy of the ONU comes from the Raspberry Pi 5 with a Hailo-10H accelerator that
 \citeonline{renney2026cloud} measured with a plug-in power meter while it ran
@@ -808,7 +809,8 @@ reliable than sampling the power, since sampling misses part of the
 runtime~\cite{yang2023part}.
 
 We gave the GPU static batches of 1 to 64 queries, in which every query starts and ends
-together, each query with a prompt of 96 tokens and an answer of 300. To separate the two
+together, drawn from 64 GSM8K problems whose prompts average 92 tokens, and each query
+generated an answer of 300 tokens. To separate the two
 phases of inference (Section~\ref{sec:llm-background}), each batch was also run
 generating a single token, which measures the prefill alone, and the decode is the
 difference between the two runs. Every measurement was repeated five times after one
@@ -861,16 +863,17 @@ The OLT in the simulation, however, serves with continuous batching
 of its batch keeps changing. The simulator we built for the case study
 (Section~\ref{sec:simulation}) runs no model, and instead follows this size over time and
 charges each moment the energy per token measured for a static batch of the same size.
-We checked on the same GPU, in two steps, that this predicts continuous batching within
-10\%. First, we kept a fixed number of requests generating at once, from 1 to 64, replacing
-each one with a new request the moment it finished, and the energy per token was within
-3.2\% of the static batch of that size (Figure~\ref{fig:batching}a), so a batch costs the
-same whether or not its queries started together. Then we sent the GPU 15 runs of about
-five minutes with requests arriving at random times, three aimed at each average of 1, 2,
-4, 8 and 16 requests in flight, and gave the same arrival times to the simulator, which
-predicted the GPU's energy
-within 3\% and its mean latency within 2\% under both ways of charging energy described in
-Section~\ref{sec:accounting} (Figure~\ref{fig:batching}b).
+We checked this against runs with continuous batching, requiring the simulator to come
+within 10\% of them, in two steps. First, we kept a fixed number of requests generating at
+once, from 1 to 64, replacing each one with a new request the moment it finished, and the
+energy per token was within 3.2\% of the static batch of that size
+(Figure~\ref{fig:batching}a), well inside the 10\%, so a batch costs about the same
+whether or not its queries started together. Then we sent the GPU 15 runs of about five
+minutes with requests arriving at random times, three aimed at each average of 1, 2, 4, 8
+and 16 requests in flight, and gave the simulator the same requests at the same times.
+Under both ways of charging energy described in Section~\ref{sec:accounting}, it
+overestimated the GPU's energy by 1 to 3\% and underestimated its mean latency by less
+than 2\% (Figure~\ref{fig:batching}b).
 
 \begin{figure}[htb]
   \centering
