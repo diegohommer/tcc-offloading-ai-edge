@@ -55,38 +55,38 @@ At each tier's mean real answer length. Marginal accounting charges no tier for 
 
 ## 4. OLT per query, at its real answer length
 
-122 prompt and 251 generated tokens. Whole system = GPU card × 1.60 (host and idle machines, Google's shares) × PUE: × 2.47 at PUE 1.54, × 1.75 at PUE 1.09.
+122 prompt and 251 generated tokens. Whole system = GPU card × 1.59 (host and idle machines, Google's shares) × PUE: × 2.44 at PUE 1.54, × 1.73 at PUE 1.09.
 
 | Batch | GPU card | GPU, net of idle | Whole system, PUE 1.54 | Whole system, PUE 1.09 |
 |---|---|---|---|---|
-| 1 | 623.9 | 359.9 | **1540.6** | 1090.4 |
-| 2 | 316.4 | 182.5 | **781.2** | 552.9 |
-| 3 | 211.1 | 121.4 | **521.3** | 369.0 |
-| 4 | 160.0 | 92.5 | **395.1** | 279.7 |
-| 6 | 107.7 | 62.0 | **265.9** | 188.2 |
-| 8 | 81.7 | 47.1 | **201.6** | 142.7 |
-| 12 | 55.6 | 32.0 | **137.4** | 97.2 |
-| 16 | 42.5 | 24.5 | **104.9** | 74.2 |
-| 24 | 30.0 | 17.2 | **74.0** | 52.4 |
-| 32 | 23.4 | 13.5 | **57.7** | 40.8 |
-| 48 | 17.2 | 9.9 | **42.4** | 30.0 |
-| 64 | 13.9 | 8.0 | **34.4** | 24.4 |
+| 1 | 623.9 | 359.9 | **1524.0** | 1078.7 |
+| 2 | 316.4 | 182.5 | **772.8** | 547.0 |
+| 3 | 211.1 | 121.4 | **515.7** | 365.0 |
+| 4 | 160.0 | 92.5 | **390.9** | 276.7 |
+| 6 | 107.7 | 62.0 | **263.0** | 186.2 |
+| 8 | 81.7 | 47.1 | **199.5** | 141.2 |
+| 12 | 55.6 | 32.0 | **135.9** | 96.2 |
+| 16 | 42.5 | 24.5 | **103.8** | 73.4 |
+| 24 | 30.0 | 17.2 | **73.2** | 51.8 |
+| 32 | 23.4 | 13.5 | **57.1** | 40.4 |
+| 48 | 17.2 | 9.9 | **41.9** | 29.7 |
+| 64 | 13.9 | 8.0 | **34.0** | 24.1 |
 
 ## 5. Batch size from which the OLT is cheaper per query
 
 | Lower tier | Its J/query | Whole system, PUE 1.54 | Whole system, PUE 1.09 | GPU card only | GPU, net of idle |
 |---|---|---|---|---|---|
-| onu | 242.9 | ≈ 6.6 | ≈ 4.6 | ≈ 2.6 | ≈ 1.5 |
+| onu | 242.9 | ≈ 6.5 | ≈ 4.6 | ≈ 2.6 | ≈ 1.5 |
 | user | 15.7 | not within 64 | not within 64 | ≈ 54.3 | ≈ 26.7 |
 
 ## 6. Marginal cost: what one more query adds
 
-A query that finds the OLT idle adds the energy above idle (net rates at batch 1). One that joins a running batch adds the slope of the batch's energy per step against batch size (least squares over batches 1–64). Whole system under marginal accounting: × 2.20 (the idle-machines share left out).
+A query that finds the OLT idle adds the energy above idle (net rates at batch 1). One that joins a running batch adds the slope of the batch's energy per step against batch size (least squares over batches 1–64). Whole system under marginal accounting: × 2.18 (the idle-machines share left out).
 
-|  | J per prompt token (card) | J per generated token (card) | J/query, card | J/query, whole system × 2.20 |
+|  | J per prompt token (card) | J per generated token (card) | J/query, card | J/query, whole system × 2.18 |
 |---|---|---|---|---|
-| OLT idle (batch 1) | 0.0196 | 1.422 | 359.9 | 793.1 |
-| OLT busy (slope) | 0.0145 | 0.0097 | 4.2 | 9.3 |
+| OLT idle (batch 1) | 0.0196 | 1.422 | 359.9 | 783.5 |
+| OLT busy (slope) | 0.0145 | 0.0097 | 4.2 | 9.1 |
 
 For comparison, the slope measured between adjacent batches from 16 up (table 1, 96 in / 300 out tokens): 3.6, 4.5, 3.5, 4.9, 4.1 J at the card.
 
