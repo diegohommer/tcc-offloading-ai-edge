@@ -152,13 +152,13 @@ In this work, we propose the integration of energy awareness into recursive tier
 inference, so that each tier decides whether to answer a query or pass it up from the
 confidence of its answer and also from the energy expected to be spent at each tier. As a
 case study, we simulate a three-tier
-hierarchy over a PON, formed by the user device, the ONU and the OLT, each running a
+hierarchy over a PON-based access network, formed by the user device, the ONU and the OLT, each running a
 larger model than the one below. We evaluate two energy-aware strategies, one that
 follows a fixed timetable of the OLT's cost and one that takes advantage of the PON
 downstream broadcast, with the OLT periodically announcing its current cost to every
 ONU. Both are compared with escalation by confidence alone at the same target accuracy, in energy per query
 and in communication burden, under recorded conversation traffic with and without
-unforeseen surges. \todo{one or two sentences with the main results, once the Results
+drift in the load. \todo{one or two sentences with the main results, once the Results
 chapter is settled.}
 
 The contributions of this work are:
@@ -166,12 +166,12 @@ The contributions of this work are:
   \item The integration of energy awareness into recursive tiered LLM inference, in which the
   decision to answer a query or pass it up takes into account the energy spent at each
   tier, and not only confidence;
-  \item An energy model of the user device, the ONU and the OLT under a single
+  \item An energy model of the user device, the ONU and the OLT counted toward a single
   measurement boundary, with the OLT's energy measured by us on a Graphics Processing Unit (GPU);
   \item An offloading strategy that uses the PON downstream broadcast to share the
   OLT's current cost with every ONU;
   \item A simulation study on recorded conversation traffic, with and without
-  unforeseen surges, comparing the energy-aware strategies with confidence-only
+  drift in the load, comparing the energy-aware strategies with confidence-only
   escalation in energy per query and communication burden.
 \end{itemize}
 
@@ -217,10 +217,11 @@ closes the chapter with the gaps this work addresses.
 \subsection{Passive Optical Networks}
 \label{sec:pon}
 A PON is an access network technology that uses a shared fiber architecture, where a
-single fiber coming out of an OLT is split passively to serve several dozen ONUs at the
-subscribers' premises, up to 128 of them in Gigabit-capable PON (G-PON). Because the
-fiber is shared, the OLT downstream works as a broadcast, with the splitters passively
-replicating its signal across all the ONUs connected to it, and each ONU looks at the
+single fiber coming out of one of the OLT's ports is split passively to serve several
+dozen ONUs at the subscribers' premises, up to 128 of them in Gigabit-capable PON
+(G-PON), and an OLT has many such ports, each serving its own PON. Because the fiber is
+shared, the OLT downstream works as a broadcast, with the splitters passively
+replicating its signal across all the ONUs of that PON, and each ONU looks at the
 frame headers and keeps only the data addressed to it, discarding the
 rest~\cite{effenberger2007introduction}.
 
@@ -228,7 +229,8 @@ In the opposite direction, the ONUs share the fiber through Time Division Multip
 Access (TDMA) to avoid collisions, with the OLT assigning each ONU strictly synchronized
 time slots through Dynamic Bandwidth Allocation (DBA), so that the ONUs take turns
 bursting data back~\cite{effenberger2007introduction}. The two directions are therefore
-not symmetric, because anything the OLT sends reaches every ONU at once while each ONU
+not symmetric, because anything the OLT sends on a port reaches every ONU of that PON at
+once while each ONU
 can only speak in its own slot (Figure~\ref{fig:pon}).
 
 \begin{figure}[htb]
@@ -245,8 +247,8 @@ top of the time sharing, each pair running its own TDMA, to multiply the capacit
 same fiber~\cite{luo2013twdm}, and it is the setting in which
 \citeonline{pakpahan2026continuum} place tiered LLM inference
 (Section~\ref{sec:pakpahan}). One of the strategies evaluated in this work relies on
-the downstream broadcast, since a single message from the OLT reaches every ONU with no
-extra upstream traffic (Chapter~\ref{chap:methodology}).
+the downstream broadcast, since a single message on each of the OLT's ports reaches every
+ONU behind it with no extra upstream traffic (Chapter~\ref{chap:methodology}).
 
 \subsection{LLM Inference}
 \label{sec:llm-background}
@@ -540,9 +542,10 @@ the policies run, and Section~\ref{sec:evaluation} how they are compared.
 \section{Overview of the Case Study}
 \label{sec:overview}
 
-The case study places a three-tier hierarchy on a PON, formed by the device on which the
-query is typed, the ONU in the home and the OLT at the operator's central office, which
-is shared by every home on the PON. As in earlier tiered
+The case study places a three-tier hierarchy on a PON-based access network, formed by the
+device on which the query is typed, the ONU in the home and the OLT at the operator's
+central office, which serves every household connected to its PON ports and shares its model
+among them. As in earlier tiered
 architectures~\cite{wu2025recserve,pakpahan2026continuum}, each tier runs a larger model
 than the one below it, and Table~\ref{tab:tiers} lists the three. The user tier is a
 phone running a model of about one billion parameters, and the ONU is a single-board
@@ -683,7 +686,7 @@ weighted toward the latest so that it follows about its last 20 answers. Since a
 travels back to the user through every tier below the one that produced it, it can
 carry, at no extra cost, the energy rates and the average answer length of every tier
 that ran the query, and each tier below replaces the answer lengths it holds with the
-ones it hears. The OLT's average covers every household on the PON, while those of the
+ones it hears. The OLT's average covers every household it serves, while those of the
 user device and the ONU cover only their own household, so households with different models would each
 hold their own values for these two tiers. Until a tier has an estimate of the OLT's
 energy rate, it runs every query that reaches it and escalates by confidence alone. For
@@ -706,8 +709,8 @@ every tier a current estimate of it.
   the previous version produced, so that it settles.
   \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream the energy one
   more query would add to its consumption, averaged over its last 5 minutes
-  (Section~\ref{sec:accounting}). A single message reaches every ONU on the PON, and each
-  ONU passes it on to the devices in its home.
+  (Section~\ref{sec:accounting}). A single message on each of its PON ports reaches every
+  ONU on that port, and each ONU passes it on to the devices in its home.
 \end{itemize}
 
 \section{Energy Model}
@@ -936,7 +939,8 @@ weekend day.
 \section{Simulation}
 \label{sec:simulation}
 
-The simulator we built for the case study follows one PON through time, from the moment
+The simulator we built for the case study follows one OLT and the households it serves
+through time, from the moment
 each household sends a message until some tier returns its answer. It runs no model,
 since every answer is the one recorded for its question (Section~\ref{sec:overview}), and
 it charges each tier the energy of Section~\ref{sec:energy-model}, so what it reproduces
@@ -958,9 +962,11 @@ ask.
 \subsection{Households and Their Traffic}
 \label{sec:traffic}
 
-Each run places between 1,000 and 20,000 households on the PON. We assume that a
+Each run connects between 1,000 and 20,000 households to the OLT, one ONU each, which
+takes at least 8 to 157 PON ports, since G-PON allows at most 128 ONUs per port. We assume
+that a
 household has, on average, one person who uses an LLM every week, because we found no
-measured figure for Brazilian homes, and the study repeats its runs with two such people
+measured figure for Brazilian households, and the study repeats its runs with two such people
 to see how much this choice matters. That person sends 3.6 messages a day, the average
 of ChatGPT's users in July 2025, when more than 700 million people used it every week
 and together sent more than 2.5 billion messages a day~\cite{chatterji2025how}. Some
@@ -975,7 +981,7 @@ and the simulation copies from WildChat when conversations start, how many messa
 they hold and how long people pause between them. WildChat records its times on the
 server's clock, and its users are spread over the world, so each user's times are first
 moved to their own time zone. Every simulated household then shares that one local day,
-as the homes on one OLT share a time zone. A conversation is a run of messages less than 10 minutes apart, and it holds
+as the households of one OLT share a time zone. A conversation is a run of messages less than 10 minutes apart, and it holds
 3.2 messages on average. Conversations start about seven times more often at the busiest
 hour of a weekday, in the afternoon, than at the quietest, before dawn, and a weekend day
 has three quarters of the conversations of a weekday. Users who sent a single message
@@ -1013,7 +1019,7 @@ one period to the next while depending on the periods before it, and ours is of 
 second kind. Our measurement below finds the same excess over Poisson counts in
 BurstGPT's conversations, whose arrivals also grow more or less bursty within
 twenty-minute windows during working hours~\cite{wang2025burstgpt}. In our simulation the factor $F_k$
-changes every hour $k$ and is shared by the whole PON, which makes the arrivals a
+changes every hour $k$ and is shared by every household of the OLT, which makes the arrivals a
 log-Gaussian Cox process~\cite{moller1998log}, and it is built from a number $z_k$ that
 keeps part of the previous hour's departure and receives a small random kick each hour,
 as
@@ -1077,7 +1083,7 @@ generates 6.3 tokens per second and so takes about 44 seconds for an answer of t
 length. It reads the prompt at about 200 tokens per second
 (Section~\ref{sec:user-onu-energy}), so a longer prompt also takes it longer. Each household's
 ONU answers one query at a time, in the order they were sent,
-so a second query from the same home waits for the first. The OLT serves with continuous
+so a second query from the same household waits for the first. The OLT serves with continuous
 batching (Section~\ref{sec:olt-energy}), with 64 slots, the largest batch measured, and a
 query that finds every slot busy waits for one. A query reaches the OLT only after the
 seconds the tiers below spent on it, so the batch it meets is the one actually running
