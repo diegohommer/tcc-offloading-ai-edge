@@ -372,7 +372,8 @@ than one way to charge it. The GPU reports only the energy of the whole batch, a
 rules used in practice to split it among queries can differ substantially from a fair
 split, with static and continuous batching alike~\cite{luo2026request}. Average
 accounting charges each query its share of the batch's energy, while marginal accounting
-charges only what the query adds to it (Chapter~\ref{chap:methodology}).
+leaves out the power the hardware draws at rest and shares among the queries only the
+energy their work adds to it (Chapter~\ref{chap:methodology}).
 
 The boundary also depends on the tool, since each class of hardware is measured
 differently. GPUs report their own energy in software, read through the NVIDIA
@@ -565,7 +566,8 @@ GPUs~\cite{pakpahan2026continuum}. The OLT is therefore the top tier, and since 
 above it can correct its answers, its accuracy of 91.7\% bounds what a policy delivers in
 practice. A policy could exceed it only on the 2.0\% of problems (26 of 1,319) that a lower tier
 answers correctly and the OLT does not, and none of our policies does. The decision rule itself does not depend on the number of tiers
-(Section~\ref{sec:policy}), so a cloud tier would only add one more term to it.
+(Section~\ref{sec:policy}), so a cloud tier would only add one more level to its
+recursion.
 
 \begin{table}[htb]
   \centering
@@ -595,8 +597,8 @@ their tokens (Section~\ref{sec:llm-background}), instead of running the models a
 \label{sec:policy}
 
 In the policy we propose, a query starts at the user device, and each tier that runs it
-applies the quantile test of \citeonline{wu2025recserve}
-(Section~\ref{sec:llm-background}), returning its answer to the user if the answer's
+applies the quantile test described in
+Section~\ref{sec:llm-background}~\cite{wu2025recserve}, returning its answer to the user if the answer's
 confidence reaches the $\beta$-quantile of the confidences the tier has seen recently and
 escalating the query otherwise. On top of this recursion, the policy chooses which tier
 runs the query from the energy each tier is expected to spend. Since it never judges
@@ -604,19 +606,30 @@ whether an answer is good enough, the accuracy delivered still comes only from t
 and from the quantile test.
 
 The choice rests on $C_j$, the expected energy spent from the moment a query is handed
-to tier $j$ until some tier returns an answer. Tier $j$ always runs the query, and with
-probability $p_j$ its answer fails the test and the query moves on to tier $j+1$, so
+to tier $j$ until some tier returns an answer, when every tier from $j$ up decides as the
+policy does. If tier $j$ would forward the query on arrival, it forwards it to $k^*$,
+the tier above it with the lowest cost, and the query costs $C_{k^*}$. Otherwise tier $j$
+runs it, and with probability $p_j$ its answer fails the test and the query moves on to
+tier $n$, which is $k^*$ when $\delta = 0$ and may stay at $j+1$ when $\delta > 0$, so
 \begin{equation}
-  C_j = E_j + p_j \, C_{j+1}, \qquad C_J = E_J,
+  C_j =
+  \begin{cases}
+    C_{k^*} & \text{if tier } j \text{ forwards the query},\\
+    E_j + p_j \, C_n & \text{otherwise},
+  \end{cases}
+  \qquad C_J = E_J,
   \label{eq:cost-to-completion}
 \end{equation}
 where $J$ is the top tier and $E_j$ is the energy tier $j$ is expected to spend running
 the query. We call a tier's energy per prompt token and per generated token its energy
 rates, and $E_j$ is the first rate times the length of the prompt plus the second times
 the average length of the tier's past answers, which stands in for the length of this
-answer because that length is only known after the tier runs.
-Equation~\eqref{eq:cost-to-completion} also assumes that, after tier $j$, the query
-climbs one tier at a time, as it does when confidence alone decides.
+answer because that length is only known after the tier runs. Both decisions of tier $j$
+depend only on the costs of the tiers above it, as described below, so the costs are
+computed from the top tier down. When confidence alone decides, no tier forwards a query
+and every escalation goes to the next tier, and Equation~\eqref{eq:cost-to-completion}
+reduces to $C_j = E_j + p_j \, C_{j+1}$, a simpler form that would charge a tier for
+climbs that the tiers above it would skip.
 
 The quantile test escalates about a fraction $\beta$ of a tier's answers by construction
 (Section~\ref{sec:llm-background}), so the policy sets $p_j = \beta$. The policy does not
@@ -627,7 +640,7 @@ is not fixed in advance would need $p_j$ to be learned from the answers instead,
 why Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$.
 
 The policy uses $C_j$ at two points of Algorithm~\ref{alg:decision}. The first is when a
-query arrives at a tier $i < J$ (lines 1 to 4), where running the query costs $E_i$ and,
+query arrives at a tier $i < J$ (lines 2 to 6), where running the query costs $E_i$ and,
 if its answer escalates, the expected energy of the cheapest tier above. The tier
 therefore forwards the query, without running it, to the tier $k^*$ above it with the
 lowest $C_k$ if
@@ -635,30 +648,35 @@ lowest $C_k$ if
   C_{k^*} < (1-\delta)\left(E_i + p_i \, C_{k^*}\right),
   \label{eq:on-arrival}
 \end{equation}
-and runs it otherwise. The second is when an answer escalates (lines 9 to 11), and the
-query then goes to tier $i+1$, or skips directly to $k^*$ if
-$C_{k^*} < (1-\delta)\,C_{i+1}$. The top tier has nowhere to send a query and always
-returns its answer.
+and runs it otherwise. The second is where the query goes if its answer escalates
+(lines 7 and 8), which the tier settles at the same time because it depends only on the
+same costs, and the query then goes to tier $i+1$, or skips directly to $k^*$ if
+$C_{k^*} < (1-\delta)\,C_{i+1}$. A tier that cannot decide yet keeps the default of
+line 1, so it escalates by confidence alone. The top tier has nowhere to send a query and
+always returns its answer.
 
 \begin{algorithm}[htb]
   \caption{The decision of tier $i < J$ on a query $q$}
   \label{alg:decision}
-  \KwIn{the query $q$; the quantile $\beta$; the window $W_i$ of tier $i$'s recent
-    confidences; the learned averages; the energy rates of every tier above}
+  \KwIn{the query $q$; the quantile $\beta$; the margin $\delta$; the window $W_i$ of
+    tier $i$'s recent confidences; the average answer lengths of the tiers above; the
+    energy rates of tier $i$ and of every tier above}
+  $\mathit{next} \leftarrow i+1$\;
   \If{tier $i$ can decide}{
-    $k^* \leftarrow \arg\min_{k>i} C_k$ \tcp*{Equation~\eqref{eq:cost-to-completion}}
-    \If{$C_{k^*} < (1-\delta)\,(E_i + p_i\,C_{k^*})$}{
+    compute $C_k$ for every $k > i$, from the top tier
+    down\tcp*{Equation~\eqref{eq:cost-to-completion}}
+    $k^* \leftarrow \arg\min_{k>i} C_k$\;
+    \If(\tcp*[f]{Equation~\eqref{eq:on-arrival}}){$C_{k^*} < (1-\delta)\,(E_i + p_i\,C_{k^*})$}{
       forward $q$ to tier $k^*$ and stop\;
+    }
+    \If{$C_{k^*} < (1-\delta)\,C_{i+1}$}{
+      $\mathit{next} \leftarrow k^*$\;
     }
   }
   run $q$, giving the answer $a$ with confidence $s$\;
   $\theta \leftarrow$ the $\beta$-quantile of $W_i$, then add $s$ to $W_i$\;
   \If{$s \geq \theta$}{
     return $a$ to the user and stop\;
-  }
-  $\mathit{next} \leftarrow i+1$\;
-  \If{tier $i$ can decide \textbf{and} $C_{k^*} < (1-\delta)\,C_{i+1}$}{
-    $\mathit{next} \leftarrow k^*$\;
   }
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
@@ -678,6 +696,33 @@ the test, which happens with probability $1-\beta$. A tier therefore runs a quer
 if the cheapest tier above it costs at least $E_i/(1-\beta)$. This threshold rises with
 $\beta$, because the more often a tier escalates, the more often the energy it spends
 running a query is wasted.
+
+Table~\ref{tab:example} follows one query through Algorithm~\ref{alg:decision} with
+round, hypothetical energies of the same order as those of
+Section~\ref{sec:energy-model}, with $\beta = 0.5$ and $\delta = 0$. When the OLT is
+busy, its 5~J cost less than what either lower tier would spend on an answer that still
+escalates half of the time, so the ONU would forward the query and the user device sends
+it straight to the OLT. When the OLT is idle, its 800~J are worth avoiding, so both lower
+tiers run the query and it climbs one tier at a time, as under confidence alone. The same
+query therefore takes the shortest route when the OLT is busy and the longest when it is
+idle, which is why the tiers need a current estimate of the OLT's cost.
+
+\begin{table}[htb]
+  \centering
+  \caption{Algorithm~\ref{alg:decision} on one query, with hypothetical energies and
+  $\beta = 0.5$}
+  \label{tab:example}
+  \begin{tabular}{lll}
+    \hline
+    & OLT busy (5~J) & OLT idle (800~J) \\
+    \hline
+    ONU & $90 + 0.5 \times 5 = 92.5 > 5$, forwards & $90 + 0.5 \times 800 = 490 < 800$, runs \\
+    User device & $16 + 0.5 \times 5 = 18.5 > 5$, forwards & $16 + 0.5 \times 490 = 261 < 490$, runs \\
+    Route & straight to the OLT & user device, ONU, OLT \\
+    \hline
+  \end{tabular}
+  \legend{Source: The author}
+\end{table}
 
 To compute $C_k$, a tier also needs the average answer length of every tier above it.
 Each tier ships with the mean answer length of its model, measured on the benchmark
@@ -706,9 +751,12 @@ every tier a current estimate of it.
 \begin{itemize}
   \item \textbf{Timetable.} One OLT rate per hour of the day, for weekdays and for
   weekends, learned over a month of calibration and shipped to every device in advance.
-  Since the policy changes the load the timetable describes, the timetable is learned
-  while the policy runs with it, and it is relearned three times, each time from the load
-  the previous version produced, so that it settles.
+  The OLT's cost depends on how many queries the policy sends it, so a timetable learned
+  from confidence-only escalation, which sends it fewer, would make the OLT look dearer
+  than it is under the policy. We therefore learn a first timetable from confidence-only
+  escalation and then replay the calibration month three times with the policy using the
+  latest timetable, recording the OLT's cost again each time, so that the timetable
+  settles on the load the policy itself produces.
   \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream the energy one
   more query would add to its consumption, averaged over its last 5 minutes
   (Section~\ref{sec:accounting}). The 5 minutes smooth out the batches that form and
@@ -733,7 +781,10 @@ relaying the OLT's broadcast inside the home and manufacturing the hardware. Sin
 sources of the three tiers count different parts of their systems
 (Section~\ref{sec:measurements}), Table~\ref{tab:energy} lists what each one measures and
 how close it comes to this boundary, together with the energy each tier
-spends on a query of its mean prompt and answer lengths on GSM8K. The OLT's energy
+spends on a query of its mean prompt and answer lengths on GSM8K. Each figure is given
+under the two accountings of Section~\ref{sec:accounting}, average accounting, which
+charges everything a tier draws while it answers, and marginal accounting, which charges
+only what it draws above its idle power. The OLT's energy
 depends on how many queries it batches, so the table gives its range, which
 Section~\ref{sec:olt-energy} explains.
 
@@ -778,7 +829,8 @@ of their 12-token prompt folded in, so reading a longer prompt has to be priced
 separately. \citeonline{tummalapalli2026edge} timed the same board reading a prompt of
 258 tokens in 1.287~s, about 200 tokens per second, and assuming the board draws the same
 power while reading as while generating, a prompt token costs $5.58/200 = 0.028$~J, or
-$2.08/200 = 0.010$~J above idle. With the mean prompt of 122 tokens, a query then costs
+$2.08/200 = 0.010$~J above idle. With the mean prompt of 122 tokens, the same problems
+as the phone's 126 counted in the tokens of Qwen's tokenizer, a query then costs
 the ONU $243 + 122 \times 0.028 = 246$~J, or $91 + 122 \times 0.010 = 92$~J above idle.
 \todo{take every result from the final re-run, which adds this prefill
 to the code.}
@@ -920,26 +972,35 @@ Marginal accounting also removes the ONU's idle draw, which lowers its energy pe
 from 246~J to 92~J, while the phone is charged the same under both, since its source gives
 no idle power. The OLT keeps the factor of 2.44 under both accountings, so its marginal
 figure still includes Google's share for the spare machines kept ready for peaks, which a
-single query does not add. We keep it for simplicity, and since a dearer OLT only reduces
-the saving of the policy (Chapter~\ref{chap:results}), it can only understate it. The
-study uses marginal accounting, because a routing
-decision changes only what the query adds, and repeats its main runs under average
-accounting as a sensitivity analysis.
+single query does not add, a simplification discussed in Section~\ref{sec:limitations}.
+The study uses marginal accounting, because a routing decision does not change the power
+the hardware draws at rest, and repeats its main runs under average accounting as a
+sensitivity analysis.
 
-The cost the OLT reports follows the same accounting. The OLT sends it on its broadcast
-and also stamps it on the answers it returns, but under the broadcast strategy the tiers
-take the OLT's cost only from the broadcast. A household relying on its own answers
-alone would hear this cost only a few times a day, and Section~\ref{sec:evaluation} tests
-this variant to show what the broadcast adds. Under marginal accounting it is what one more query would add, about 5~J for a query of
-the mean lengths while the OLT is busy and the cost of a query alone while it is idle. The OLT reports the
-average of the two, weighted by the share of its last 5 minutes it spent busy. The 5~J is
-a single slope of the GPU's energy above idle, fitted over batches 1 to 64, because the
-energy added between adjacent batch sizes is noisy at small batches and nearly constant
-above four queries, and a single value also spares the tiers from predicting the batch
-their query will meet. Under average accounting, the OLT
-instead reports the mean cost per token of its work over the same 5 minutes, and in
-either case the timetable holds the same quantity for each hour of a weekday and of a
-weekend day.
+The OLT also reports its cost to the tiers below, under the same accounting as the
+energy it is charged. Under average accounting it reports the mean cost per token of its
+work over its last 5 minutes. Under marginal accounting it reports what one more query
+would add to its energy above idle, which is not the share that query is then charged,
+because a batch's energy above idle grows little with its size, and a step of 64 queries
+draws only about a fifth more above idle than a step of one
+($0.026 \times 64 = 1.66$ against 1.365~J, Table~\ref{tab:olt-sweep}). A query that finds
+the OLT idle therefore adds the cost of a query alone, while one that joins a running
+batch adds only about 5~J for a query of the mean lengths, against the 18~J it is charged
+in a batch of 64. The decision weighs the 5~J, since that is what sending one more query
+to the OLT changes, while the charge divides the energy the GPU actually drew above idle
+among the queries that drew it, so that the energy totals of the study add up to it. The
+5~J is the slope of the batch's energy above idle against its size, fitted over batches 1
+to 64 and multiplied by 2.44. We fit a single slope because the energy added between
+adjacent batch sizes is noisy at small batches and nearly constant above four queries,
+and a single value also spares the tiers from predicting the batch their query will
+meet. The OLT reports the average of the idle and busy figures, weighted by the share of
+its last 5 minutes it spent busy.
+
+The OLT sends this cost on its broadcast and also stamps it on the answers it returns,
+and the timetable holds the same quantity for each hour of a weekday and of a weekend
+day. Under the broadcast strategy the tiers take the OLT's cost only from the broadcast,
+since a household relying on its own answers alone would hear it only a few times a day,
+and Section~\ref{sec:evaluation} tests this variant to show what the broadcast adds.
 
 \section{Simulation}
 \label{sec:simulation}
