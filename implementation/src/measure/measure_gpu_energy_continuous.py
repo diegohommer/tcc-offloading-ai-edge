@@ -189,16 +189,7 @@ def median_of_windows(level: int, trials: list[dict]) -> dict:
 #   * the same counter, boundary, precision and prefix-caching setting as the static sweep
 
 
-@app.function(
-    image=vllm_image,
-    gpu=GPU_SPEC,
-    volumes={
-        "/root/.cache/huggingface": hf_cache_vol,
-        "/root/.cache/vllm": vllm_cache_vol,
-    },
-    timeout=3 * 60 * 60,
-)
-def measure(
+def run_measure(
     requests: list[dict],
     concurrency: list[int],
     warmup_s: float,
@@ -211,9 +202,11 @@ def measure(
     gpu_mem_util: float,
     max_slots: int,
 ) -> dict:
-    """Measure the fixed-concurrency sweep and the Poisson loads, on a Modal GPU.
+    """Measure the fixed-concurrency sweep and the Poisson loads, on the GPU this process sees.
 
     Everything this body needs is an argument, never a module-level setting (see Settings).
+    measure() runs it in its own container; measure_gpu_energy_one_card.py runs it beside
+    the static sweep on one card.
 
     Args:
         requests: [{"prompt", "generated_tokens"}]: the OLT's questions and answer lengths.
@@ -483,21 +476,56 @@ def measure(
     }
 
 
-@app.local_entrypoint()
-def main():
-    """Build the requests from the OLT's recorded answers, measure, and write the report.
+@app.function(
+    image=vllm_image,
+    gpu=GPU_SPEC,
+    volumes={
+        "/root/.cache/huggingface": hf_cache_vol,
+        "/root/.cache/vllm": vllm_cache_vol,
+    },
+    timeout=3 * 60 * 60,
+)
+def measure(
+    requests: list[dict],
+    concurrency: list[int],
+    warmup_s: float,
+    window_s: float,
+    repeats: int,
+    poisson_loads: list[tuple[float, int, list]],
+    model_name: str,
+    quantization: str | None,
+    max_model_len: int,
+    gpu_mem_util: float,
+    max_slots: int,
+) -> dict:
+    """Measure the fixed-concurrency sweep and the Poisson loads, on a Modal GPU (run_measure's arguments)."""
+    return run_measure(
+        requests,
+        concurrency,
+        warmup_s,
+        window_s,
+        repeats,
+        poisson_loads,
+        model_name,
+        quantization,
+        max_model_len,
+        gpu_mem_util,
+        max_slots,
+    )
+
+
+def olt_requests() -> list[dict]:
+    """Return the OLT's GSM8K questions with the number of tokens it answered each with.
 
     The OLT's own answers rather than synthetic text, because answer length decides how
-    long a request stays in the batch.
+    long a request stays in the batch. Runs on the launching machine, which has src/.
     """
-    here = Path(__file__).resolve()
-    sys.path.insert(0, str(here.parents[1]))  # implementation/src
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
     # imported here: this file also runs inside the Modal container, which has no src/
     # pylint: disable=import-outside-toplevel
     from energy.three_tier import answer_sources
     from measure.gsm8k import build_prompt
 
-    # --- The OLT's questions and how long it answered them ---
     requests = []
     for path, tiers in answer_sources():
         if "olt" not in tiers:
@@ -512,11 +540,28 @@ def main():
                             "generated_tokens": record["tokens_gen"],
                         }
                     )
-    poisson_loads = [
-        (load, seed, poisson_arrivals(load, POISSON_S, len(requests), seed))
+    return requests
+
+
+def poisson_plan(pool_size: int) -> list[tuple[float, int, list]]:
+    """Return every Poisson load to run: (target load, seed, arrivals), REPEATS seeds per load.
+
+    Args:
+        pool_size: How many requests the arrivals draw from.
+    """
+    return [
+        (load, seed, poisson_arrivals(load, POISSON_S, pool_size, seed))
         for index, load in enumerate(LOADS)
         for seed in range(SEED + 100 * index, SEED + 100 * index + REPEATS)
     ]
+
+
+@app.local_entrypoint()
+def main():
+    """Build the requests from the OLT's recorded answers, measure, and write the report."""
+    here = Path(__file__).resolve()
+    requests = olt_requests()
+    poisson_loads = poisson_plan(len(requests))
     print(
         f"{MODEL_NAME} on {GPU_SPEC}, {QUANTIZATION or 'bf16'}: {len(requests)} requests, "
         f"concurrency {CONCURRENCY} x {REPEATS} windows, Poisson loads {LOADS} x {REPEATS} "
