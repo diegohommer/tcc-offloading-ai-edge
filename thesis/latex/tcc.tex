@@ -806,7 +806,11 @@ one NVIDIA L4 GPU served with vLLM 0.21.0~\cite{kwon2023vllm} under the NVIDIA d
 580.95.05. The GPU keeps a running total of the energy it has used, which NVML reports,
 and we read this total before and after each run and took the difference, which is more
 reliable than sampling the power, since sampling misses part of the
-runtime~\cite{yang2023part}.
+runtime~\cite{yang2023part}. \todo{take every OLT figure from the one-card re-measurement,
+which runs the static sweep and the continuous batching on the same L4 and records its
+driver: Table~\ref{tab:olt-sweep}, Figure~\ref{fig:batching}, the idle power, the clock
+values and the validation results here, the OLT's range in Table~\ref{tab:energy} and the
+costs in Section~\ref{sec:accounting}; then say both were measured on the same GPU.}
 
 We gave the GPU static batches of 1 to 64 queries, in which every query starts and ends
 together, drawn from 64 GSM8K problems whose prompts average 92 tokens, and each query
