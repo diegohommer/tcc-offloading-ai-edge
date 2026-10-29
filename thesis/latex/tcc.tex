@@ -816,10 +816,40 @@ warm-up run, and we kept the median. We also measured the GPU at rest, at 30.5~W
 model loaded, so that the energy a query adds above this idle power could be computed.
 
 Batching makes each query much cheaper, because the GPU draws about 72~W whatever the
-batch size, while the number of tokens it generates per second grows almost in
-proportion to the batch. The energy per generated token therefore falls by a factor of
-51, from 2.47~J for a query alone to 0.048~J in a batch of 64, while the energy per
-prompt token falls until a batch of about 12 and then stays near 0.015~J.
+batch size, while the number of tokens it generates per second grows from 29.2 for a
+query alone to 1,367.5 in a batch of 64 (Table~\ref{tab:olt-sweep}). Dividing the power
+by this speed, a generated token costs $72.0/29.2 = 2.47$~J alone and
+$71.7/1{,}367.5 = 0.052$~J in a batch of 64, 47 times less (Figure~\ref{fig:batching}a).
+These figures still include the reading of the prompts, and once the prefill, measured
+separately, is taken out, the decode costs 2.465~J per token alone and 0.048~J in a
+batch of 64. The energy per prompt token falls to about 0.015~J by a batch of 16 and
+stays there.
+
+\begin{table}[htb]
+  \centering
+  \caption{Energy of the OLT's GPU in static batches}
+  \label{tab:olt-sweep}
+  \begin{tabular}{rrrrr}
+    \hline
+    & & Generated & \multicolumn{2}{c}{Joules per token} \\
+    Batch & Power (W) & tokens/s & Prompt & Generated \\
+    \hline
+    1 & 72.0 & 29.2 & 0.034 & 2.465 \\
+    2 & 72.0 & 57.9 & 0.039 & 1.239 \\
+    3 & 71.7 & 86.3 & 0.029 & 0.825 \\
+    4 & 72.2 & 114.9 & 0.024 & 0.625 \\
+    6 & 71.8 & 169.8 & 0.020 & 0.419 \\
+    8 & 72.0 & 225.0 & 0.018 & 0.316 \\
+    12 & 71.8 & 329.7 & 0.017 & 0.213 \\
+    16 & 71.8 & 433.4 & 0.015 & 0.161 \\
+    24 & 71.6 & 618.1 & 0.016 & 0.111 \\
+    32 & 71.9 & 801.4 & 0.015 & 0.085 \\
+    48 & 71.9 & 1{,}099.5 & 0.015 & 0.061 \\
+    64 & 71.7 & 1{,}367.5 & 0.015 & 0.048 \\
+    \hline
+  \end{tabular}
+  \legend{Source: The author}
+\end{table}
 
 The OLT in the simulation, however, serves with continuous batching
 (Section~\ref{sec:measurements}), where queries join and leave at any moment, so the size
