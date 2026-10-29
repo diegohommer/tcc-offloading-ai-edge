@@ -271,35 +271,84 @@ def answer_energy(tier: str, prompt_tokens: float, rates: dict, learned: Learned
     return j_prompt * prompt_tokens + j_generated * learned.tokens[tier]
 
 
-def cost_to_completion(start: int, prompt_tokens: float, rates: dict, learned: Learned) -> float:
+def _forward_choice(here: int, costs: dict, run_energy: float, p_here: float, delta: float) -> int:
+    """Return the tier above that tier `here` forwards to on arrival, or `here` to run it.
+
+    Running here costs this tier's energy plus, if it escalates, the cheapest way on. The
+    query is forwarded only if a tier above is cheaper by more than the margin delta.
+    """
+    cheapest = min(costs, key=costs.get)
+    run_here = run_energy + p_here * costs[cheapest]
+    return cheapest if run_here - costs[cheapest] > delta * run_here else here
+
+
+def _escalation_choice(here: int, costs: dict, delta: float) -> int:
+    """Return the tier an escalated query goes to: the next one up, or a cheaper later one."""
+    cheapest = min(costs, key=costs.get)
+    following = here + 1
+    return cheapest if costs[following] - costs[cheapest] > delta * costs[following] else following
+
+
+def _plan(
+    lowest: int, prompt_tokens: float, rates: dict, learned: Learned, delta: float
+) -> tuple[dict, dict]:
+    """Return C_j and where a query handed to tier j ends up running, for every tier from `lowest` up.
+
+    Computed from the top down, so each C_j follows what tier j itself would do with the
+    query: C_J = E_J, C_j = C_k if tier j forwards it on arrival to k, and otherwise
+    C_j = E_j + p_j * C_n, with n where tier j sends it if its answer escalates. A tier that
+    would forward a query is passed straight through, since the query reaches the tier it
+    forwards to either way.
+
+    Args:
+        lowest: Index of the lowest tier to plan for.
+        prompt_tokens: The query's prompt length.
+        rates: The J per token each tier is believed to cost now.
+        learned: The household's knowledge (answer lengths, escalation rates).
+        delta: Relative margin a forward or a skip must save.
+
+    Returns:
+        ({tier index: expected joules until answered}, {tier index: index of the tier that runs it}).
+    """
+    costs = {TOP: answer_energy(TIERS[TOP], prompt_tokens, rates, learned)}
+    runs_at = {TOP: TOP}
+    for index in range(TOP - 1, lowest - 1, -1):
+        tier = TIERS[index]
+        above = {k: costs[k] for k in range(index + 1, TOP + 1)}
+        run_energy = answer_energy(tier, prompt_tokens, rates, learned)
+        forward = _forward_choice(index, above, run_energy, learned.p_further[tier], delta)
+        if forward != index:
+            costs[index], runs_at[index] = costs[forward], runs_at[forward]
+        else:
+            following = _escalation_choice(index, above, delta)
+            costs[index] = run_energy + learned.p_further[tier] * costs[following]
+            runs_at[index] = index
+    return costs, runs_at
+
+
+def cost_to_completion(
+    start: int, prompt_tokens: float, rates: dict, learned: Learned, delta: float
+) -> float:
     """Return the expected joules from handing the query to tier `start` until it is answered.
 
-    C(j) = E_j + p_j * C(j+1): tier j always runs; with probability p_j the query goes one
-    tier further. The policy decides where the OLT's rate in `rates` comes from.
+    Every tier from `start` up is assumed to decide as the policy does (see _plan). The
+    policy decides where the OLT's rate in `rates` comes from.
 
     Args:
         start: Index of the tier that gets the query.
         prompt_tokens: The query's prompt length.
         rates: The J per token each tier is believed to cost now.
         learned: The household's knowledge (answer lengths, escalation rates).
+        delta: Relative margin a forward or a skip must save.
 
     Returns:
         The expected energy, in joules.
     """
-    total, chance_of_reaching = 0.0, 1.0
-    for index in range(start, TOP + 1):
-        tier = TIERS[index]
-        total += chance_of_reaching * answer_energy(tier, prompt_tokens, rates, learned)
-        if index < TOP:
-            chance_of_reaching *= learned.p_further[tier]
-    return total
+    return _plan(start, prompt_tokens, rates, learned, delta)[0][start]
 
 
 def on_arrival(here: int, prompt_tokens: float, rates: dict, learned: Learned, delta: float) -> int:
     """Decide whether to run the query here or forward it straight to a tier above.
-
-    Running here costs this tier's energy plus, if it escalates, the cheapest way on. The
-    query is forwarded only if a tier above is cheaper by more than the margin delta.
 
     Args:
         here: Index of the tier the query is at.
@@ -313,15 +362,7 @@ def on_arrival(here: int, prompt_tokens: float, rates: dict, learned: Learned, d
     """
     if here == TOP:
         return here
-    above = {
-        k: cost_to_completion(k, prompt_tokens, rates, learned) for k in range(here + 1, TOP + 1)
-    }
-    tier = TIERS[here]
-    run_here = answer_energy(tier, prompt_tokens, rates, learned) + learned.p_further[tier] * min(
-        above.values()
-    )
-    cheapest = min(above, key=above.get)
-    return cheapest if run_here - above[cheapest] > delta * run_here else here
+    return _plan(here, prompt_tokens, rates, learned, delta)[1][here]
 
 
 def on_escalation(
@@ -337,10 +378,7 @@ def on_escalation(
         delta: Relative margin a skip must save.
 
     Returns:
-        The index of the next tier to try.
+        The index of the tier that will run it next.
     """
-    above = {
-        k: cost_to_completion(k, prompt_tokens, rates, learned) for k in range(here + 1, TOP + 1)
-    }
-    cheapest = min(above, key=above.get)
-    return cheapest if above[here + 1] - above[cheapest] > delta * above[here + 1] else here + 1
+    costs, runs_at = _plan(here + 1, prompt_tokens, rates, learned, delta)
+    return runs_at[_escalation_choice(here, costs, delta)]

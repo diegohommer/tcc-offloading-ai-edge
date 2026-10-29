@@ -81,9 +81,56 @@ def test_learned_pool_shares_question_statistics_but_not_rates():
 
 
 def test_cost_to_completion_weights_each_tier_by_the_chance_of_reaching_it():
-    """C(user) = E(user) + p(user) x (E(onu) + p(onu) x E(olt))."""
-    expected = 200 * 0.1 + 0.5 * (200 * 0.5 + 0.5 * 200 * 0.3)
-    assert cost_to_completion(0, PROMPT_TOKENS, _rates(), _learned()) == pytest.approx(expected)
+    """With a cheap ONU every tier runs: C(user) = E(user) + p(user) x (E(onu) + p(onu) x E(olt))."""
+    rates = _rates(onu=0.05)
+    expected = 200 * 0.1 + 0.5 * (200 * 0.05 + 0.5 * 200 * 0.3)
+    assert cost_to_completion(0, PROMPT_TOKENS, rates, _learned(), 0.0) == pytest.approx(expected)
+
+
+def test_cost_to_completion_follows_what_the_tiers_above_would_do():
+    """An ONU dearer than the OLT would forward the query, so it costs what the OLT does."""
+    assert cost_to_completion(1, PROMPT_TOKENS, _rates(), _learned(), 0.0) == pytest.approx(60)
+    expected = 200 * 0.1 + 0.5 * 200 * 0.3
+    assert cost_to_completion(0, PROMPT_TOKENS, _rates(), _learned(), 0.0) == pytest.approx(expected)
+
+
+def _plain_decisions(here, rates, learned, delta):
+    """Return (on arrival, on escalation) under C(j) = E_j + p_j x C(j+1), the rule before recursion."""
+    tiers = ["user", "onu", "olt"]
+
+    def energy(index):
+        prompt_rate, generated_rate = rates[tiers[index]]
+        return prompt_rate * PROMPT_TOKENS + generated_rate * learned.tokens[tiers[index]]
+
+    def plain_cost(start):
+        total, chance = 0.0, 1.0
+        for index in range(start, 3):
+            total += chance * energy(index)
+            chance *= learned.p_further[tiers[index]]
+        return total
+
+    above = {k: plain_cost(k) for k in range(here + 1, 3)}
+    cheapest = min(above, key=above.get)
+    run_here = energy(here) + learned.p_further[tiers[here]] * above[cheapest]
+    arrival = cheapest if run_here - above[cheapest] > delta * run_here else here
+    following = here + 1
+    skip = above[following] - above[cheapest] > delta * above[following]
+    return arrival, cheapest if skip else following
+
+
+def test_three_tiers_decide_as_without_recursion():
+    """With three tiers, following the tiers' own choices changes no decision."""
+    rng = random.Random(11)
+    for _ in range(5000):
+        rates = {tier: (rng.uniform(0, 0.05), rng.uniform(0.01, 3.0)) for tier in ("user", "onu", "olt")}
+        learned = _learned(
+            *(rng.uniform(50, 400) for _ in range(3)), rng.uniform(0, 1), rng.uniform(0, 1)
+        )
+        delta = rng.choice([0.0, rng.uniform(0, 1)])
+        for here in (0, 1):
+            arrival, escalation = _plain_decisions(here, rates, learned, delta)
+            assert on_arrival(here, PROMPT_TOKENS, rates, learned, delta) == arrival
+            assert on_escalation(here, PROMPT_TOKENS, rates, learned, delta) == escalation
 
 
 def test_on_arrival_runs_here_when_this_tier_is_cheap():
