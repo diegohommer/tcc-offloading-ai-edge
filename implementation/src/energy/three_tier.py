@@ -130,14 +130,16 @@ def olt_factor(which: str = "system", accounting: str = "average") -> float:
 # ==========================================
 # The OLT sweeps (measure/measure_gpu_energy_static.py), in the order they were run. Run 1's
 # prefill figures are unreliable (the energy counter's resolution, energy_tests.md §3.4);
-# its decode figures replicate the others.
+# its decode figures replicate the others. onecard ran on the same L4 as the continuous
+# batching runs it is validated against (measure_gpu_energy_one_card.py).
 OLT_RUN_FILES = {
     "run1": "gpu_energy_qwen2.5-7b-instruct_l4x1_run1.json",
     "run2": "gpu_energy_qwen2.5-7b-instruct_l4x1_run2.json",
     "run3": "gpu_energy_qwen2.5-7b-instruct_l4x1_run3.json",
+    "onecard": "gpu_energy_qwen2.5-7b-instruct_l4x1_onecard_20261029T032659Z.json",
 }
-OLT_REFERENCE = "run3"
-"""The sweep every energy figure is priced on: 5 repeats, 12 batch sizes."""
+OLT_REFERENCE = "onecard"
+"""The sweep every energy figure is priced on: 5 repeats, 12 batch sizes, on one card."""
 
 
 def olt_runs() -> dict:
