@@ -894,10 +894,9 @@ prompt's energy, the server's CPU and memory for 24\%, the spare machines kept r
 peaks for 10\% and the building for 8\%~\cite{elsworth2025measuring}. Counting the first
 three, a server spends $(58+24+10)/58 = 1.59$ times the energy of its accelerators, and
 using the industry's average PUE of 1.54~\cite{uptime2025survey} in place of Google's
-building overhead gives $1.59 \times 1.54 = 2.44$. In Google's machines one host, with its
-CPU and memory, serves several accelerators, while the architecture we follow equips each
-OLT to run inference itself~\cite{pakpahan2026continuum}, so the OLT's server keeps a
-whole host for a single 72~W GPU, and this factor is more likely too low than too high.
+building overhead gives $1.59 \times 1.54 = 2.44$. A server built around a single GPU may
+spend more on the rest of the machine than Google's do, and the sensitivity runs of
+Chapter~\ref{chap:results} raise the OLT's energy to cover this.
 
 \subsection{Average and Marginal Accounting}
 \label{sec:accounting}
