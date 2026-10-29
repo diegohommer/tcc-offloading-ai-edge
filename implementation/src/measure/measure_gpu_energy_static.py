@@ -152,18 +152,11 @@ def add_per_query(rows: list[dict]) -> list[dict]:
 #   * ignore_eos with a fixed max_tokens, so every batch size generates the same tokens
 #   * one discarded warm-up per batch size; the median of the repeats
 #   * static batches (all prompts at once): a live OLT sees random arrivals instead
+#   * the GPU's temperature and SM clock read around every full pass, and its UUID, driver
+#     and power limit recorded, as the continuous measurement does
 
 
-@app.function(
-    image=vllm_image,
-    gpu=GPU_SPEC,
-    volumes={
-        "/root/.cache/huggingface": hf_cache_vol,
-        "/root/.cache/vllm": vllm_cache_vol,
-    },
-    timeout=2 * 60 * 60,
-)
-def sweep(
+def run_sweep(
     prompts: list[str],
     batches: list[int],
     out_tokens: int,
@@ -173,9 +166,11 @@ def sweep(
     max_model_len: int,
     gpu_mem_util: float,
 ) -> dict:
-    """Measure the energy of every batch size, on a Modal GPU.
+    """Measure the energy of every batch size, on the GPU this process sees.
 
     Everything this body needs is an argument, never a module-level setting (see Settings).
+    sweep() runs it in its own container; measure_gpu_energy_one_card.py runs it beside the
+    continuous measurement on one card.
 
     Args:
         prompts: The GSM8K prompt pool.
@@ -200,6 +195,17 @@ def sweep(
     handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(pynvml.nvmlDeviceGetCount())]
     gpu_names = [pynvml.nvmlDeviceGetName(h) for h in handles]
     gpu_names = [n.decode() if isinstance(n, bytes) else n for n in gpu_names]
+
+    def text(value) -> str:
+        """Return an NVML string as text, whichever type the binding gives."""
+        return value.decode() if isinstance(value, bytes) else value
+
+    def gpu_state() -> tuple[int, int]:
+        """Return the first GPU's (temperature in C, SM clock in MHz) right now."""
+        return (
+            pynvml.nvmlDeviceGetTemperature(handles[0], pynvml.NVML_TEMPERATURE_GPU),
+            pynvml.nvmlDeviceGetClockInfo(handles[0], pynvml.NVML_CLOCK_SM),
+        )
 
     # Prefer the cumulative counter; fall back to integrating instantaneous power
     # only if the driver or a virtualized device refuses it. The fallback CAN miss
@@ -313,8 +319,13 @@ def sweep(
         trials = []
         for r in range(repeats):
             prefill = run(chosen, prefill_pass, min_seconds=3.0)
-            trial = summarize_trial(prefill, run(chosen, full_pass), idle_watts, batch)
+            state_start = gpu_state()
+            full = run(chosen, full_pass)
+            state_end = gpu_state()
+            trial = summarize_trial(prefill, full, idle_watts, batch)
             trial["prefill_reps"] = prefill["reps"]
+            trial["max_temperature_C"] = max(state_start[0], state_end[0])
+            trial["min_sm_clock_MHz"] = min(state_start[1], state_end[1])
             trials.append(trial)
             print(
                 f"  batch={batch:>3} trial {r + 1}/{repeats}: "
@@ -325,10 +336,16 @@ def sweep(
             )
         rows.append(median_row(batch, trials))
 
+    gpu_uuid = text(pynvml.nvmlDeviceGetUUID(handles[0]))
+    driver = text(pynvml.nvmlSystemGetDriverVersion())
+    power_limit = pynvml.nvmlDeviceGetEnforcedPowerLimit(handles[0]) / 1000.0
     pynvml.nvmlShutdown()
     return {
         "model": model_name,
         "gpu": gpu_names[0],
+        "gpu_uuid": gpu_uuid,
+        "driver_version": driver,
+        "power_limit_W": power_limit,
         # From NVML inside the container, so it is ground truth; GPU_SPEC would
         # revert to its default here, like MODEL_NAME once did.
         "gpu_count": n_gpu,
@@ -350,6 +367,31 @@ def sweep(
         "values_are": "gross (what the GPU drew); fields ending _net subtract idle power x duration",
         "batch_curve": add_per_query(rows),
     }
+
+
+@app.function(
+    image=vllm_image,
+    gpu=GPU_SPEC,
+    volumes={
+        "/root/.cache/huggingface": hf_cache_vol,
+        "/root/.cache/vllm": vllm_cache_vol,
+    },
+    timeout=2 * 60 * 60,
+)
+def sweep(
+    prompts: list[str],
+    batches: list[int],
+    out_tokens: int,
+    repeats: int,
+    model_name: str,
+    quantization: str | None,
+    max_model_len: int,
+    gpu_mem_util: float,
+) -> dict:
+    """Measure the energy of every batch size, on a Modal GPU (run_sweep's arguments)."""
+    return run_sweep(
+        prompts, batches, out_tokens, repeats, model_name, quantization, max_model_len, gpu_mem_util
+    )
 
 
 @app.local_entrypoint()
