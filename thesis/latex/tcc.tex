@@ -332,10 +332,10 @@ query in the cloud~\cite{wu2025recserve}.
 \label{sec:metrics}
 \label{sec:measurements}
 
-Studies report the energy of LLM inference per generated token or separately for the
-prefill and decode phases~\cite{solovyeva2026green}, or per
-query~\cite{elsworth2025measuring,chung2025mlenergy}, and there is no agreed way of
-measuring any of them. Of these units, this work compares tiers per query, since different
+Studies report the energy of LLM inference per generated token or per
+query~\cite{solovyeva2026green,elsworth2025measuring,chung2025mlenergy}, and either unit
+can be further split into the prefill and decode phases~\cite{solovyeva2026green}. Of
+these units, this work compares tiers per query, since different
 models can answer the same prompt with responses of very different lengths, and a figure
 per token would hide how verbose each model is~\cite{chung2025mlenergy}. Each query's
 energy is still built from the two phases, as the energy per prompt token in the prefill
@@ -862,9 +862,10 @@ to the code.}
 We measured the energy of the OLT ourselves, running its model, Qwen2.5-7B in 8-bit, on
 one NVIDIA L4 GPU served with vLLM 0.21.0~\cite{kwon2023vllm} under the NVIDIA driver
 610.57.04. The GPU keeps a running total of the energy it has used, which NVML reports,
-and we read this total before and after each run and took the difference, which is more
-reliable than sampling the power, since sampling misses part of the
-runtime~\cite{yang2023part}.
+and we read this total before and after each run and took the difference. Software
+readings like this are accurate on GPUs~\cite{chung2025mlenergy}, and the running total
+avoids the power sampling that, on GPUs such as the A100 and H100, covers only a quarter
+of the runtime~\cite{yang2023part}.
 
 We gave the GPU static batches of 1 to 64 queries, in which every query starts and ends
 together, drawn from 64 GSM8K problems whose prompts average 92 tokens, and each query
@@ -874,16 +875,17 @@ phases of inference (Section~\ref{sec:llm-background}), each batch was also run
 generating a single token, which measures the prefill alone, and the decode is the
 difference between the two runs. Every measurement was repeated five times after one
 warm-up run, and we kept the median. We also measured the GPU at rest, at 32.1~W with the
-model loaded, so that the energy a query adds above this idle power could be computed (the last two
-columns of Table~\ref{tab:olt-sweep}).
+model loaded, so that the energy spent above this idle power could be computed (the last
+two columns of Table~\ref{tab:olt-sweep}).
 
-Batching makes each query much cheaper, because the L4 draws its power limit of 72~W
-whatever the batch size, while the number of tokens it generates per second grows from
-29.1 for a query alone to 1,394.2 in a batch of 64 (Table~\ref{tab:olt-sweep}). The GPU
-already reaches this limit with a single query, so for a larger batch it cannot draw more
-power and runs its cores more slowly instead. In the sweep, its clock fell from about
-1,290~MHz for a query alone to 930~MHz in a batch of 64, about 28\% slower, which is why
-the speed grows 48 times for a batch 64 times larger. Dividing the power by this speed, a
+Batching makes each query much cheaper, because each decode step is limited by reading
+the model's weights from memory (Section~\ref{sec:llm-background}), and a batch reads
+them once for all its queries. The number of tokens the L4 generates per second therefore
+grows from 29.1 for a query alone to 1,394.2 in a batch of 64 (Table~\ref{tab:olt-sweep}),
+48 times for a batch 64 times larger, while its power stays at its limit of 72~W. The GPU
+already reaches this limit with a single query, so as the batch grows it cannot draw more
+power and lowers its clock instead, which is one reason the speed grows less than the
+batch. Dividing the power by this speed, a
 generated token costs $71.9/29.1 = 2.47$~J alone and $72.0/1{,}394.2 = 0.052$~J in a batch
 of 64, 48 times less (Figure~\ref{fig:batching}a). These figures still include the reading
 of the prompts, and once the prefill, measured separately, is taken out, the decode costs
@@ -979,7 +981,8 @@ sensitivity analysis.
 
 The OLT also reports its cost to the tiers below, under the same accounting as the
 energy it is charged. Under average accounting it reports the mean cost per token of its
-work over its last 5 minutes. Under marginal accounting it reports what one more query
+work over its last 5 minutes, its estimate of what a query joining it would be charged.
+Under marginal accounting it reports what one more query
 would add to its energy above idle, which is not the share that query is then charged,
 because a batch's energy above idle grows little with its size, and a step of 64 queries
 draws only about a fifth more above idle than a step of one
