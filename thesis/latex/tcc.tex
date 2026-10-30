@@ -380,7 +380,7 @@ differently. GPUs report their own energy in software, read through the NVIDIA
 Management Library (NVML) on the NVIDIA GPUs this work uses, while libraries such as
 Zeus, used by \citeonline{chung2025mlenergy}, read it on both NVIDIA and AMD GPUs.
 These readings have limits of their own, since on the A100 and H100 the power that
-nvidia-smi reports samples only a quarter of the runtime, which can lead to a large
+nvidia-smi reports was found to sample only a quarter of the runtime, which can lead to a large
 under- or overestimate of the energy spent~\cite{yang2023part}. Phones expose on-chip
 telemetry that reports the energy of the whole chip~\cite{cai2026npu}, while single-board
 edge devices are measured either at the plug, with a power meter that includes the whole
@@ -548,7 +548,8 @@ device on which the query is typed, the ONU in the home and the OLT at the opera
 central office, which serves every household connected to its PON ports and shares its model
 among them. As in earlier tiered
 architectures~\cite{wu2025recserve,pakpahan2026continuum}, each tier runs a larger model
-than the one below it, and Table~\ref{tab:tiers} lists the three. The user tier is a
+than the one below it, in the size range that \citeonline{pakpahan2026continuum} assign
+to it, and Table~\ref{tab:tiers} lists the three. The user tier is a
 phone running a model of about one billion parameters, and the ONU is a single-board
 computer with a neural accelerator, the class of device that an AI-capable home gateway
 could carry. The energy of these two tiers comes from published
@@ -556,18 +557,16 @@ measurements~\cite{cai2026npu,renney2026cloud}, while that of the OLT was measur
 on a GPU (Section~\ref{sec:energy-model}).
 
 The hierarchy stops at the OLT, without the cloud tier that those architectures place
-above it, for two reasons. The strategies compared in this work differ in how the tiers
-learn the OLT's current cost, and the broadcast that carries this cost exists only in the
-access network, so the access network is where they can be compared. A cloud tier was
-also beyond the resources of this work, since it would have required running a model of
-more than 70 billion parameters on every test problem, recording the probabilities of its
-tokens, and measuring its energy against batch size on a cluster of
-GPUs~\cite{pakpahan2026continuum}. The OLT is therefore the top tier, and since no tier
-above it can correct its answers, its accuracy of 91.7\% bounds what a policy delivers in
-practice. A policy could exceed it only on the 2.0\% of problems (26 of 1,319) that a lower tier
-answers correctly and the OLT does not, and none of our policies does. The decision rule itself does not depend on the number of tiers
+above it, for two reasons. The first is that this work focuses on the PON access network,
+whose tiers end at the OLT. The second is that a cloud tier was beyond the resources of
+this work, since the size ranges we follow put it at more than 70 billion parameters, a
+model we could not run on every test problem and measure against batch size without a
+cluster of GPUs. Leaving it out does not
+restrict the policy, whose decision rule does not depend on the number of tiers
 (Section~\ref{sec:policy}), so a cloud tier would only add one more level to its
-recursion.
+recursion. The OLT is therefore the top tier, and its accuracy of 91.7\% caps what a policy
+can deliver, except on the 2.0\% of problems (26 of 1,319) that a lower tier gets right and
+the OLT gets wrong.
 
 \begin{table}[htb]
   \centering
@@ -596,21 +595,20 @@ their tokens (Section~\ref{sec:llm-background}), instead of running the models a
 \section{Energy-Aware Recursive Offloading}
 \label{sec:policy}
 
-In the policy we propose, a query starts at the user device, and each tier that runs it
-applies the quantile test described in
-Section~\ref{sec:llm-background}~\cite{wu2025recserve}, returning its answer to the user if the answer's
-confidence reaches the $\beta$-quantile of the confidences the tier has seen recently and
-escalating the query otherwise. On top of this recursion, the policy chooses which tier
-runs the query from the energy each tier is expected to spend. Since it never judges
-whether an answer is good enough, the accuracy delivered still comes only from the models
-and from the quantile test.
+In the policy we propose, a query starts at the user device, and each tier it reaches
+first decides whether to run it or to send it straight to a cheaper one above, based on
+the energy each one is expected to spend. A tier that runs the query applies the quantile
+test described in Section~\ref{sec:llm-background}~\cite{wu2025recserve}, returning its
+answer to the user if the answer's confidence reaches the $\beta$-quantile of the
+confidences the tier has seen recently and escalating the query otherwise, to the next
+tier or, if that saves energy, to one further up.
 
-The choice rests on $C_j$, the expected energy spent from the moment a query is handed
-to tier $j$ until some tier returns an answer, when every tier from $j$ up decides as the
-policy does. If tier $j$ would forward the query on arrival, it forwards it to $k^*$,
-the tier above it with the lowest cost, and the query costs $C_{k^*}$. Otherwise tier $j$
-runs it, and with probability $p_j$ its answer fails the test and the query moves on to
-tier $n$, which is $k^*$ when $\delta = 0$ and may stay at $j+1$ when $\delta > 0$, so
+Both choices rest on $C_j$, the expected energy spent from the moment a query is handed
+to tier $j$ until some tier returns an answer, assuming that every tier from $j$ up decides
+as the policy does. If tier $j$ forwards the query on arrival, it sends it to $k^*$, the
+tier above it with the lowest $C_k$, so the query costs $C_{k^*}$. Otherwise tier $j$ runs
+it, and with probability $p_j$ its answer fails the test and the query moves on to tier
+$n$, which is $k^*$ unless the margin $\delta$ introduced below keeps it at $j+1$, so
 \begin{equation}
   C_j =
   \begin{cases}
@@ -830,7 +828,7 @@ separately. \citeonline{tummalapalli2026edge} timed the same board reading a pro
 258 tokens in 1.287~s, about 200 tokens per second, and assuming the board draws the same
 power while reading as while generating, a prompt token costs $5.58/200 = 0.028$~J, or
 $2.08/200 = 0.010$~J above idle. With the mean prompt of 122 tokens, the same problems
-as the phone's 126 counted in the tokens of Qwen's tokenizer, a query then costs
+that come to 126 tokens on the phone's model, a query then costs
 the ONU $243 + 122 \times 0.028 = 246$~J, or $91 + 122 \times 0.010 = 92$~J above idle.
 \todo{take every result from the final re-run, which adds this prefill
 to the code.}
@@ -860,12 +858,13 @@ to the code.}
 \label{sec:olt-energy}
 
 We measured the energy of the OLT ourselves, running its model, Qwen2.5-7B in 8-bit, on
-one NVIDIA L4 GPU served with vLLM 0.21.0~\cite{kwon2023vllm} under the NVIDIA driver
-610.57.04. The GPU keeps a running total of the energy it has used, which NVML reports,
+one NVIDIA L4 GPU rented in the cloud, served with vLLM 0.21.0~\cite{kwon2023vllm} under
+the NVIDIA driver 610.57.04 and with prefix caching disabled, so that every run reads its
+prompts again instead of reusing them. The GPU keeps a running total of the energy it has used, which NVML reports,
 and we read this total before and after each run and took the difference. Software
 readings like this are accurate on GPUs~\cite{chung2025mlenergy}, and the running total
-avoids the power sampling that, on GPUs such as the A100 and H100, covers only a quarter
-of the runtime~\cite{yang2023part}.
+avoids the power sampling that, on GPUs such as the A100 and H100, was found to cover only
+a quarter of the runtime~\cite{yang2023part}.
 
 We gave the GPU static batches of 1 to 64 queries, in which every query starts and ends
 together, drawn from 64 GSM8K problems whose prompts average 92 tokens, and each query
@@ -948,9 +947,9 @@ The GPU is only part of what the OLT's server consumes, so we multiply its energ
 2.44 to cover the rest. In Google's measurements, the accelerators account for 58\% of a
 prompt's energy, the server's CPU and memory for 24\%, the spare machines kept ready for
 peaks for 10\% and the building for 8\%~\cite{elsworth2025measuring}. Counting the first
-three, a server spends $(58+24+10)/58 = 1.59$ times the energy of its accelerators, and
+three, a server spends $(58+24+10)/58 = 1.586$ times the energy of its accelerators, and
 using the industry's average PUE of 1.54~\cite{uptime2025survey} in place of Google's
-building overhead gives $1.59 \times 1.54 = 2.44$. The same factor is used under both ways
+building overhead gives $1.586 \times 1.54 = 2.44$. The same factor is used under both ways
 of charging energy (Section~\ref{sec:accounting}), and Chapter~\ref{chap:results} repeats the
 main runs with the GPU card alone, a factor of 1.0, and with Google's own accounting of a
 prompt, $100/58 = 1.72$, to show how much the results depend on it.
@@ -983,10 +982,12 @@ The OLT also reports its cost to the tiers below, under the same accounting as t
 energy it is charged. Under average accounting it reports the mean cost per token of its
 work over its last 5 minutes, its estimate of what a query joining it would be charged.
 Under marginal accounting it reports what one more query
-would add to its energy above idle, which is not the share that query is then charged,
-because a batch's energy above idle grows little with its size, and a step of 64 queries
-draws only about a fifth more above idle than a step of one
-($0.026 \times 64 = 1.66$ against 1.365~J, Table~\ref{tab:olt-sweep}). A query that finds
+would add to its energy above idle, which is less than the share that query is then
+charged. In one decode step, where every query of the batch generates one token, a batch
+of 64 draws only about a fifth more energy above idle than a query alone
+($64 \times 0.026 = 1.66$~J against 1.365~J, Table~\ref{tab:olt-sweep}), so most of that
+energy would be drawn even for a single query, and adding a query to a running batch
+costs little. A query that finds
 the OLT idle therefore adds the cost of a query alone, while one that joins a running
 batch adds only about 5~J for a query of the mean lengths, against the 18~J it is charged
 in a batch of 64. The decision weighs the 5~J, since that is what sending one more query
@@ -1164,7 +1165,9 @@ network, a few milliseconds, is also left out.
 \section{Evaluation}
 \label{sec:evaluation}
 
-\todo{reading every policy at the same accuracy; the baselines: confidence-only
+\todo{reading every policy at the same accuracy (the energy choice weighs energy alone and
+leaves judging the answers to the quantile test, so it changes accuracy only by changing
+which models answer); the baselines: confidence-only
 escalation, cited as the rule of \citeonline{wu2025recserve}, with and without the ONU,
 and each tier answering alone; the piggyback ablation, where a household hears the
 OLT's cost only on its own answers and blends each one it hears into its estimate with a
