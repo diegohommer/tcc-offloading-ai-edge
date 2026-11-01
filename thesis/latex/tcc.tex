@@ -778,9 +778,12 @@ manufacturing the hardware.
 The energy of a query also depends on how it is charged, and we consider two ways of
 charging it (Section~\ref{sec:measurements}): average accounting, which counts everything a
 tier draws while it answers, and marginal accounting, which counts only what it draws above idle, so
-nothing is charged for keeping the hardware on. The study uses marginal accounting because
-a routing decision does not change the power the hardware draws at rest, and repeats its
-main runs under average accounting as a sensitivity analysis. Table~\ref{tab:energy} lists
+nothing is charged for keeping the hardware on. We assume that the hardware stays on wherever a
+query goes, so the power it draws at rest is spent either way and a routing decision changes
+only the energy above idle. The tiers therefore decide on energy above idle under both
+accountings. The study charges under marginal accounting, and its main runs are repeated under
+average accounting as a sensitivity analysis, with the queries routed the same way, so that only
+the energy counted changes. Table~\ref{tab:energy} lists
 what each source measures and how close it comes to the boundary, together with the energy
 each tier spends on a query of its mean prompt and answer lengths on GSM8K under both
 accountings. The OLT's energy depends on how many queries it batches, so the table gives its
@@ -803,7 +806,7 @@ range, which Sections~\ref{sec:olt-energy} and~\ref{sec:accounting} explain.
   \legend{Source: The author}
 \end{table}
 
-\subsection{User Device and ONU}
+\subsection{Cost per Query at the User Device and ONU}
 \label{sec:user-onu-energy}
 
 The energy of the user device comes from the phone that \citeonline{cai2026npu} measured
@@ -840,6 +843,8 @@ the ONU $243 + 122 \times 0.028 = 246$~J, or $91 + 122 \times 0.010 = 92$~J abov
     \hline
     Energy per prompt token (J) & 0.016 & 0.028 \\
     Energy per generated token (J) & 0.074 & 0.88 \\
+    Energy per prompt token above idle (J) & \ldots & 0.010 \\
+    Energy per generated token above idle (J) & \ldots & 0.33 \\
     Prompt tokens per second & 287.6 & 200 \\
     Generated tokens per second & 72.2 & 6.34 \\
     Idle power (W) & \ldots & 3.5 \\
@@ -939,6 +944,9 @@ mean latency by less than 2.5\%.
   \legend{Source: The author}
 \end{figure}
 
+\subsection{Cost per Query at the OLT}
+\label{sec:accounting}
+
 The GPU is only part of what the OLT's server consumes, so we multiply its energy by
 2.44 to cover the rest. In Google's measurements, the accelerators account for 58\% of a
 prompt's energy, the server's CPU and memory for 24\%, the spare machines kept ready for
@@ -947,49 +955,68 @@ three, the computing equipment spends $(58+24+10)/58 = 1.586$ times the energy o
 accelerators, and
 using the industry's average PUE of 1.54~\cite{uptime2025survey} in place of Google's
 building overhead gives $1.586 \times 1.54 = 2.44$. Chapter~\ref{chap:results} repeats the
-main runs with three other factors: 1.0 for the GPU card alone, $100/58 = 1.72$ for Google's
-own accounting of a prompt, and $(58+58+10)/58 \times 1.54 = 3.35$ for a host that draws as
-much as its card, to show how much the results depend on it.
+main runs with three other factors, to show how much the results depend on this one: 1.0 for
+the GPU card alone, $100/58 = 1.72$ for Google's own accounting of a prompt, and
+$(58+58+10)/58 \times 1.54 = 3.35$ for a host that draws as much as its card.
 
-\subsection{The OLT's Cost per Query}
-\label{sec:accounting}
+Under both accountings, a query at the OLT is charged its share of its batch's energy, read
+from Table~\ref{tab:olt-sweep} at the batch's size and multiplied by 2.44.
+A query of the OLT's mean lengths on GSM8K, 122 prompt and 251 generated tokens, costs
+$(0.033 \times 122 + 2.464 \times 251) \times 2.44 \approx 1{,}520$~J alone under average
+accounting and $(0.018 \times 122 + 1.365 \times 251) \times 2.44 \approx 840$~J alone under
+marginal accounting. In a batch of 64, the same query costs
+$(0.014 \times 122 + 0.047 \times 251) \times 2.44 \approx 33$~J under average accounting and
+$(0.008 \times 122 + 0.026 \times 251) \times 2.44 \approx 18$~J under marginal accounting.
 
-The sweep and the conversion give what a query costs at the OLT. Under both accountings it
-pays its share of its batch's energy, read from Table~\ref{tab:olt-sweep} at the batch's size. A query of the OLT's mean lengths on GSM8K, 122 prompt and 251 generated
-tokens, costs $(0.033 \times 122 + 2.464 \times 251) \times 2.44 \approx 1{,}520$~J alone
-under average accounting and $(0.018 \times 122 + 1.365 \times 251) \times 2.44 \approx
-840$~J under marginal accounting. In a batch of 64, the same query costs about 33~J and
-18~J. The conversion of 2.44 is the same under both accountings, so the marginal figure
-still includes Google's share for the spare machines kept ready for peaks, which a single
-query does not add, a simplification discussed in Section~\ref{sec:limitations}.
+These figures are what a query is charged once it has run, but a tier decides where to send a
+query before the OLT has seen it. The OLT therefore has to tell the tiers below what a query
+would cost, and it could report two different things. The first is
+the query's share, the batch's energy divided among its queries, which under marginal
+accounting is about 18~J in a batch of 64. The second is what the query adds, the difference
+between the OLT's energy with the query and without it, which in the same batch is only about
+5~J. A batch of 64 costs about 1,180~J above idle, or about 18~J per query, against the 840~J
+of one query alone, so each of the other 63 adds $(1{,}180 - 840)/63 \approx 5$~J. A query that
+finds the OLT idle, in contrast, adds the full 840~J, since without it the GPU would be at rest.
 
-The OLT reports its cost to the tiers below under the same accounting as the
-energy it is charged. Under average accounting it reports the mean cost per token of its
-work over its last 5 minutes, its estimate of what a query joining it would be charged.
-Under marginal accounting it reports what one more query
-would add to its energy above idle, which is less than the share that query is then
-charged. In one decode step, where every query of the batch generates one token, a batch
-of 64 draws only about a fifth more energy above idle than a query alone
-($64 \times 0.026 = 1.66$~J against 1.365~J, Table~\ref{tab:olt-sweep}), so most of that
-energy would be drawn even for a single query, and adding a query to a running batch
-costs little. A query that finds
-the OLT idle therefore adds the cost of a query alone, while one that joins a running
-batch adds only about 5~J for a query of the mean lengths, against the 18~J it is charged
-in a batch of 64. The decision weighs the 5~J, since that is what sending one more query
-to the OLT changes, while the charge divides the energy the GPU actually drew above idle
-among the queries that drew it, so that the energy totals of the study add up to it. The
-5~J is the slope of the batch's energy above idle against its size, fitted over batches 1
-to 64 and multiplied by 2.44. We fit a single slope because the energy added between
-adjacent batch sizes is noisy at small batches and nearly constant above four queries,
-and a single value also spares the tiers from predicting the batch their query will
-meet. The OLT reports the average of the idle and busy figures, weighted by the share of
-its last 5 minutes it spent busy.
+The OLT reports what a query adds above idle, since that is what the tiers decide on
+(Section~\ref{sec:energy-model}). A tier cannot know whether its query will find the OLT idle or busy, so the OLT weights the two cases by the share $b$ of
+the last 5 minutes it spent busy, with at least one query generating, and reports the energy rate
+\begin{equation}
+  r = b \, r_{\text{busy}} + (1-b) \, r_{\text{idle}},
+  \label{eq:olt-report}
+\end{equation}
+for prompt and generated tokens separately, where $r_{\text{idle}}$ is the rate of a query that
+finds the OLT idle and $r_{\text{busy}}$ is the rate of a query that joins a running batch.
+Both rates are fixed, so only $b$ changes over time. For a query of the mean lengths, they come
+to about 840~J and 5~J, and an OLT that was busy half of the time reports
+$0.5 \times 5 + 0.5 \times 840 \approx 420$~J.
 
-The OLT sends this cost on its broadcast and also stamps it on the answers it returns,
-and the timetable holds the same quantity for each hour of a weekday and of a weekend
-day. Under the broadcast strategy the tiers take the OLT's cost only from the broadcast,
-and Section~\ref{sec:evaluation} tests relying on the answers alone, to show what the
-broadcast adds.
+The first rate is read from Table~\ref{tab:olt-sweep} at a batch of one and multiplied by 2.44,
+which gives 0.044~J per prompt token and 3.33~J per generated token.
+The second follows the idea of the calculation above, which used only the two ends of the table,
+but draws on every measured size. Separately for prompt and generated tokens, we take the energy
+above idle of a whole batch at each size, divide it by the tokens of one query, multiply it by
+2.44 and fit a least-squares line of the result against the batch size, over batches 1 to 64
+(Figure~\ref{fig:batch-energy}). The slopes are what each extra query adds, 0.0185~J per prompt
+token and 0.0122~J per generated token, so that the rate can price queries of any length, and
+a query of the mean lengths adds $0.0185 \times 122 + 0.0122 \times 251 \approx 5$~J. We fit a single slope because the energy added between adjacent measured sizes is noisy
+at small batches and, for such a query, stays between about 4 and 6~J above four queries.
+
+\begin{figure}[htb]
+  \centering
+  \caption{Energy of a whole batch above idle, per prompt token (a) and per generated token (b) of each query}
+  \label{fig:batch-energy}
+  \includegraphics[width=\textwidth]{figures/batch_energy.pdf}
+  \legend{Source: The author}
+\end{figure}
+
+The OLT sends its report on the broadcast and also stamps it on the
+answers it returns. The timetable holds the same report, computed with Equation~\eqref{eq:olt-report} over each hour
+of a weekday and of a weekend day in the calibration month instead of over the last 5 minutes,
+so the two strategies differ only in whether the report is live or learned in advance. Under the broadcast strategy
+the tiers take the OLT's cost only from the broadcast, and Section~\ref{sec:evaluation} tests
+relying on the answers alone, to show what the broadcast adds. It also tests the OLT reporting
+the share instead, as the mean cost per token of its work over its last 5 minutes.
 
 \section{Simulation}
 \label{sec:simulation}
@@ -1073,7 +1100,9 @@ rate~\cite{ibrahim2012modeling}. The factor can be one for the whole day or chan
 one period to the next while depending on the periods before it, and ours is of the
 second kind. Our measurement below finds the same excess over Poisson counts in
 BurstGPT's conversations, whose arrivals also grow more or less bursty within
-twenty-minute windows during working hours~\cite{wang2025burstgpt}. In our simulation the factor $F_k$
+twenty-minute windows during working hours~\cite{wang2025burstgpt}.
+
+In our simulation the factor $F_k$
 changes every hour $k$ and is shared by every household of the OLT, which makes the arrivals a
 log-Gaussian Cox process~\cite{moller1998log}, and it is built from a number $z_k$ that
 keeps part of the previous hour's departure and receives a small random kick each hour,
@@ -1157,7 +1186,8 @@ escalation, cited as the rule of \citeonline{wu2025recserve}, with and without t
 and each tier answering alone; the piggyback ablation, where a household hears the
 OLT's cost only on its own answers and blends each one it hears into its estimate with a
 weight of 0.3; the metrics; the sensitivity runs (the OLT's conversion at $\times 1.0$,
-$\times 1.72$ and $\times 3.35$, an ONU twice as efficient, average accounting) and the sweep of
+$\times 1.72$ and $\times 3.35$, an ONU twice as efficient, average accounting with the same
+routing, the OLT reporting the share instead of what a query adds) and the sweep of
 $\delta$.}
 
 %==============================================================================
@@ -1195,14 +1225,16 @@ accelerators~\cite{elsworth2025measuring}, with the average PUE of data
 centers~\cite{uptime2025survey}, so it does not necessarily reflect the server and the
 building of a real OLT, whose central office may be more or less efficient. The same factor
 is kept under marginal accounting, where Google's share for spare machines would not
-strictly apply. Chapter~\ref{chap:results} shows how the results change with the GPU card
-alone, a factor of 1.0, with Google's own accounting of a prompt, a factor of 1.72, and
-with a host that draws as much as its card, a factor of 3.35, since a server with a single
-small card shares its host among fewer accelerator watts and could exceed 2.44.
+strictly apply. Chapter~\ref{chap:results} shows how the results change with the other factors
+of Section~\ref{sec:accounting}, including a host that draws as much as its card, since a
+server with a single small card shares its host among fewer accelerator watts and could exceed
+2.44.
 \todo{point to the section with these sensitivity runs once it is written.} The GPU itself
 is an L4 held at its power limit of 72~W at every batch size, so a larger batch costs it a lower clock rather than more power. A larger GPU
 that is below its limit with a single query would draw more as its batch grows and gain
-less from batching, so the OLT's figures hold for a small power-capped card like ours.
+less from batching, so the OLT's figures hold for a small power-capped card like ours. We also
+assume that the hardware stays on when it is idle, so an operator that powers down idle GPUs
+would save idle energy that our figures do not count.
 
 The simulation reproduces how the OLT's cost changes over time, following the load of the
 households and its drift, and holds the other quantities the policy reads still. The user
