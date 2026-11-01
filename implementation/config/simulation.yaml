@@ -90,9 +90,9 @@ energy:
   # Where the OLT's energy is counted: system = whole server and building at
   # PUE 1.54; system-low = PUE 1.09; gpu = the card alone. [source: §7, Google]
   boundary: system
-  # average: a query pays its share of the OLT batch's energy. marginal: every
-  # tier is charged only what the query adds, nothing for being on. [choice:
-  # both are reported; marginal is the one a routing decision changes]
+  # What a query is charged. average: its share of everything the tier draws.
+  # marginal: its share of the energy above idle, nothing for being on. [choice:
+  # both are reported; what the tiers decide on is report.signal]
   accounting: average
   # Multiplies the ONU's energy per token (config/energy_sources.yaml): a stand-in
   # for a more or less efficient gateway accelerator. [swept]
@@ -152,9 +152,13 @@ learning:
   windows: household
 
 report:
-  # What the OLT's packet carries. query = what this query cost (its share, or
-  # under marginal accounting what it added). window = the OLT's report over its
-  # recent work, far less noisy under marginal accounting. [choice]
+  # What the tiers decide on. added = what a query adds to the energy above idle,
+  # the same under either accounting, and the phone's and ONU's rates above idle too.
+  # share = the query's share of the batch, as the accounting charges it. [choice]
+  signal: share
+  # What the OLT's packet carries. query = what this query cost, as the signal
+  # defines it. window = the OLT's report over its recent work, far less noisy with
+  # the added signal. [choice]
   report: query
   # Minutes the OLT averages over, for report: window and for its broadcast. [choice]
   report_window: 5.0

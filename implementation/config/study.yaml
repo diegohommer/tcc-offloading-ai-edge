@@ -15,8 +15,8 @@ traffic:
   subscribers: [1000, 2000, 5000, 10000, 20000]
 
 energy:
-  # Only what a query adds: the energy a routing decision actually changes.
-  # [choice; average accounting in the sensitivity runs]
+  # A query is charged its share of the energy above idle. [choice; average
+  # accounting in a sensitivity run]
   accounting: marginal
 
 policy:
@@ -34,6 +34,9 @@ learning:
   rate_alpha: 0.3
 
 report:
+  # The tiers decide on what a query adds: the energy a routing decision actually
+  # changes. [choice; the query's share in a sensitivity run]
+  signal: added
   # The OLT reports over its last 5 minutes, on answers (piggyback) and in its
   # broadcast alike. [choice]
   report: window

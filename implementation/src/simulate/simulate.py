@@ -176,7 +176,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add(
         "--accounting",
         choices=("average", "marginal"),
-        help="share of the batch, or what a query adds",
+        help="what a query is charged: its share of everything drawn, or of the energy above idle",
+    )
+    add(
+        "--signal",
+        choices=("added", "share"),
+        help="what the tiers decide on: what a query adds, or its share as the accounting charges it",
     )
     add(
         "--report",
@@ -341,9 +346,13 @@ def build_prices(s):
     """
     published = published_rates(s.accounting)
     published["onu"]["dec"] *= s.onu_scale
+    # What a query adds excludes idle under either accounting, at every tier.
+    decided = published_rates("marginal" if s.signal == "added" else s.accounting)
+    decided["onu"]["dec"] *= s.onu_scale
     factor = olt_factor(s.boundary, s.accounting) * s.olt_scale
     curve = OltCurve(olt_reference()["batch_curve"], factor)
-    return published, factor, curve, Energy(curve, published, s.accounting, published_speeds())
+    prices = Energy(curve, published, s.accounting, published_speeds(), s.signal, decided)
+    return published, factor, curve, prices
 
 
 # ==========================================
@@ -506,7 +515,7 @@ def print_header(s, sources, answers, factor, accuracy, fixed) -> None:
         f"n={len(answers)} questions; {s.test_days} days after {s.calibration_days} "
         f"calibration days; confidence exp({s.confidence}); "
         f"OLT boundary {s.boundary} (x{factor:.2f}), {s.accounting} accounting; OLT reports "
-        f"{reports}; delta={s.delta}, window={s.window}; load drift sigma {s.burst_sigma:g}"
+        f"the {s.signal} cost, {reports}; delta={s.delta}, window={s.window}; load drift sigma {s.burst_sigma:g}"
         + (f" over {s.burst_hours:g} h" if s.burst_sigma else "")
     )
     print("standalone accuracy: " + "  ".join(f"{t} {accuracy[t]:.3f}" for t in TIERS))
@@ -587,6 +596,7 @@ def output_path(s) -> Path:
         + (f"_u{s.users_per_home:g}x{s.per_user_day:g}" if s.users_per_home != 1 else "")
         + (f"_burst{s.burst_sigma:g}x{s.burst_hours:g}h" if s.burst_sigma else "")
         + ("_marginal" if s.accounting == "marginal" else "")
+        + ("_added" if s.signal == "added" else "")
         + ("_window" if s.report == "window" else "")
         + (f"_ra{s.rate_alpha:g}" if s.rate_alpha is not None else "")
     )

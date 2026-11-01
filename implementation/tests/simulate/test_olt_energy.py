@@ -3,6 +3,7 @@
 import pytest
 
 from energy.three_tier import published_rates, published_speeds
+from olt_energy import Energy
 
 
 def test_rates_below_the_olt_are_the_published_figures(prices):
@@ -41,7 +42,7 @@ def test_seconds_at_the_olt_depends_on_the_batch(curve, prices):
     assert prices.seconds("olt", 8, 100, 300) == pytest.approx(curve.service_s(8, 300))
 
 
-def test_added_rates_under_marginal_accounting_is_net_when_idle_and_slope_when_busy(
+def test_added_rates_with_the_added_signal_is_net_when_idle_and_slope_when_busy(
     marginal_curve, marginal_prices
 ):
     """One more query adds the net-of-idle rate to an idle OLT and the slope to a busy one."""
@@ -49,6 +50,25 @@ def test_added_rates_under_marginal_accounting_is_net_when_idle_and_slope_when_b
     assert marginal_prices.added_rates(5) == (marginal_curve.pf_slope, marginal_curve.dec_slope)
 
 
-def test_added_rates_under_average_accounting_is_the_share_of_the_batch_it_makes(curve, prices):
-    """Under average accounting a query pays its share of the batch it joins."""
+def test_added_rates_with_the_share_signal_is_the_share_of_the_batch_it_makes(curve, prices):
+    """With the share signal a query counts its share of the batch it joins."""
     assert prices.added_rates(3) == curve.rates(4)
+
+
+def test_added_rates_do_not_depend_on_the_accounting(curve, marginal_prices):
+    """What a query adds excludes idle, so counting idle in the charge does not change it."""
+    charged_on_average = Energy(
+        curve, published_rates("average"), "average", published_speeds(), "added"
+    )
+    for running in (0, 1, 5):
+        assert charged_on_average.added_rates(running) == marginal_prices.added_rates(running)
+
+
+def test_decision_rates_can_differ_from_the_rates_charged(curve):
+    """Charged on average accounting, the tiers still decide on the ONU's rates above idle."""
+    above_idle = published_rates("marginal")
+    energy = Energy(
+        curve, published_rates("average"), "average", published_speeds(), "added", above_idle
+    )
+    assert energy.decision_rates("onu") == (above_idle["onu"]["pf"], above_idle["onu"]["dec"])
+    assert energy.rates("onu", 1) != energy.decision_rates("onu")

@@ -135,8 +135,9 @@ def run(setup: RunSetup, beta: float, policy: str):
         policy: One of POLICIES.
 
     Returns:
-        (metrics over the whole stream, per-hour detail, {(day type, hour): (mean J/prompt
-        token, mean J/generated token, OLT answers)}, which is what a timetable is built from).
+        (metrics over the whole stream, per-hour detail, {(day type, hour): (J/prompt token,
+        J/generated token, OLT answers)}, the OLT's report over all the hours of each cell,
+        which is what a timetable is built from).
     """
     settings, prices = setup.settings, setup.prices
     top = TIERS[TOP]
@@ -206,7 +207,7 @@ def run(setup: RunSetup, beta: float, policy: str):
     comm_follow_ups = 0.0
     follow_ups = {link[0] for link in setup.follow if link is not None} if setup.follow else set()
     hourly = [[0.0, 0, 0, 0, 0] for _ in range(24)]
-    seen: dict = {}  # (day type, hour) -> [sum of J/prompt token, sum of J/gen token, answers]
+    seen = collections.Counter()  # (day type, hour) -> OLT answers
     arrivals: list = []  # heap of (second it reaches the OLT, query id)
     in_flight: dict = {}  # query id -> what a query carries while the OLT holds it
     next_id = 0
@@ -302,9 +303,9 @@ def run(setup: RunSetup, beta: float, policy: str):
         for query_id, done_at, prefill_joules, decode_joules in completions:
             query = in_flight.pop(query_id)
             answer = setup.answers[query["question"]][top]
-            # What this query cost the network per token: its share of the batches it ran
-            # in under average accounting, what it added under marginal accounting.
-            if prices.accounting == "marginal":
+            # What this query cost per token, as the tiers decide on it: what it added, or
+            # its share of the batches it ran in.
+            if prices.signal == "added":
                 cost = prices.added_rates(query["running"])
             else:
                 prompt = answer["tp"] + query["carried"]
@@ -314,12 +315,9 @@ def run(setup: RunSetup, beta: float, policy: str):
                 )
             if query["belief"] is not None:
                 rate_errors.append(abs(query["belief"] - query["fresh"]) / query["fresh"])
-            cell = seen.setdefault(setup.schedule_key(query["hour"]), [0.0, 0.0, 0])
-            cell[0] += cost[0]
-            cell[1] += cost[1]
-            cell[2] += 1
+            seen[setup.schedule_key(query["hour"])] += 1
             # The packet carries this query's cost, or the OLT's report over its window,
-            # which is far steadier under marginal accounting.
+            # which is far steadier with the added signal.
             reported = server.reported_rate() if settings.report == "window" else cost
             if stats == "published":
                 olt_own.record(answer["tg"], None)
@@ -417,7 +415,7 @@ def run(setup: RunSetup, beta: float, policy: str):
             if decide:
                 # A household knows its own devices' rates; only the OLT's must reach it.
                 if stats != "household":
-                    rates = {upper: prices.rates(upper, 1) for upper in TIERS[here:TOP]}
+                    rates = {upper: prices.decision_rates(upper) for upper in TIERS[here:TOP]}
                     rates["olt"] = learned.rates.get("olt")
                 else:
                     rates = {upper: learned.rates[upper] for upper in TIERS[here:]}
@@ -465,7 +463,9 @@ def run(setup: RunSetup, beta: float, policy: str):
                 took = start - now
                 onu_free[household] = start + seconds
             took += seconds
-            packet[tier] = (prompt_rate, generated_rate, answer["tg"])
+            # the packet tells the other tiers what they decide on, not what was charged
+            told_prompt_rate, told_generated_rate = prices.decision_rates(tier)
+            packet[tier] = (told_prompt_rate, told_generated_rate, answer["tg"])
 
             # --- RecServe's test: escalate below the beta-quantile of recent confidences ---
             window = window_for(household, tier)
@@ -475,7 +475,7 @@ def run(setup: RunSetup, beta: float, policy: str):
             window.add(answer["conf"])
             if stats == "published":
                 own[household][tier].record(answer["tg"], escalate)
-                packet[tier] = (prompt_rate, generated_rate, own[household][tier])
+                packet[tier] = (told_prompt_rate, told_generated_rate, own[household][tier])
             if not escalate:
                 settle(index, hour, tier, spent, took, packet)
                 break
@@ -542,9 +542,15 @@ def run(setup: RunSetup, beta: float, policy: str):
         }
         for hour_of_day, row in enumerate(hourly)
     ]
+    # A timetable's cell holds what the OLT would have reported over all the hours of that cell.
+    hours_of_cell = collections.defaultdict(list)
+    if setup.schedule_key is not None:
+        first_hour = math.floor(setup.stream[0][1])
+        last_hour = math.ceil(max(setup.stream[-1][1], server.clock / 3600))
+        for hour_index in range(first_hour, max(last_hour, first_hour + 1)):
+            hours_of_cell[setup.schedule_key(hour_index)].append(hour_index)
     observed = {
-        cell: (prompt_sum / answers, generated_sum / answers, answers)
-        for cell, (prompt_sum, generated_sum, answers) in seen.items()
+        cell: (*server.rate_over_hours(hours), seen[cell]) for cell, hours in hours_of_cell.items()
     }
     return metrics, per_hour, observed
 

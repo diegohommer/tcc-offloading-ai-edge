@@ -48,6 +48,7 @@ ORDER = [
     "burst_week",
     "burst_all",
     "average",
+    "report_share",
     "onu0.5",
     "olt0.41",
     "olt0.70",
@@ -157,7 +158,9 @@ def describe(run):
     olt_scale = float(args["olt_scale"])
     burst = float(args.get("burst_sigma", 0))
     return (
-        f"{args['accounting']} accounting; ONU {run['fixed_J_per_query']['onu']:.0f} J; "
+        f"{args['accounting']} accounting; "
+        + (f"OLT reports the {args['signal']} cost; " if "signal" in args else "")
+        + f"ONU {run['fixed_J_per_query']['onu']:.0f} J; "
         + (f"OLT energy x{olt_scale:g}; " if olt_scale != 1 else "")
         + f"{args['users_per_home']} active user(s) x {args['per_user_day']} messages/day per household; "
         + f"question statistics {question_statistics(args)}"

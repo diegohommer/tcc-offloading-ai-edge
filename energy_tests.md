@@ -339,7 +339,7 @@ genuinely running then. The tests check this against hand-worked cases and check
 joules charged to queries sum to what the OLT spent.
 
 The OLT reports what a query costs, from its last 5 minutes (§8.4 says what that is under
-each accounting). `broadcast` hears the report as sent on the PON every 10 s; `oracle`
+each signal). `broadcast` hears the report as sent on the PON every 10 s; `oracle`
 reads it with no delay; `piggyback` hears it only on its own household's answers.
 
 ### 8.4 Energy accounting
@@ -348,24 +348,30 @@ reads it with no delay; `piggyback` hears it only on its own household's answers
   that batch, as Google's per-prompt accounting does [13].
 - **Marginal**: only what queries add to the network. A batch of n draws the net-of-idle
   energy the sweep measured at that size, shared equally, which matches the GPU under
-  continuous batching within 3% (§3.5). The first query on an idle OLT costs about 790 J
+  continuous batching within 3% (§3.5). The first query on an idle OLT costs about 840 J
   at the whole-system boundary. The ONU drops its idle draw (§5); the phone is unchanged.
 
-What the OLT reports, and what packets and the static tables carry, follows the
-accounting. Under average accounting it is the mean cost per token of its recent work, the
-share a query pays. Under marginal accounting it is what one more query would add: the
-slope while the OLT is busy, the net-of-idle rate while it is idle, weighted by the share
-of the last 5 minutes it spent busy. The slope is the least-squares slope of the batch's
-energy against its size over batches 1–64, about 9 J for a query on a busy OLT: a smooth
-estimate, where differences between adjacent measured batches are too noisy to route on.
-The slope is fitted on the gross curve, so it keeps the idle draw over the extra step time;
-on the net curve it is about 5 J. Routing on the net slope makes the broadcast 0.7–1.1%
-cheaper at 10,000 households (one seed), so the gross slope errs slightly against it.
-Routing on the average instead would make a busy OLT look tens of times dearer than joining
-it really is.
+The accounting only sets what a query is charged. What the OLT reports, and what packets
+and the static tables carry, is a separate setting, the signal (`--signal`):
 
-The study uses marginal accounting, the energy a routing decision changes, with average
-accounting as a sensitivity run.
+- **added**: what one more query would add above idle: the slope while the OLT is busy, the
+  net-of-idle rate while it is idle, weighted by the share of the last 5 minutes it spent
+  busy. The tiers also take the phone's and the ONU's rates above idle. This does not depend
+  on the accounting, so both accountings route every query the same way. The slope is the
+  least-squares slope of the batch's net energy against its size over batches 1–64, about
+  5 J for a query on a busy OLT: a smooth estimate, where differences between adjacent
+  measured batches are too noisy to route on.
+- **share**: the mean cost per token of the OLT's recent work, the share a query pays under
+  the accounting in use. This makes a busy OLT look dearer than joining it really is.
+
+The study charges under marginal accounting and decides on the added signal. Each of the
+two is changed alone in a sensitivity run: `average` keeps the routing and counts everything
+drawn, and `report_share` keeps the charge and routes on the share.
+
+The static tables apply the same formula as the live report, over every hour of a cell in the
+calibration days instead of the last 5 minutes (`OltServer.rate_over_hours`), so `b` is a share
+of time in both and the broadcast and the timetable differ only in being live or learned in
+advance.
 
 ### 8.5 Comparing policies
 
@@ -383,8 +389,8 @@ month of calibration (when the static tables are observed over plain RecServe) b
 month of test. The main runs follow the average day (no drift); two more add BurstGPT's drift
 (§8.1.1): mild drift, measured with each week's level taken out, and strong drift, measured
 without. Sensitivity runs change
-one setting each: average accounting, a 2× or 5× cheaper ONU, the OLT's energy × 1.07 or
-× 1.75, two active users per household, and question statistics learned per household.
+one setting each: average accounting with the same routing, the OLT reporting the share, a 2×
+cheaper ONU, and the OLT's conversion at × 1.0, × 1.72 or × 3.35 instead of × 2.44.
 Figures from `src/analyze/plot_study.py` (`implementation/results/study/figures/`, listed with draft captions in its README.md): the traffic, the β knob, reading at equal accuracy beside each tier alone (`results/study/alone_seed*.json`), where queries are answered, the batching validation, the savings, energy as the drift grows, and RecServe's communication burden against ours. Each is drawn at the thesis's text width as a vector PDF and a 300 dpi PNG, with its numbers in `figures/data/<name>.csv`.
 
 ### 9.1 Two timetables

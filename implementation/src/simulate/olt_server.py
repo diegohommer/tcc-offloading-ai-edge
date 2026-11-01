@@ -16,6 +16,7 @@ import heapq
 import math
 
 MAX_BATCH = 64
+SECONDS_PER_HOUR = 3600
 """Largest batch the OLT's curve was measured at, and so its number of slots."""
 
 
@@ -65,6 +66,9 @@ class OltServer:
 
         self._recent_totals = [0.0] * 5
         """Sums of the five quantities over the report window."""
+
+        self._hourly_totals: dict[int, list[float]] = {}
+        """Hour since the run began -> sums of the same five quantities, for a timetable."""
 
         self._busy_s = self._batch_s = 0.0
         """Seconds spent generating, and those weighted by the batch held."""
@@ -188,20 +192,45 @@ class OltServer:
     def reported_rate(self) -> tuple[float, float]:
         """Return what the OLT tells the PON a query costs, from its last report window.
 
-        Under marginal accounting it is what one more query would add: the slope while the
-        OLT was busy, the net-of-idle rate while it was idle, weighted by how much of the
-        window it spent busy. Under average accounting it is the mean cost per token of the
-        work done, or a lone query's rate when there was none.
+        With the added signal it is what one more query would add: the slope while the OLT
+        was busy, the net-of-idle rate while it was idle, weighted by how much of the window
+        it spent busy. With the share signal it is the mean cost per token of the work done,
+        or a lone query's rate when there was none.
 
         Returns:
             (J per prompt token, J per generated token).
         """
         self._forget_old()
-        busy_s, prompt_tokens, prompt_joules, generated_tokens, generated_joules = (
-            self._recent_totals
-        )
-        if self.prices.accounting == "marginal":
-            window = min(self.report_window_s, self.clock) or self.report_window_s
+        window = min(self.report_window_s, self.clock) or self.report_window_s
+        return self._rate_over(self._recent_totals, window)
+
+    def rate_over_hours(self, hours: list[int]) -> tuple[float, float]:
+        """Return what the OLT would have reported over whole hours, for a timetable.
+
+        Args:
+            hours: Hours since the run began, each counted in full.
+
+        Returns:
+            (J per prompt token, J per generated token).
+        """
+        totals = [0.0] * 5
+        for hour in hours:
+            for index, amount in enumerate(self._hourly_totals.get(hour, ())):
+                totals[index] += amount
+        return self._rate_over(totals, len(hours) * SECONDS_PER_HOUR)
+
+    def _rate_over(self, totals: list[float], window: float) -> tuple[float, float]:
+        """Return the report over a period, from the work done in it.
+
+        Args:
+            totals: The period's busy seconds, prompt tokens and joules, generated tokens and joules.
+            window: The period's length, in seconds.
+
+        Returns:
+            (J per prompt token, J per generated token).
+        """
+        busy_s, prompt_tokens, prompt_joules, generated_tokens, generated_joules = totals
+        if self.prices.signal == "added":
             busy = min(busy_s / window, 1.0)
             idle_rates, busy_rates = self.prices.added_rates(0), self.prices.added_rates(1)
             return tuple(
@@ -219,10 +248,22 @@ class OltServer:
         self.last_broadcast = self.reported_rate()
 
     def _record(self, *work: float) -> None:
-        """Add work done now to the report window."""
+        """Add work done now to the report window and to the hours it ran in."""
         self._recent.append((self.clock, *work))
         for index, amount in enumerate(work):
             self._recent_totals[index] += amount
+        seconds = work[0]
+        start = self.clock - seconds
+        while True:
+            hour = int(start // SECONDS_PER_HOUR)
+            end = min((hour + 1) * SECONDS_PER_HOUR, self.clock)
+            share = (end - start) / seconds if seconds > 0 else 1.0
+            totals = self._hourly_totals.setdefault(hour, [0.0] * 5)
+            for index, amount in enumerate(work):
+                totals[index] += amount * share
+            if seconds <= 0 or end >= self.clock:
+                return
+            start = end
 
     def _forget_old(self) -> None:
         """Drop work older than the report window."""

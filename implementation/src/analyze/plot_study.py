@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/s
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "simulate"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_continuous_batching import compare_run  # noqa: E402
-from energy.three_tier import olt_reference, RESULTS, STUDY  # noqa: E402
+from energy.three_tier import olt_factor, olt_reference, OltCurve, RESULTS, STUDY  # noqa: E402
 from households import Households, load_sessions, TRAFFIC  # noqa: E402
 from summarize_study import at_column, ORDER  # noqa: E402
 
@@ -170,6 +170,11 @@ CAPTIONS = {
         "(a) Energy per generated token on one L4 GPU, from the static batch sweep the "
         "simulator uses and from continuous batching. (b) Energy the simulator predicts "
         "against what the GPU measured, over 15 Poisson runs."
+    ),
+    "batch_energy": (
+        "Energy of a whole batch above idle, per prompt token (a) and per generated token (b) of "
+        "each query, at the whole-system boundary, with the lines whose slopes are what each "
+        "extra query adds."
     ),
     "saving_over_recserve": (
         "Energy saved over RecServe at 0.80 accuracy, with no drift, by number of "
@@ -697,7 +702,7 @@ def plot_batching_validation() -> Path:
         / row["generated_tokens"]
         for level, row in zip(levels, report["fixed"])
     ]
-    line(panels[0], levels, expected, "Static sweep (simulator)", "#2a78d6", "o")
+    line(panels[0], levels, expected, "Static batches", "#2a78d6", "o")
     line(panels[0], levels, measured, "Continuous batching", "#eb6834", "s", linestyle="--")
     panels[0].set_xscale("log")
     panels[0].set_yscale("log")
@@ -716,7 +721,7 @@ def plot_batching_validation() -> Path:
             y=value,
         )
         for series, values in (
-            ("Static sweep (simulator)", expected),
+            ("Static batches", expected),
             ("Continuous batching", measured),
         )
         for level, value in zip(levels, values)
@@ -724,8 +729,8 @@ def plot_batching_validation() -> Path:
 
     style(panels[1], "Energy the GPU spent (kJ)", "Energy the simulator predicts (kJ)", "(b)")
     for key, name, color, marker in (
-        ("gross", "Gross, average accounting", "#2a78d6", "o"),
-        ("net", "Net of idle, marginal", "#eb6834", "s"),
+        ("gross", "Average accounting", "#2a78d6", "o"),
+        ("net", "Marginal accounting", "#eb6834", "s"),
     ):
         pairs = [compare_run(run, report["idle_power_W"])[key] for run in report["poisson"]]
         panels[1].scatter(
@@ -751,7 +756,7 @@ def plot_batching_validation() -> Path:
             for pair in pairs
         ]
     limits = (4, 25)
-    panels[1].plot(limits, limits, color=MUTED, linewidth=0.8, linestyle=":", label="Exact")
+    panels[1].plot(limits, limits, color=MUTED, linewidth=0.8, linestyle=":", label="Perfect match")
     panels[1].fill_between(
         limits,
         [0.9 * x for x in limits],
@@ -759,12 +764,75 @@ def plot_batching_validation() -> Path:
         color=GRID,
         alpha=0.7,
         linewidth=0,
-        label="±10% criterion",
+        label="Within 10%",
     )
     panels[1].set_xlim(*limits)
     panels[1].set_ylim(*limits)
     legend(panels[1])
     return save(figure, "batching_validation", rows)
+
+
+def plot_batch_energy() -> Path:
+    """A whole batch's energy above idle against its size: where the OLT's two rates come from."""
+    curve = OltCurve(olt_reference()["batch_curve"], olt_factor("system", "marginal"))
+    sizes = curve.b
+    figure, panels = new_figure(columns=2)
+    rows = []
+    for axes, panel, token, net_rates, slope, top, idle_offset, busy_offset in (
+        (panels[0], "a", "prompt", curve.pf_net, curve.pf_slope, 1.4, (36, 4), (42, -34)),
+        (panels[1], "b", "generated", curve.dec_net, curve.dec_slope, 4.5, (6, -48), (-10, -44)),
+    ):
+        energies = [size * rate for size, rate in zip(sizes, net_rates)]
+        intercept = statistics.mean(energies) - slope * statistics.mean(sizes)
+        fitted = [intercept + slope * size for size in (sizes[0], sizes[-1])]
+        style(axes, "Batch size", f"Whole batch, per {token} token (J)", f"({panel})")
+        axes.plot(
+            (sizes[0], sizes[-1]),
+            fitted,
+            color="#eb6834",
+            linestyle="--",
+            label="Fitted line",
+            zorder=2,
+        )
+        line(axes, sizes, energies, "Measured sizes", "#2a78d6", "o", linestyle="none", zorder=3)
+        axes.set_xlim(0, 66)
+        axes.set_ylim(0, top)
+        axes.annotate(
+            f"$r_{{\\mathrm{{idle}}}}$: first point, {energies[0]:.3g} J",
+            (sizes[0], energies[0]),
+            xytext=idle_offset,
+            textcoords="offset points",
+            fontsize=8,
+            color=INK,
+            arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.6},
+        )
+        axes.annotate(
+            f"$r_{{\\mathrm{{busy}}}}$: slope, {slope:.3g} J",
+            (32, intercept + slope * 32),
+            xytext=busy_offset,
+            textcoords="offset points",
+            ha="center",
+            fontsize=8,
+            color=INK,
+            arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.6},
+        )
+        legend(axes, "lower right" if panel == "b" else "upper left")
+        rows += [
+            point(
+                panel=panel,
+                series=series,
+                x_name="queries",
+                x=size,
+                y_name=f"batch_J_per_{token}_token_above_idle",
+                y=energy,
+            )
+            for series, points in (
+                ("Measured sizes", zip(sizes, energies)),
+                ("Fitted line", zip((sizes[0], sizes[-1]), fitted)),
+            )
+            for size, energy in points
+        ]
+    return save(figure, "batch_energy", rows)
 
 
 # ==========================================
@@ -965,6 +1033,7 @@ SCENARIO_LABELS = {
     "burst_week": "Mild drift",
     "burst_all": "Strong drift",
     "average": "Average accounting",
+    "report_share": "OLT reports the share",
     "onu0.5": "ONU energy \u00d70.5",
     "olt0.41": "OLT \u00d71.0 (GPU card alone)",
     "olt0.70": "OLT \u00d71.72 (Google's accounting)",
@@ -1255,6 +1324,7 @@ def main() -> int:
         plot_equal_accuracy,
         plot_tiers,
         plot_batching_validation,
+        plot_batch_energy,
         plot_savings_over_recserve,
         plot_broadcast_over_timetable,
         plot_drift,

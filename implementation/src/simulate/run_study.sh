@@ -5,9 +5,11 @@
 #   bursts        the load drifting around the timetable as BurstGPT's does
 #                 (data/load_traces/burstgpt_sessions.json, "drift"): within each
 #                 week only, and with whole weeks departing too               x 3 seeds
-#   sensitivity   one change each: average accounting; an ONU twice as efficient;
-#                 the OLT's conversion at x1.0 (the GPU card alone) or x1.72 (Google's
-#                 own accounting) instead of x2.44                           x 3 seeds
+#   sensitivity   one change each: the same routing charged under average accounting;
+#                 the OLT reporting a query's share instead of what it adds; an ONU
+#                 twice as efficient; the OLT's conversion at x1.0 (the GPU card alone),
+#                 x1.72 (Google's own accounting) or x3.35 (a host drawing as much as
+#                 its card) instead of x2.44                                 x 3 seeds
 # Runs already finished are skipped, so the script can be restarted. While it runs,
 # nothing suspends the laptop: neither idle time (GNOME's and logind's) nor closing
 # the lid.
@@ -35,6 +37,7 @@ jobs() {
     echo "burst_week $seed --burst-sigma 0.235 --burst-hours 3.18"
     echo "burst_all $seed --burst-sigma 0.457 --burst-hours 12.3"
     echo "average $seed --accounting average"
+    echo "report_share $seed --signal share"
     echo "onu0.5 $seed --onu-scale 0.5"
     echo "olt0.41 $seed --olt-scale 0.4094"
     echo "olt0.70 $seed --olt-scale 0.7058"

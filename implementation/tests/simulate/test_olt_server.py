@@ -6,6 +6,8 @@ import random
 
 import pytest
 
+from energy.three_tier import published_rates, published_speeds
+from olt_energy import Energy
 import olt_server
 from olt_server import OltServer
 
@@ -25,6 +27,7 @@ class ConstantPowerPrices:  # pylint: disable=too-few-public-methods
     """A card drawing 10 W whatever the batch: 1 / batch J per generated token."""
 
     accounting = "average"
+    signal = "share"
 
     @staticmethod
     def olt(batch):
@@ -177,6 +180,22 @@ def test_send_broadcast_holds_the_report_until_the_next_send(toy_server):
     assert toy_server.reported_rate()[1] < 1.0
 
 
+def test_reported_rate_with_the_share_signal_is_the_share_above_idle_under_marginal_accounting(
+    marginal_curve,
+):
+    """Charged above idle and busy with 8 queries, the OLT reports their share, not the slope."""
+    energy = Energy(
+        marginal_curve, published_rates("marginal"), "marginal", published_speeds(), "share"
+    )
+    server = OltServer(marginal_curve, energy, report_window_s=10.0)
+    for query in range(8):
+        server.admit(query, 0, 1_000_000)
+    server.advance(100.0)
+    share = marginal_curve.marginal_rates(8)[1]
+    assert server.reported_rate()[1] == pytest.approx(share)
+    assert server.reported_rate()[1] > marginal_curve.dec_slope
+
+
 def test_reported_rate_under_marginal_accounting_is_what_one_more_query_adds(
     marginal_curve, marginal_prices
 ):
@@ -188,6 +207,38 @@ def test_reported_rate_under_marginal_accounting_is_what_one_more_query_adds(
         server.admit(query, 100, 10_000)
     server.advance(120.0)
     assert server.reported_rate() == pytest.approx(marginal_prices.added_rates(1))
+
+
+def test_rate_over_hours_uses_the_same_formula_as_the_report(marginal_curve, marginal_prices):
+    """Busy for half of an hour, the OLT's rate over it is halfway between slope and net rate."""
+    server = OltServer(marginal_curve, marginal_prices)
+    per_sequence = marginal_curve._at(marginal_curve.tps, 1)
+    server.admit(0, 0, 1800.0 * per_sequence)
+    server.advance(3600.0)
+    idle, busy = marginal_prices.added_rates(0), marginal_prices.added_rates(1)
+    assert server.rate_over_hours([0])[1] == pytest.approx((idle[1] + busy[1]) / 2)
+
+
+def test_rate_over_hours_splits_work_across_the_hours_it_spans(marginal_curve, marginal_prices):
+    """A query generating across an hour's end counts its time in each of the two hours."""
+    server = OltServer(marginal_curve, marginal_prices)
+    per_sequence = marginal_curve._at(marginal_curve.tps, 1)
+    server.advance(3000.0)
+    server.admit(0, 0, 1200.0 * per_sequence)  # generates from 3,000 s to 4,200 s
+    server.advance(7200.0)
+    idle, busy = marginal_prices.added_rates(0), marginal_prices.added_rates(1)
+    expected = (1 / 6) * busy[1] + (5 / 6) * idle[1]
+    assert server.rate_over_hours([0])[1] == pytest.approx(expected)
+    assert server.rate_over_hours([1])[1] == pytest.approx(expected)
+    both = (1 / 6) * busy[1] + (5 / 6) * idle[1]
+    assert server.rate_over_hours([0, 1])[1] == pytest.approx(both)
+
+
+def test_rate_over_hours_with_no_work_is_a_lone_query_rate(marginal_curve, marginal_prices):
+    """An hour the OLT spent idle reports the rate of a query that finds it idle."""
+    server = OltServer(marginal_curve, marginal_prices)
+    server.advance(7200.0)
+    assert server.rate_over_hours([1]) == pytest.approx(marginal_prices.added_rates(0))
 
 
 def test_reported_rate_under_marginal_accounting_weights_by_busy_time(

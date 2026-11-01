@@ -34,5 +34,7 @@ def prices(curve):
 
 @pytest.fixture
 def marginal_prices(marginal_curve):
-    """True energy rates for every tier, marginal accounting."""
-    return Energy(marginal_curve, published_rates("marginal"), "marginal", published_speeds())
+    """True energy rates for every tier, marginal accounting, deciding on what a query adds."""
+    return Energy(
+        marginal_curve, published_rates("marginal"), "marginal", published_speeds(), "added"
+    )

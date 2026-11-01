@@ -15,15 +15,25 @@ class Energy:
     """True energy rates per tier; the OLT's depend on its batch.
 
     Average accounting charges a query its share of the batch's energy; marginal charges
-    only what it adds, since the OLT is on and serving other PONs anyway. The phone's and
+    its share above idle, since the OLT is on and serving other PONs anyway. The phone's and
     the ONU's rates arrive already set for the accounting (published_rates).
+
+    The accounting only sets what is charged. What the tiers decide on is the signal: the
+    energy a query adds, which is the same under either accounting, or its share of the
+    batch as the accounting charges it.
     """
 
     # ==========================================
     # Initialization
     # ==========================================
     def __init__(
-        self, curve: OltCurve, pub: dict, accounting: str = "average", speeds: dict | None = None
+        self,
+        curve: OltCurve,
+        pub: dict,
+        accounting: str = "average",
+        speeds: dict | None = None,
+        signal: str = "share",
+        decision_pub: dict | None = None,
     ):
         """Set up the rates.
 
@@ -32,8 +42,12 @@ class Energy:
             pub: The phone's and ONU's rates (energy.three_tier.published_rates).
             accounting: "average" or "marginal".
             speeds: The phone's and ONU's tokens per second (published_speeds), for seconds().
+            signal: What the tiers decide on, "added" or "share".
+            decision_pub: The phone's and ONU's rates the tiers decide on (default: pub).
         """
         self.curve, self.pub, self.speeds, self.accounting = curve, pub, speeds, accounting
+        self.signal = signal
+        self.decision_pub = decision_pub if decision_pub is not None else pub
         self.olt = curve.marginal_rates if accounting == "marginal" else curve.rates
 
     # ==========================================
@@ -50,17 +64,25 @@ class Energy:
             return self.olt(batch)
         return self.pub[tier]["pf"], self.pub[tier]["dec"]
 
+    def decision_rates(self, tier: str) -> tuple[float, float]:
+        """Return what the tiers take the phone or the ONU to cost per token when deciding.
+
+        Args:
+            tier: The tier's name, below the OLT.
+        """
+        return self.decision_pub[tier]["pf"], self.decision_pub[tier]["dec"]
+
     def added_rates(self, running: int) -> tuple[float, float]:
         """Return what one more OLT query costs per token, joining `running` sequences.
 
-        Under marginal accounting that is what the network's energy goes up by: the
-        net-of-idle rate on an idle OLT, the slope of the batch's energy on a busy one.
-        Under average accounting it is the query's share of the batch it makes.
+        With the added signal that is what the network's energy goes up by: the net-of-idle
+        rate on an idle OLT, the slope of the batch's energy on a busy one. With the share
+        signal it is the query's share of the batch it makes.
 
         Args:
             running: Sequences already generating when the query joins.
         """
-        if self.accounting != "marginal":
+        if self.signal != "added":
             return self.olt(running + 1)
         if running == 0:
             return self.curve.pf1_net, self.curve.dec1_net

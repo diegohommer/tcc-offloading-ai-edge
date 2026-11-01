@@ -10,7 +10,8 @@ import pytest
 
 import cascade
 from cascade import believed_olt_rate, calibrate, POLICIES, run, RunSetup, STATIC
-from energy.three_tier import TIERS
+from energy.three_tier import published_rates, published_speeds, TIERS
+from olt_energy import Energy
 
 
 def _answers(questions=40, seed=1):
@@ -99,6 +100,22 @@ def test_run_settles_every_query_exactly_once(setup, policy, timing):
     assert sum(hour["queries"] for hour in per_hour) == len(setup.stream)
 
 
+@pytest.mark.parametrize("policy", ["static_hour", "broadcast", "piggyback"])
+@pytest.mark.parametrize("stats", ["pooled", "household"])
+def test_the_accounting_changes_the_energy_counted_but_not_the_routing(setup, curve, policy, stats):
+    """Deciding on what a query adds, both accountings send every query to the same tier."""
+    above_idle = published_rates("marginal")
+    results = {}
+    for accounting, charged in (("marginal", above_idle), ("average", published_rates("average"))):
+        setup.prices = Energy(curve, charged, accounting, published_speeds(), "added", above_idle)
+        setup.settings = _settings(stats=stats, timing="after-answer")
+        setup.static_rates = calibrate(setup, 0.5)
+        results[accounting] = run(setup, 0.5, policy)[0]
+    for tier in TIERS:
+        assert results["average"][f"final_{tier}"] == results["marginal"][f"final_{tier}"]
+    assert results["average"]["J_per_query"] > results["marginal"]["J_per_query"]
+
+
 def test_run_with_equal_confidences_answers_everything_on_the_phone(setup, prices):
     """When every phone answer is equally confident, none is below the window's quantile."""
     for answers in setup.answers.values():
@@ -140,6 +157,18 @@ def test_run_fixed_chains_measure_no_rate_error(setup):
     """Policies that never route on energy have no belief to compare with what was paid."""
     metrics, _, _ = run(setup, 0.7, "recserve")
     assert math.isnan(metrics["olt_rate_error"])
+
+
+def test_run_observed_cells_hold_the_olt_report_over_each_cell(setup, curve):
+    """Each cell lies between what joining adds and a lone query, the report's two ends."""
+    above_idle = published_rates("marginal")
+    setup.prices = Energy(curve, above_idle, "marginal", published_speeds(), "added", above_idle)
+    _, _, observed = run(setup, 0.7, "recserve")
+    idle, busy = setup.prices.added_rates(0), setup.prices.added_rates(1)
+    assert len(observed) == 24
+    for prompt_rate, generated_rate, _ in observed.values():
+        assert busy[0] <= prompt_rate <= idle[0]
+        assert busy[1] <= generated_rate <= idle[1]
 
 
 def test_run_observed_cells_count_the_olt_answers(setup):
