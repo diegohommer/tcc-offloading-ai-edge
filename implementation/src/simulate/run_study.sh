@@ -38,6 +38,7 @@ jobs() {
     echo "onu0.5 $seed --onu-scale 0.5"
     echo "olt0.41 $seed --olt-scale 0.4094"
     echo "olt0.70 $seed --olt-scale 0.7058"
+    echo "olt1.37 $seed --olt-scale 1.3696"
   done
 }
 [ "${1:-}" = "--list" ] && { jobs; exit 0; }

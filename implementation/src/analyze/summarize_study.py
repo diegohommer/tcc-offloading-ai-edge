@@ -51,6 +51,7 @@ ORDER = [
     "onu0.5",
     "olt0.41",
     "olt0.70",
+    "olt1.37",
 ]
 """Scenarios in run_study.sh's order."""
 

@@ -968,6 +968,7 @@ SCENARIO_LABELS = {
     "onu0.5": "ONU energy \u00d70.5",
     "olt0.41": "OLT \u00d71.0 (GPU card alone)",
     "olt0.70": "OLT \u00d71.72 (Google's accounting)",
+    "olt1.37": "OLT \u00d73.35 (host draws as much as the card)",
 }
 """How each scenario is named in the figures."""
 
