@@ -152,8 +152,8 @@ In this work, we propose the integration of energy awareness into recursive tier
 inference, so that each tier decides whether to answer a query or pass it up from the
 confidence of its answer and also from the energy expected to be spent at each tier. As a
 case study, we simulate a three-tier
-hierarchy over a PON-based access network, formed by the user device, the ONU and the OLT, each running a
-larger model than the one below. We evaluate two energy-aware strategies, one that
+hierarchy over a PON-based access network: the user device, the ONU and the OLT, each running a
+larger model than the one below. We evaluate two energy-aware strategies: one that
 follows a fixed timetable of the OLT's cost and one that takes advantage of the PON
 downstream broadcast, with the OLT periodically announcing its current cost to every
 ONU. Both are compared with escalation by confidence alone at the same target accuracy, in energy per query
@@ -229,9 +229,8 @@ In the opposite direction, the ONUs share the fiber through Time Division Multip
 Access (TDMA) to avoid collisions, with the OLT assigning each ONU strictly synchronized
 time slots through Dynamic Bandwidth Allocation (DBA), so that the ONUs take turns
 bursting data back~\cite{effenberger2007introduction}. The two directions are therefore
-not symmetric, because anything the OLT sends on a port reaches every ONU of that PON at
-once while each ONU
-can only speak in its own slot (Figure~\ref{fig:pon}).
+not symmetric: anything the OLT sends on a port reaches every ONU of that PON at once,
+while each ONU can only speak in its own slot (Figure~\ref{fig:pon}).
 
 \begin{figure}[htb]
   \centering
@@ -341,8 +340,8 @@ per token would hide how verbose each model is~\cite{chung2025mlenergy}. Each qu
 energy is still built from the two phases, as the energy per prompt token in the prefill
 plus the energy per generated token in the decode (Chapter~\ref{chap:methodology}).
 
-What a figure means depends on its measurement boundary, the set of components whose
-energy it counts, and a boundary can cover only the accelerator or also the host's CPU
+What a figure means depends on its measurement boundary: the set of components whose
+energy it counts. A boundary can cover only the accelerator or also the host's CPU
 and memory, the idle machines kept ready for peaks, and the overhead of the building
 itself. That
 overhead is measured by the Power Usage Effectiveness (PUE), the ratio between a
@@ -367,8 +366,8 @@ fixed-size blocks, so more queries fit in a batch. Its throughput is 2--4 times 
 Orca and FasterTransformer at the same latency~\cite{kwon2023vllm}. We refer to this way
 of serving as continuous batching.
 
-Because a query's energy then depends on the other queries in its batch, there is more
-than one way to charge it. The GPU reports only the energy of the whole batch, and the
+Because a query's energy then depends on the other queries in its batch, and because the
+hardware draws power even at rest, there is more than one way to charge it. The GPU reports only the energy of the whole batch, and the
 rules used in practice to split it among queries can differ substantially from a fair
 split, with static and continuous batching alike~\cite{luo2026request}. Average
 accounting charges each query its share of the batch's energy, while marginal accounting
@@ -412,7 +411,7 @@ of $\beta$, and each query is still decided on its confidence alone.
 
 \label{sec:pakpahan}
 \citeonline{pakpahan2026continuum} bring this hierarchy into the access network, mapping
-four tiers onto a TWDM-PON (Figure~\ref{fig:pakpahan}). Tiny LLMs run on user devices,
+four tiers onto a TWDM-PON (Figure~\ref{fig:pakpahan}): tiny LLMs on user devices,
 quantized models on ONUs equipped with an accelerator, models of 7 to 13 billion
 parameters on OLTs at the central office, and larger models in the cloud. Most of their
 work is on the network side, where a Software-Defined Networking (SDN) controller gives
@@ -543,8 +542,7 @@ the policies run, and Section~\ref{sec:evaluation} how they are compared.
 \section{Overview of the Case Study}
 \label{sec:overview}
 
-The case study places a three-tier hierarchy on a PON-based access network, formed by the
-device on which the query is typed, the ONU in the home and the OLT at the operator's
+The case study places a three-tier hierarchy on a PON-based access network: the device on which the query is typed, the ONU in the home and the OLT at the operator's
 central office, which serves every household connected to its PON ports and shares its model
 among them. As in earlier tiered
 architectures~\cite{wu2025recserve,pakpahan2026continuum}, each tier runs a larger model
@@ -743,9 +741,8 @@ The energy rates of the user device and the ONU do not change, and answers carry
 the same way, so the rates a tier hears on past answers stay valid. The OLT's rate, however,
 depends on how many other queries the OLT is serving at the moment
 (Section~\ref{sec:olt-energy}), and a household hears it on its own answers only a few
-times a day, so we compare two strategies for giving every tier a current estimate of it.
-Until a tier has an estimate, it runs every query that reaches it and escalates by
-confidence alone.
+times a day. Until a tier has an estimate, it runs every query that reaches it and
+escalates by confidence alone, and we compare two strategies for giving it one:
 
 \begin{itemize}
   \item \textbf{Timetable.} One OLT rate per hour of the day, for weekdays and for
@@ -767,25 +764,27 @@ confidence alone.
 \section{Energy Model}
 \label{sec:energy-model}
 
-The energy of every tier is meant to be counted at the same boundary, all the energy the
+The energy of every tier is meant to be counted at the same boundary: all the energy the
 system draws to answer a query, as in Google's full-stack accounting of a
-prompt~\cite{elsworth2025measuring}. The phone's source covers only its chip, so the user device is
-counted below this boundary (Section~\ref{sec:limitations}). The ONU's source, by contrast,
-measures it directly at the plug of the whole board, and the OLT's GPU card is brought to
-it with Google's shares of a prompt's energy and the industry's average PUE, which add an
-estimate of the rest of its server, the spare machines kept ready for peaks and the
-building that houses them. The energy of
-carrying queries and answers over the PON and the home network is left out, as are
-relaying the OLT's broadcast inside the home and manufacturing the hardware. Since the
-sources of the three tiers count different parts of their systems
-(Section~\ref{sec:measurements}), Table~\ref{tab:energy} lists what each one measures and
-how close it comes to this boundary, together with the energy each tier
-spends on a query of its mean prompt and answer lengths on GSM8K. Each figure is given
-under the two accountings of Section~\ref{sec:accounting}, average accounting, which
-charges everything a tier draws while it answers, and marginal accounting, which charges
-only what it draws above its idle power. The OLT's energy
-depends on how many queries it batches, so the table gives its range, which
-Sections~\ref{sec:olt-energy} and~\ref{sec:accounting} explain.
+prompt~\cite{elsworth2025measuring}. The phone's source covers only its chip, so the user
+device is counted below this boundary (Section~\ref{sec:limitations}). The ONU's source, by
+contrast, measures it directly at the plug of the whole board, and the OLT's GPU card is
+brought to it with Google's shares of a prompt's energy and the industry's average PUE,
+which add an estimate of the rest of its server, the spare machines kept ready for peaks
+and the building that houses them. The energy of carrying queries and answers over the PON
+and the home network is left out, as are relaying the OLT's broadcast inside the home and
+manufacturing the hardware.
+
+The energy of a query also depends on how it is charged, and we consider two ways of
+charging it (Section~\ref{sec:measurements}): average accounting, which counts everything a
+tier draws while it answers, and marginal accounting, which counts only what it draws above idle, so
+nothing is charged for keeping the hardware on. The study uses marginal accounting because
+a routing decision does not change the power the hardware draws at rest, and repeats its
+main runs under average accounting as a sensitivity analysis. Table~\ref{tab:energy} lists
+what each source measures and how close it comes to the boundary, together with the energy
+each tier spends on a query of its mean prompt and answer lengths on GSM8K under both
+accountings. The OLT's energy depends on how many queries it batches, so the table gives its
+range, which Sections~\ref{sec:olt-energy} and~\ref{sec:accounting} explain.
 
 \begin{table}[htb]
   \centering
@@ -852,7 +851,7 @@ the ONU $243 + 122 \times 0.028 = 246$~J, or $91 + 122 \times 0.010 = 92$~J abov
   and \citeonline{tummalapalli2026edge}}
 \end{table}
 
-\subsection{OLT}
+\subsection{Measuring the OLT}
 \label{sec:olt-energy}
 
 We measured the energy of the OLT ourselves, running its model, Qwen2.5-7B in 8-bit, on
@@ -928,7 +927,7 @@ energy per token was within 2.9\% of the static batch of that size
 whether or not its queries started together. Then we sent the GPU 15 runs of about five
 minutes with requests arriving at random times, three aimed at each average of 1, 2, 4, 8
 and 16 requests in flight, and gave the simulator the same requests at the same times.
-Under both ways of charging energy described in Section~\ref{sec:accounting}, it
+Under both ways of charging energy described in Section~\ref{sec:energy-model}, it
 predicted the GPU's energy within 3\% (Figure~\ref{fig:batching}b) and underestimated its
 mean latency by less than 2.5\%.
 
@@ -944,38 +943,27 @@ The GPU is only part of what the OLT's server consumes, so we multiply its energ
 2.44 to cover the rest. In Google's measurements, the accelerators account for 58\% of a
 prompt's energy, the server's CPU and memory for 24\%, the spare machines kept ready for
 peaks for 10\% and the building for 8\%~\cite{elsworth2025measuring}. Counting the first
-three, a server spends $(58+24+10)/58 = 1.586$ times the energy of its accelerators, and
+three, the computing equipment spends $(58+24+10)/58 = 1.586$ times the energy of its
+accelerators, and
 using the industry's average PUE of 1.54~\cite{uptime2025survey} in place of Google's
-building overhead gives $1.586 \times 1.54 = 2.44$. The same factor is used under both ways
-of charging energy (Section~\ref{sec:accounting}), and Chapter~\ref{chap:results} repeats the
-main runs with the GPU card alone, a factor of 1.0, and with Google's own accounting of a
-prompt, $100/58 = 1.72$, to show how much the results depend on it.
+building overhead gives $1.586 \times 1.54 = 2.44$. Chapter~\ref{chap:results} repeats the
+main runs with three other factors: 1.0 for the GPU card alone, $100/58 = 1.72$ for Google's
+own accounting of a prompt, and $(58+58+10)/58 \times 1.54 = 3.35$ for a host that draws as
+much as its card, to show how much the results depend on it.
 
-\subsection{Average and Marginal Accounting}
+\subsection{The OLT's Cost per Query}
 \label{sec:accounting}
 
-Since the OLT batches, the energy of a query depends on how it is charged
-(Section~\ref{sec:measurements}). Under average accounting, a query pays its share of its
-batch's energy, read off the sweep at the batch's size, while under marginal accounting
-nothing is charged for keeping the hardware on, and a batch's energy above idle,
-measured at its size, is shared equally among its queries. For a query of the OLT's mean
-lengths in our runs on GSM8K, 122 prompt and 251 generated tokens, the rates of
-Table~\ref{tab:olt-sweep} make a query alone cost
-$(0.033 \times 122 + 2.464 \times 251) \times 2.44 \approx 1{,}520$~J under average accounting
-and, with the rates above idle, $(0.018 \times 122 + 1.365 \times 251) \times 2.44 \approx
-840$~J under marginal accounting, while one in a batch of 64 costs about 33~J and 18~J
-respectively.
+The sweep and the conversion give what a query costs at the OLT. Under both accountings it
+pays its share of its batch's energy, read from Table~\ref{tab:olt-sweep} at the batch's size. A query of the OLT's mean lengths on GSM8K, 122 prompt and 251 generated
+tokens, costs $(0.033 \times 122 + 2.464 \times 251) \times 2.44 \approx 1{,}520$~J alone
+under average accounting and $(0.018 \times 122 + 1.365 \times 251) \times 2.44 \approx
+840$~J under marginal accounting. In a batch of 64, the same query costs about 33~J and
+18~J. The conversion of 2.44 is the same under both accountings, so the marginal figure
+still includes Google's share for the spare machines kept ready for peaks, which a single
+query does not add, a simplification discussed in Section~\ref{sec:limitations}.
 
-Marginal accounting also removes the ONU's idle draw, which lowers its energy per query
-from 246~J to 92~J, while the phone is charged the same under both, since its source gives
-no idle power. The OLT keeps the factor of 2.44 under both accountings, so its marginal
-figure still includes Google's share for the spare machines kept ready for peaks, which a
-single query does not add, a simplification discussed in Section~\ref{sec:limitations}.
-The study uses marginal accounting, because a routing decision does not change the power
-the hardware draws at rest, and repeats its main runs under average accounting as a
-sensitivity analysis.
-
-The OLT also reports its cost to the tiers below, under the same accounting as the
+The OLT reports its cost to the tiers below under the same accounting as the
 energy it is charged. Under average accounting it reports the mean cost per token of its
 work over its last 5 minutes, its estimate of what a query joining it would be charged.
 Under marginal accounting it reports what one more query
@@ -1000,8 +988,8 @@ its last 5 minutes it spent busy.
 The OLT sends this cost on its broadcast and also stamps it on the answers it returns,
 and the timetable holds the same quantity for each hour of a weekday and of a weekend
 day. Under the broadcast strategy the tiers take the OLT's cost only from the broadcast,
-since a household relying on its own answers alone would hear it only a few times a day,
-and Section~\ref{sec:evaluation} tests this variant to show what the broadcast adds.
+and Section~\ref{sec:evaluation} tests relying on the answers alone, to show what the
+broadcast adds.
 
 \section{Simulation}
 \label{sec:simulation}
@@ -1168,8 +1156,8 @@ which models answer); the baselines: confidence-only
 escalation, cited as the rule of \citeonline{wu2025recserve}, with and without the ONU,
 and each tier answering alone; the piggyback ablation, where a household hears the
 OLT's cost only on its own answers and blends each one it hears into its estimate with a
-weight of 0.3; the metrics; the sensitivity runs (the OLT's conversion at $\times 1.0$
-and $\times 1.72$, an ONU twice as efficient, average accounting) and the sweep of
+weight of 0.3; the metrics; the sensitivity runs (the OLT's conversion at $\times 1.0$,
+$\times 1.72$ and $\times 3.35$, an ONU twice as efficient, average accounting) and the sweep of
 $\delta$.}
 
 %==============================================================================
@@ -1208,7 +1196,9 @@ centers~\cite{uptime2025survey}, so it does not necessarily reflect the server a
 building of a real OLT, whose central office may be more or less efficient. The same factor
 is kept under marginal accounting, where Google's share for spare machines would not
 strictly apply. Chapter~\ref{chap:results} shows how the results change with the GPU card
-alone, a factor of 1.0, and with Google's own accounting of a prompt, a factor of 1.72.
+alone, a factor of 1.0, with Google's own accounting of a prompt, a factor of 1.72, and
+with a host that draws as much as its card, a factor of 3.35, since a server with a single
+small card shares its host among fewer accelerator watts and could exceed 2.44.
 \todo{point to the section with these sensitivity runs once it is written.} The GPU itself
 is an L4 held at its power limit of 72~W at every batch size, so a larger batch costs it a lower clock rather than more power. A larger GPU
 that is below its limit with a single query would draw more as its batch grows and gain
