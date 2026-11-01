@@ -600,13 +600,14 @@ first decides whether to run it or to send it straight to a cheaper one above, b
 the energy each one is expected to spend. A tier that runs the query applies the quantile
 test described in Section~\ref{sec:llm-background}~\cite{wu2025recserve}, returning its
 answer to the user if the answer's confidence reaches the $\beta$-quantile of the
-confidences the tier has seen recently and escalating the query otherwise, to the next
-tier or, if that saves energy, to one further up.
+confidences the tier has seen recently and escalating the query otherwise. The query then
+goes to the next tier, or further up if that saves energy.
 
 Both choices rest on $C_j$, the expected energy spent from the moment a query is handed
 to tier $j$ until some tier returns an answer, assuming that every tier from $j$ up decides
-as the policy does. If tier $j$ forwards the query on arrival, it sends it to $k^*$, the
-tier above it with the lowest $C_k$, so the query costs $C_{k^*}$. Otherwise tier $j$ runs
+as the policy does. If tier $j$ forwards the query on arrival, it sends it to
+$k^*$, the tier $k$ above it with the lowest expected energy $C_k$, so the query costs
+$C_{k^*}$. Otherwise tier $j$ runs
 it, and with probability $p_j$ its answer fails the test and the query moves on to tier
 $n$, which is $k^*$ unless the margin $\delta$ introduced below keeps it at $j+1$, so
 \begin{equation}
@@ -637,21 +638,36 @@ a fixed threshold or a separate scoring model~\cite{chen2024frugalgpt}. A test w
 is not fixed in advance would need $p_j$ to be learned from the answers instead, which is
 why Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$.
 
-The policy uses $C_j$ at two points of Algorithm~\ref{alg:decision}. The first is when a
-query arrives at a tier $i < J$ (lines 2 to 6), where running the query costs $E_i$ and,
-if its answer escalates, the expected energy of the cheapest tier above. The tier
-therefore forwards the query, without running it, to the tier $k^*$ above it with the
-lowest $C_k$ if
+The policy uses $C_j$ for two decisions in Algorithm~\ref{alg:decision}, both made when a
+query arrives at a tier $i < J$. The first is whether to run the query at all (lines 2
+to 6). Running it costs $E_i$ and, if its answer escalates, the expected energy of the
+cheapest tier above, so the tier forwards the query to $k^*$ without running it if
 \begin{equation}
   C_{k^*} < (1-\delta)\left(E_i + p_i \, C_{k^*}\right),
   \label{eq:on-arrival}
 \end{equation}
-and runs it otherwise. The second is where the query goes if its answer escalates
-(lines 7 and 8), which the tier settles at the same time because it depends only on the
-same costs, and the query then goes to tier $i+1$, or skips directly to $k^*$ if
-$C_{k^*} < (1-\delta)\,C_{i+1}$. A tier that cannot decide yet keeps the default of
+and runs it otherwise. The second is where the query goes if the tier runs it and its
+answer fails the test (lines 7 and 8), which is tier $i+1$, or directly $k^*$ if
+$C_{k^*} < (1-\delta)\,C_{i+1}$. Forwarding therefore spends nothing at tier $i$, while
+escalating comes after the tier has spent $E_i$. A tier that cannot decide yet keeps the default of
 line 1, so it escalates by confidence alone. The top tier has nowhere to send a query and
 always returns its answer.
+
+The margin $\delta$ keeps a tier from moving a query for a negligible saving, and it also
+sets how far the policy departs from escalation by confidence alone. With $\delta = 0$, a
+tier takes any route that is expected to cost less. With $\delta = 1$, neither
+inequality can hold, since every energy is positive, so each tier runs every query that
+reaches it and passes on only those whose answers fail the test, which is confidence-only
+escalation exactly. The main results use $\delta = 0$, and Chapter~\ref{chap:results}
+sweeps the values in between.
+
+With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} becomes
+$(1-\beta)\,C_{k^*} < E_i$, or $C_{k^*} < E_i / (1-\beta)$. Running the query costs
+$E_i$, and it avoids the cost $C_{k^*}$ of the tiers above only when the answer passes
+the test, which happens with probability $1-\beta$. A tier therefore runs a query only
+if the cheapest tier above it costs at least $E_i/(1-\beta)$. This threshold rises with
+$\beta$, because the more often a tier escalates, the more often the energy it spends
+running a query is wasted.
 
 \begin{algorithm}[htb]
   \caption{The decision of tier $i < J$ on a query $q$}
@@ -678,22 +694,6 @@ always returns its answer.
   }
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
-
-The margin $\delta$ keeps a tier from moving a query for a negligible saving, and it also
-sets how far the policy departs from escalation by confidence alone. With $\delta = 0$, a
-tier takes any route that is expected to cost less. With $\delta = 1$, neither
-inequality can hold, since every energy is positive, so each tier runs every query that
-reaches it and passes on only those whose answers fail the test, which is confidence-only
-escalation exactly. The main results use $\delta = 0$, and Chapter~\ref{chap:results}
-sweeps the values in between.
-
-With $\delta = 0$ and $p_i = \beta$, Equation~\eqref{eq:on-arrival} becomes
-$(1-\beta)\,C_{k^*} < E_i$, or $C_{k^*} < E_i / (1-\beta)$. Running the query costs
-$E_i$, and it avoids the cost $C_{k^*}$ of the tiers above only when the answer passes
-the test, which happens with probability $1-\beta$. A tier therefore runs a query only
-if the cheapest tier above it costs at least $E_i/(1-\beta)$. This threshold rises with
-$\beta$, because the more often a tier escalates, the more often the energy it spends
-running a query is wasted.
 
 Table~\ref{tab:example} follows one query through Algorithm~\ref{alg:decision} with
 round, hypothetical energies of the same order as those of
@@ -722,29 +722,30 @@ idle, which is why the tiers need a current estimate of the OLT's cost.
   \legend{Source: The author}
 \end{table}
 
-To compute $C_k$, a tier also needs the average answer length of every tier above it.
-Each tier ships with the mean answer length of its model, measured on the benchmark
-before deployment, and then moves this average 5\% of the way toward the length $L$ of
-each new answer, $\bar{L} \leftarrow 0.95\,\bar{L} + 0.05\,L$, so that each older answer
-counts 5\% less than the one after it and the last 20 answers carry about two thirds of the
-weight. Since an answer
-travels back to the user through every tier below the one that produced it, it can
-carry, at no extra cost, the energy rates and the average answer length of every tier
-that ran the query, and each tier below replaces the answer lengths it holds with the
-ones it hears. The OLT's average covers every household it serves, while those of the
-user device and the ONU cover only their own household, so households with different models would each
-hold their own values for these two tiers. Until a tier has an estimate of the OLT's
-energy rate, it runs every query that reaches it and escalates by confidence alone. For
-the quantile test, each device also keeps its own window of its last 1,000 confidences,
-within the 300 to 1,000 that \citeonline{wu2025recserve} find sufficient, started from
-the confidences of its model on the benchmark so that the threshold is right from the
-first query.
+To compute $C_k$, a tier needs three things from the other tiers: their average answer
+lengths, the energy rates of the user device and the ONU, and the current energy rate of
+the OLT. The quantile test needs nothing from them, since each device keeps its own window
+of its last 1,000 confidences, within the 300 to 1,000 that \citeonline{wu2025recserve}
+find sufficient, started from the confidences of its model on the benchmark so that the
+threshold works from the first query.
 
-The energy rates of the user device and the ONU do not change, so the rates a tier hears
-on past answers stay valid. The OLT's rate, however, depends on how many other queries
-the OLT is serving at the moment (Section~\ref{sec:energy-model}), and a household hears
-it on its own answers only a few times a day, so we compare two strategies for giving
-every tier a current estimate of it.
+For the answer lengths, each tier ships with the mean answer length of its model, measured
+on the benchmark before deployment, and then moves this average 5\% of the way toward the
+length $L$ of each new answer, $\bar{L} \leftarrow 0.95\,\bar{L} + 0.05\,L$, so that each
+older answer counts 5\% less than the one after it and the last 20 answers carry about two
+thirds of the weight. Since an answer travels back to the user through every tier below the
+one that produced it, it can carry these averages at no extra cost, and each tier below
+replaces the lengths it holds with the ones it hears. The OLT's average covers every
+household it serves, while those of the user device and the ONU cover only their own
+household.
+
+The energy rates of the user device and the ONU do not change, and answers carry them in
+the same way, so the rates a tier hears on past answers stay valid. The OLT's rate, however,
+depends on how many other queries the OLT is serving at the moment
+(Section~\ref{sec:energy-model}), and a household hears it on its own answers only a few
+times a day, so we compare two strategies for giving every tier a current estimate of it.
+Until a tier has an estimate, it runs every query that reaches it and escalates by
+confidence alone.
 
 \begin{itemize}
   \item \textbf{Timetable.} One OLT rate per hour of the day, for weekdays and for
