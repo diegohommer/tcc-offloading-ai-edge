@@ -98,9 +98,9 @@ plt.rcParams.update(
 # and marker. Some slots sit below 3:1 against white, so every series also has a legend
 # entry and a marker of its own, and reads in greyscale print too.
 SERIES = {
-    "recserve": ("RecServe", "#2a78d6", "o"),
-    "static_hour": ("Timetable", "#1baf7a", "^"),
-    "broadcast": ("Broadcast", "#eda100", "D"),
+    "recserve": ("Confidence only", "#2a78d6", "o"),
+    "static_hour": ("WattLadder, timetable", "#1baf7a", "^"),
+    "broadcast": ("WattLadder, broadcast", "#eda100", "D"),
 }
 SCENARIOS = {
     "main": ("No drift", "#2a78d6", "o"),

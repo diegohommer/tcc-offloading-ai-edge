@@ -32,12 +32,12 @@
 %------------------------------------------------------------------------------
 % Document metadata
 %------------------------------------------------------------------------------
-\title{Energy-Aware Recursive Offloading for LLM Inference: A Case Study on
+\title{WattLadder: Energy-Aware Recursive Offloading for LLM Inference over
   Passive Optical Networks}
 
-% Title of the Portuguese abstract (Resumo)
-\translatedtitle{Offloading Recursivo Sens\'ivel \`a Energia para Infer\^encia de
-  LLMs: Um Estudo de Caso em Redes \'Opticas Passivas}
+% Title of the Portuguese abstract (Resumo); the name stays untranslated
+\translatedtitle{WattLadder: Offloading Recursivo Sens\'ivel \`a Energia para
+  Infer\^encia de LLMs em Redes \'Opticas Passivas}
 
 \author{Amorim}{Diego Hommerding}
 
@@ -150,10 +150,11 @@ decision.
 
 In this work, we propose the integration of energy awareness into recursive tiered LLM
 inference, so that each tier decides whether to answer a query or pass it up from the
-confidence of its answer and also from the energy expected to be spent at each tier. As a
-case study, we simulate a three-tier
+confidence of its answer and also from the energy expected to be spent at each tier, and
+we call the resulting policy WattLadder. As a case study, we simulate a three-tier
 hierarchy over a PON-based access network: the user device, the ONU and the OLT, each running a
-larger model than the one below. We evaluate two energy-aware strategies: one that
+larger model than the one below. We evaluate WattLadder with two strategies for learning the
+OLT's cost: one that
 follows a fixed timetable of the OLT's cost and one that takes advantage of the PON
 downstream broadcast, with the OLT periodically announcing its current cost to every
 ONU. Both are compared with escalation by confidence alone at the same target accuracy, in energy per query
@@ -163,9 +164,9 @@ chapter is settled.}
 
 The contributions of this work are:
 \begin{itemize}
-  \item The integration of energy awareness into recursive tiered LLM inference, in which the
-  decision to answer a query or pass it up takes into account the energy spent at each
-  tier, and not only confidence;
+  \item The integration of energy awareness into recursive tiered LLM inference, through
+  WattLadder, a policy in which the decision to answer a query or pass it up takes into
+  account the energy spent at each tier, and not only confidence;
   \item An energy model of the user device, the ONU and the OLT counted toward a single
   measurement boundary, with the OLT's energy measured by us on a Graphics Processing Unit (GPU);
   \item An offloading strategy that uses the PON downstream broadcast to share the
@@ -177,8 +178,8 @@ The contributions of this work are:
 
 The remainder of this work is organized as follows. Chapter~\ref{chap:review}
 presents the background on PONs, LLM inference and how its energy is measured, and
-reviews the work on tiered LLM inference and on energy-aware LLM serving. Chapter~\ref{chap:methodology} describes the energy-aware
-policy, the energy model, and the simulation setup. Chapter~\ref{chap:results}
+reviews the work on tiered LLM inference and on energy-aware LLM serving. Chapter~\ref{chap:methodology} describes
+WattLadder, the energy model, and the simulation setup. Chapter~\ref{chap:results}
 presents the results of the case study, and Chapter~\ref{chap:conclusion} concludes the
 work. \todo{revise the descriptions of Chapters~\ref{chap:methodology} and~\ref{chap:results} once they are written.}
 
@@ -496,7 +497,7 @@ The first is that energy has no part in recursive tiered inference, since in Rec
 and in the architecture of \citeonline{pakpahan2026continuum} every tier decides from the
 confidence of its answer alone. PerLLM and CR$^2$ do bring energy into the decision, but
 over two tiers and with a single decision per query, made before any model has
-answered~\cite{yang2024perllm,xue2026cr2}. In this work, each tier keeps a confidence
+answered~\cite{yang2024perllm,xue2026cr2}. In WattLadder, each tier keeps a confidence
 test and also weighs the energy it expects to be spent until the query is answered,
 both when a query arrives and when an answer escalates, so a query can skip a tier whose answer is likely to cost more than it saves.
 
@@ -534,8 +535,8 @@ escalation by confidence alone, a timetable and each tier answering every query 
 
 This chapter describes how energy is brought into recursive tiered inference and how the
 case study evaluates the result. Section~\ref{sec:overview} presents the three tiers of
-the case study and the task they answer, and Section~\ref{sec:policy} the decision each
-tier makes when a query reaches it. Section~\ref{sec:energy-model} then gives the energy
+the case study and the task they answer, and Section~\ref{sec:policy} presents WattLadder,
+the decision each tier makes when a query reaches it. Section~\ref{sec:energy-model} then gives the energy
 model on which that decision rests, Section~\ref{sec:simulation} the simulation in which
 the policies run, and Section~\ref{sec:evaluation} how they are compared.
 
@@ -560,7 +561,7 @@ whose tiers end at the OLT. The second is that a cloud tier was beyond the resou
 this work, since the size ranges we follow put it at more than 70 billion parameters, a
 model we could not run on every test problem and measure against batch size without a
 cluster of GPUs. Leaving it out does not
-restrict the policy, whose decision rule does not depend on the number of tiers
+restrict WattLadder, whose decision rule does not depend on the number of tiers
 (Section~\ref{sec:policy}), so a cloud tier would only add one more level to its
 recursion. The OLT is therefore the top tier, and its accuracy of 91.7\% caps what a policy
 can deliver, except on the 2.0\% of problems (26 of 1,319) that a lower tier gets right and
@@ -593,7 +594,7 @@ their tokens (Section~\ref{sec:llm-background}), instead of running the models a
 \section{Energy-Aware Recursive Offloading}
 \label{sec:policy}
 
-In the policy we propose, a query starts at the user device, and each tier it reaches
+In WattLadder, the policy we propose, a query starts at the user device, and each tier it reaches
 first decides whether to run it or to send it straight to a cheaper one above, based on
 the energy each one is expected to spend. A tier that runs the query applies the quantile
 test described in Section~\ref{sec:llm-background}~\cite{wu2025recserve}, returning its
@@ -603,7 +604,7 @@ goes to the next tier, or further up if that saves energy.
 
 Both choices rest on $C_j$, the expected energy spent from the moment a query is handed
 to tier $j$ until some tier returns an answer, assuming that every tier from $j$ up decides
-as the policy does. If tier $j$ forwards the query on arrival, it sends it to
+as WattLadder does. If tier $j$ forwards the query on arrival, it sends it to
 $k^*$, the tier $k$ above it with the lowest expected energy $C_k$, so the query costs
 $C_{k^*}$. Otherwise tier $j$ runs
 it, and with probability $p_j$ its answer fails the test and the query moves on to tier
@@ -629,7 +630,7 @@ reduces to $C_j = E_j + p_j \, C_{j+1}$, a simpler form that would charge a tier
 climbs that the tiers above it would skip.
 
 The quantile test escalates about a fraction $\beta$ of a tier's answers by construction
-(Section~\ref{sec:llm-background}), so the policy sets $p_j = \beta$. The policy does not
+(Section~\ref{sec:llm-background}), so WattLadder sets $p_j = \beta$. The policy does not
 depend on this test, though, because Equation~\eqref{eq:cost-to-completion} needs only
 the probability that a tier escalates, and so it works with any escalation test, such as
 a fixed threshold or a separate scoring model~\cite{chen2024frugalgpt}. A test whose rate
@@ -652,7 +653,7 @@ line 1, so it escalates by confidence alone. The top tier has nowhere to send a 
 always returns its answer.
 
 The margin $\delta$ keeps a tier from moving a query for a negligible saving, and it also
-sets how far the policy departs from escalation by confidence alone. With $\delta = 0$, a
+sets how far WattLadder departs from escalation by confidence alone. With $\delta = 0$, a
 tier takes any route that is expected to cost less. With $\delta = 1$, neither
 inequality can hold, since every energy is positive, so each tier runs every query that
 reaches it and passes on only those whose answers fail the test, which is confidence-only
@@ -1237,7 +1238,7 @@ assume that the hardware stays on when it is idle, so an operator that powers do
 would save idle energy that our figures do not count.
 
 The simulation reproduces how the OLT's cost changes over time, following the load of the
-households and its drift, and holds the other quantities the policy reads still. The user
+households and its drift, and holds the other quantities WattLadder reads still. The user
 device and the ONU spend a fixed energy per token, while a real phone or gateway spends more
 or less depending on its temperature, its battery and whatever else it is running. Every
 household has the same three models and asks questions drawn at random from the same
@@ -1247,7 +1248,7 @@ recorded for its question alone, even though its prompt carries the conversation
 
 WildChat's users chose to try a free chatbot, and a user there is an address and a browser
 rather than a household, so they may not chat as a typical household does. Its pauses also
-run from one answer to the next, so they include the time the next answer took. The policy
+run from one answer to the next, so they include the time the next answer took. WattLadder
 uses one mean answer length per model, although in our runs on GSM8K the standard deviation
 of a single answer's length is 30 to 40\% of that mean, and the length could be predicted
 from the query itself~\cite{zheng2023response}. The results therefore show what the policy
