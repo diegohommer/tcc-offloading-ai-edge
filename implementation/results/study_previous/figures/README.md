@@ -11,7 +11,13 @@ point has seeds; a cell that does not apply is empty.
 
 `traffic_week.pdf` · `traffic_week.png` · `data/traffic_week.csv`
 
-Messages sent per hour over one test week by 10,000 households, in each traffic scenario. With no drift every day follows BurstGPT's average day. Mild drift adds BurstGPT's variation within each week, surges of about 25% lasting about 3 hours; strong drift adds all of its variation around the average day, swings of about 45 to 60% lasting about 12 hours, whole weeks included.
+Messages sent per hour over one test week by 10,000 households, in each traffic scenario. With no drift every day follows WildChat's average day in local time. Mild drift adds BurstGPT's variation within each week, surges of about 25% lasting about 3 hours; strong drift adds all of its variation around the average day, swings of about 45 to 60% lasting about 12 hours, whole weeks included.
+
+## traffic_profiles
+
+`traffic_profiles.pdf` · `traffic_profiles.png` · `data/traffic_profiles.csv`
+
+Share of the day's conversations opening in each hour, local time, on weekdays (a) and weekends (b): WildChat's users worldwide (the study's traffic), its Brazilian users, and BurstGPT's enterprise and campus users.
 
 ## beta_knob
 
@@ -60,3 +66,21 @@ Energy per query at 0.80 accuracy with no, mild and strong drift, 10,000 househo
 `bandwidth.pdf` · `bandwidth.png` · `data/bandwidth.csv`
 
 (a) RecServe's communication burden, the bytes carried between tiers, against accuracy. (b) Change in energy and in communication burden against RecServe at 0.80 accuracy. No drift, 10,000 households; bars: range over three seeds.
+
+## sensitivity
+
+`sensitivity.pdf` · `sensitivity.png` · `data/sensitivity.csv`
+
+Energy the broadcast saves over RecServe and over the timetable at 0.80 accuracy, 10,000 households, in every scenario of the study. Bars: range over three seeds.
+
+## delta
+
+`delta.pdf` · `delta.png` · `data/delta.csv`
+
+(a) Energy the broadcast saves over RecServe at 0.80 accuracy against the margin $\delta$, from 0 (the policy as evaluated) to 1, where no query is moved and the policy is RecServe. (b) Its communication burden and mean latency against RecServe's. No drift, 10,000 households; bars: range over three seeds (one at $\delta = 1$).
+
+## energy_split
+
+`energy_split.pdf` · `energy_split.png` · `data/energy_split.csv`
+
+Energy per query spent at each tier at 0.80 accuracy, under RecServe and under the broadcast with $\delta = 0.3$ and $\delta = 0$. No drift, 10,000 households, seed 7.

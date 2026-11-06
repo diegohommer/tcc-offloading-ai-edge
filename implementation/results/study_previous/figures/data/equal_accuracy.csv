@@ -1,34 +1,34 @@
 panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
-,main,10000,Phone alone,accuracy,0.472977,J_per_query,15.689,15.6873,15.6903
-,main,10000,ONU alone,accuracy,0.687947,J_per_query,90.4608,90.457,90.4683
-,main,10000,OLT alone,accuracy,0.916816,J_per_query,170.092,169.608,170.835
-,main,10000,RecServe,accuracy,0.504151,J_per_query,32.2479,32.2263,32.2829
-,main,10000,RecServe,accuracy,0.551453,J_per_query,61.932,61.8988,61.96
-,main,10000,RecServe,accuracy,0.594039,J_per_query,99.3314,99.25,99.4936
-,main,10000,RecServe,accuracy,0.638792,J_per_query,136.089,136.019,136.177
-,main,10000,RecServe,accuracy,0.687152,J_per_query,168.537,168.358,168.809
-,main,10000,RecServe,accuracy,0.739232,J_per_query,196.871,196.566,197.365
-,main,10000,RecServe,accuracy,0.788885,J_per_query,220.839,220.535,221.408
-,main,10000,RecServe,accuracy,0.831187,J_per_query,241.304,240.962,241.975
-,main,10000,RecServe,accuracy,0.872207,J_per_query,259.58,259.187,260.271
-,main,10000,RecServe at 0.80,accuracy,0.8,J_per_query,226.216,225.857,226.847
-,main,10000,Timetable,accuracy,0.504151,J_per_query,32.2479,32.2263,32.2829
-,main,10000,Timetable,accuracy,0.551453,J_per_query,61.932,61.8988,61.96
-,main,10000,Timetable,accuracy,0.594039,J_per_query,99.3314,99.25,99.4936
-,main,10000,Timetable,accuracy,0.763463,J_per_query,122.199,121.971,122.405
-,main,10000,Timetable,accuracy,0.823509,J_per_query,144.301,143.922,144.818
-,main,10000,Timetable,accuracy,0.887094,J_per_query,154.864,154.447,155.384
-,main,10000,Timetable,accuracy,0.90865,J_per_query,163.17,162.615,163.852
-,main,10000,Timetable,accuracy,0.915015,J_per_query,168.1,166.459,170.429
-,main,10000,Timetable,accuracy,0.916779,J_per_query,170.034,169.587,170.796
-,main,10000,Timetable at 0.80,accuracy,0.8,J_per_query,135.65,135.222,136.098
-,main,10000,Broadcast,accuracy,0.504151,J_per_query,32.2479,32.2263,32.2829
-,main,10000,Broadcast,accuracy,0.551453,J_per_query,61.932,61.8988,61.96
-,main,10000,Broadcast,accuracy,0.616335,J_per_query,100.454,100.196,100.647
-,main,10000,Broadcast,accuracy,0.794444,J_per_query,128.474,128.12,129.046
-,main,10000,Broadcast,accuracy,0.863885,J_per_query,145.546,144.955,146.034
-,main,10000,Broadcast,accuracy,0.893199,J_per_query,155.65,154.907,156.187
-,main,10000,Broadcast,accuracy,0.908027,J_per_query,163.222,162.718,163.886
-,main,10000,Broadcast,accuracy,0.914354,J_per_query,167.552,166.784,168.452
-,main,10000,Broadcast,accuracy,0.916791,J_per_query,170.058,169.575,170.795
-,main,10000,Broadcast at 0.80,accuracy,0.8,J_per_query,129.844,129.251,130.456
+,main,10000,Phone alone,accuracy,0.472725,J_per_query,50.9268,49.3955,52.4458
+,main,10000,ONU alone,accuracy,0.687754,J_per_query,90.4632,90.4541,90.4699
+,main,10000,OLT alone,accuracy,0.916822,J_per_query,282.929,279.751,286.23
+,main,10000,RecServe,accuracy,0.509398,J_per_query,83.6267,81.9791,85.1513
+,main,10000,RecServe,accuracy,0.565492,J_per_query,130.824,129.266,132.301
+,main,10000,RecServe,accuracy,0.607165,J_per_query,174.688,172.949,176.288
+,main,10000,RecServe,accuracy,0.650707,J_per_query,222.305,220.131,224.395
+,main,10000,RecServe,accuracy,0.697459,J_per_query,265.85,263.264,268.479
+,main,10000,RecServe,accuracy,0.748057,J_per_query,307.571,304.651,310.677
+,main,10000,RecServe,accuracy,0.795956,J_per_query,343.942,340.72,347.065
+,main,10000,RecServe,accuracy,0.832976,J_per_query,376.425,372.907,379.876
+,main,10000,RecServe,accuracy,0.873116,J_per_query,406.887,402.653,411.038
+,main,10000,RecServe at 0.80,accuracy,0.8,J_per_query,347.491,344.19,350.656
+,main,10000,Timetable,accuracy,0.51949,J_per_query,74.2002,73.2943,74.8909
+,main,10000,Timetable,accuracy,0.571697,J_per_query,124.457,123.414,125.212
+,main,10000,Timetable,accuracy,0.612186,J_per_query,170.07,168.657,171.287
+,main,10000,Timetable,accuracy,0.655853,J_per_query,217.819,215.904,219.474
+,main,10000,Timetable,accuracy,0.723829,J_per_query,250.635,248.548,253.081
+,main,10000,Timetable,accuracy,0.845913,J_per_query,260.294,257.88,262.818
+,main,10000,Timetable,accuracy,0.896356,J_per_query,268.953,266.186,271.542
+,main,10000,Timetable,accuracy,0.909049,J_per_query,276.652,273.876,279.552
+,main,10000,Timetable,accuracy,0.915255,J_per_query,281.692,278.791,284.689
+,main,10000,Timetable at 0.80,accuracy,0.8,J_per_query,256.661,254.353,259.21
+,main,10000,Broadcast,accuracy,0.519537,J_per_query,74.213,73.3103,74.8983
+,main,10000,Broadcast,accuracy,0.571846,J_per_query,124.477,123.455,125.229
+,main,10000,Broadcast,accuracy,0.612417,J_per_query,170.107,168.65,171.326
+,main,10000,Broadcast,accuracy,0.679456,J_per_query,216.242,214.559,217.719
+,main,10000,Broadcast,accuracy,0.807779,J_per_query,241.853,240.089,243.521
+,main,10000,Broadcast,accuracy,0.874403,J_per_query,257.028,254.828,259.207
+,main,10000,Broadcast,accuracy,0.89842,J_per_query,268.474,265.855,270.912
+,main,10000,Broadcast,accuracy,0.909434,J_per_query,276.497,273.72,279.235
+,main,10000,Broadcast,accuracy,0.915396,J_per_query,281.546,278.679,284.508
+,main,10000,Broadcast at 0.80,accuracy,0.8,J_per_query,240.297,238.704,241.328

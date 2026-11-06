@@ -1,0 +1,61 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+a,main,10000,RecServe,beta,0.1,accuracy,0.504151,0.503742,0.504365
+a,main,10000,RecServe,beta,0.2,accuracy,0.551453,0.550974,0.551774
+a,main,10000,RecServe,beta,0.3,accuracy,0.594039,0.593611,0.594291
+a,main,10000,RecServe,beta,0.4,accuracy,0.638792,0.638249,0.639078
+a,main,10000,RecServe,beta,0.5,accuracy,0.687152,0.686817,0.687375
+a,main,10000,RecServe,beta,0.6,accuracy,0.739232,0.738973,0.739512
+a,main,10000,RecServe,beta,0.7,accuracy,0.788885,0.788769,0.789008
+a,main,10000,RecServe,beta,0.8,accuracy,0.831187,0.831102,0.831236
+a,main,10000,RecServe,beta,0.9,accuracy,0.872207,0.871959,0.872371
+b,main,10000,RecServe,beta,0.1,J_per_query,32.2479,32.2263,32.2829
+b,main,10000,RecServe,beta,0.2,J_per_query,61.932,61.8988,61.96
+b,main,10000,RecServe,beta,0.3,J_per_query,99.3314,99.25,99.4936
+b,main,10000,RecServe,beta,0.4,J_per_query,136.089,136.019,136.177
+b,main,10000,RecServe,beta,0.5,J_per_query,168.537,168.358,168.809
+b,main,10000,RecServe,beta,0.6,J_per_query,196.871,196.566,197.365
+b,main,10000,RecServe,beta,0.7,J_per_query,220.839,220.535,221.408
+b,main,10000,RecServe,beta,0.8,J_per_query,241.304,240.962,241.975
+b,main,10000,RecServe,beta,0.9,J_per_query,259.58,259.187,260.271
+a,main,10000,Timetable,beta,0.1,accuracy,0.504151,0.503742,0.504365
+a,main,10000,Timetable,beta,0.2,accuracy,0.551453,0.550974,0.551774
+a,main,10000,Timetable,beta,0.3,accuracy,0.594039,0.593611,0.594291
+a,main,10000,Timetable,beta,0.4,accuracy,0.763463,0.762753,0.764148
+a,main,10000,Timetable,beta,0.5,accuracy,0.823509,0.822812,0.823997
+a,main,10000,Timetable,beta,0.6,accuracy,0.887094,0.886346,0.888032
+a,main,10000,Timetable,beta,0.7,accuracy,0.90865,0.908517,0.908839
+a,main,10000,Timetable,beta,0.8,accuracy,0.915015,0.913949,0.916591
+a,main,10000,Timetable,beta,0.9,accuracy,0.916779,0.916618,0.916925
+b,main,10000,Timetable,beta,0.1,J_per_query,32.2479,32.2263,32.2829
+b,main,10000,Timetable,beta,0.2,J_per_query,61.932,61.8988,61.96
+b,main,10000,Timetable,beta,0.3,J_per_query,99.3314,99.25,99.4936
+b,main,10000,Timetable,beta,0.4,J_per_query,122.199,121.971,122.405
+b,main,10000,Timetable,beta,0.5,J_per_query,144.301,143.922,144.818
+b,main,10000,Timetable,beta,0.6,J_per_query,154.864,154.447,155.384
+b,main,10000,Timetable,beta,0.7,J_per_query,163.17,162.615,163.852
+b,main,10000,Timetable,beta,0.8,J_per_query,168.1,166.459,170.429
+b,main,10000,Timetable,beta,0.9,J_per_query,170.034,169.587,170.796
+a,main,10000,Broadcast,beta,0.1,accuracy,0.504151,0.503742,0.504365
+a,main,10000,Broadcast,beta,0.2,accuracy,0.551453,0.550974,0.551774
+a,main,10000,Broadcast,beta,0.3,accuracy,0.616335,0.609853,0.622399
+a,main,10000,Broadcast,beta,0.4,accuracy,0.794444,0.793205,0.795884
+a,main,10000,Broadcast,beta,0.5,accuracy,0.863885,0.863024,0.865042
+a,main,10000,Broadcast,beta,0.6,accuracy,0.893199,0.892791,0.893836
+a,main,10000,Broadcast,beta,0.7,accuracy,0.908027,0.908005,0.908057
+a,main,10000,Broadcast,beta,0.8,accuracy,0.914354,0.913633,0.915694
+a,main,10000,Broadcast,beta,0.9,accuracy,0.916791,0.916664,0.916923
+b,main,10000,Broadcast,beta,0.1,J_per_query,32.2479,32.2263,32.2829
+b,main,10000,Broadcast,beta,0.2,J_per_query,61.932,61.8988,61.96
+b,main,10000,Broadcast,beta,0.3,J_per_query,100.454,100.196,100.647
+b,main,10000,Broadcast,beta,0.4,J_per_query,128.474,128.12,129.046
+b,main,10000,Broadcast,beta,0.5,J_per_query,145.546,144.955,146.034
+b,main,10000,Broadcast,beta,0.6,J_per_query,155.65,154.907,156.187
+b,main,10000,Broadcast,beta,0.7,J_per_query,163.222,162.718,163.886
+b,main,10000,Broadcast,beta,0.8,J_per_query,167.552,166.784,168.452
+b,main,10000,Broadcast,beta,0.9,J_per_query,170.058,169.575,170.795
+a,main,10000,Phone alone,,,accuracy,0.472977,0.472696,0.473322
+b,main,10000,Phone alone,,,J_per_query,15.689,15.6873,15.6903
+a,main,10000,ONU alone,,,accuracy,0.687947,0.687423,0.688279
+b,main,10000,ONU alone,,,J_per_query,90.4608,90.457,90.4683
+a,main,10000,OLT alone,,,accuracy,0.916816,0.916687,0.916954
+b,main,10000,OLT alone,,,J_per_query,170.092,169.608,170.835
