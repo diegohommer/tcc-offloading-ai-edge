@@ -1,0 +1,35 @@
+% The simulator's modules and what passes between them (Section 3.4).
+\begin{tikzpicture}[
+    font=\small,
+    module/.style={draw, thick, rounded corners=2pt, minimum width=2.8cm, minimum height=1.05cm,
+                   align=center, fill=white},
+    core/.style={module, fill=black!10},
+    data/.style={draw, dashed, minimum width=2.8cm, minimum height=0.85cm, align=center, font=\footnotesize},
+    flow/.style={-{Stealth[length=2mm]}, thick},
+    both/.style={{Stealth[length=2mm]}-{Stealth[length=2mm]}, thick},
+    label/.style={font=\footnotesize, align=center, fill=white, inner sep=1.5pt}
+  ]
+
+  % the core, with the two modules it asks
+  \node[core] (loop) at (6.3,0) {Event loop};
+  \node[module] (routing) at (6.3,3.0) {Routing policy};
+  \node[module] (olt) at (6.3,-3.0) {OLT server};
+
+  % where the traffic and the answers come from
+  \node[module] (traffic) at (0,0) {Traffic generator};
+  \node[data] (sessions) at (0,3.0) {WildChat, BurstGPT,\\GSM8K questions};
+  \node[module] (energy) at (0,-3.0) {Energy model};
+
+  % what comes out, and what is replayed
+  \node[data] (answers) at (11.9,3.0) {Recorded answers};
+  \node[data] (results) at (11.9,0) {Energy, accuracy,\\latency, bytes};
+
+  \draw[flow, dashed] (sessions) -- (traffic);
+  \draw[flow] (traffic) -- node[font=\footnotesize, above=1pt] {messages} (loop);
+  \draw[both] (loop) -- node[font=\footnotesize, align=right, left=2pt] {what the tier knows,\\where the query goes} (routing);
+  \draw[both] (loop) -- node[font=\footnotesize, align=left, right=2pt] {queries, answers,\\the OLT's report} (olt);
+  \draw[flow] (energy) -- node[font=\footnotesize, align=center, below=1pt] {batch rates, speeds,\\$r_{\text{idle}}$, $r_{\text{busy}}$} (olt);
+  \draw[flow] (energy) -- node[font=\footnotesize, sloped, above=1pt, pos=0.5] {rates and speeds} (loop);
+  \draw[flow, dashed] (answers) -- (loop);
+  \draw[flow, dashed] (loop) -- (results);
+\end{tikzpicture}

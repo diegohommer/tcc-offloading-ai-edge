@@ -648,8 +648,9 @@ cheapest tier above, so the tier forwards the query to $k^*$ without running it 
   \label{eq:on-arrival}
 \end{equation}
 and runs it otherwise. The second is where the query goes if the tier runs it and its
-answer fails the test (lines 7 and 8), which is tier $i+1$, or directly $k^*$ if
-$C_{k^*} < (1-\delta)\,C_{i+1}$. Forwarding therefore spends nothing at tier $i$, while
+answer fails the test (lines 11 to 14), which is tier $i+1$, or directly $k^*$ if
+$C_{k^*} < (1-\delta)\,C_{i+1}$, with the energy rates the tier holds once it has finished the
+query. Forwarding therefore spends nothing at tier $i$, while
 escalating comes after the tier has spent $E_i$. A tier that cannot decide yet keeps the default of
 line 1, so it escalates by confidence alone. The top tier has nowhere to send a query and
 always returns its answer.
@@ -684,14 +685,17 @@ running a query is wasted.
     \If(\tcp*[f]{Equation~\eqref{eq:on-arrival}}){$C_{k^*} < (1-\delta)\,(E_i + p_i\,C_{k^*})$}{
       forward $q$ to tier $k^*$ and stop\;
     }
-    \If{$C_{k^*} < (1-\delta)\,C_{i+1}$}{
-      $\mathit{next} \leftarrow k^*$\;
-    }
   }
   run $q$, giving the answer $a$ with confidence $s$\;
   $\theta \leftarrow$ the $\beta$-quantile of $W_i$, then add $s$ to $W_i$\;
   \If{$s \geq \theta$}{
     return $a$ to the user and stop\;
+  }
+  \If{tier $i$ can decide}{
+    compute $C_k$ and $k^*$ again, with the energy rates it holds now\;
+    \If{$C_{k^*} < (1-\delta)\,C_{i+1}$}{
+      $\mathit{next} \leftarrow k^*$\;
+    }
   }
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
@@ -750,12 +754,15 @@ escalates by confidence alone, and we compare two strategies for giving it one:
 \begin{itemize}
   \item \textbf{Timetable.} One OLT rate per hour of the day, for weekdays and for
   weekends, learned over a month of calibration and shipped to every device in advance.
-  The OLT's cost depends on how many queries the policy sends it, so a timetable learned
-  from confidence-only escalation, which sends it fewer, would make the OLT look dearer
-  than it is under the policy. We therefore learn a first timetable from confidence-only
-  escalation and then replay the calibration month three times with the policy using the
-  latest timetable, recording the OLT's cost again each time, so that the timetable
-  settles on the load the policy itself produces.
+  The OLT's cost depends on how many queries the policy sends it, and a timetable that
+  makes the OLT look expensive keeps it idle, which makes it expensive in turn, so where
+  the timetable settles depends on where it starts. We start every hour at the OLT's cost
+  when it is busy ($r_{\text{busy}}$, Section~\ref{sec:accounting}), the lowest it can
+  report, and replay the calibration month with the policy using the latest timetable,
+  recording the OLT's cost again each time, until the timetable changes by less than 1\%
+  on average, or after at most 12 replays. Rising from below, it settles on the cheapest
+  timetable that agrees with the load it produces, which in our runs also spends the
+  least energy for a given accuracy.
   \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream the energy one
   more query would add to its consumption, averaged over its last 5 minutes
   (Section~\ref{sec:accounting}). The 5 minutes smooth out the batches that form and
@@ -1014,9 +1021,9 @@ at small batches and, for such a query, stays between about 4 and 6~J above four
 \end{figure}
 
 The OLT sends its report on the broadcast and also stamps it on the
-answers it returns. The timetable holds the same report, computed with Equation~\eqref{eq:olt-report} over each hour
-of a weekday and of a weekend day in the calibration month instead of over the last 5 minutes,
-so the two strategies differ only in whether the report is live or learned in advance. Under the broadcast strategy
+answers it returns. The timetable holds the same report, computed with Equation~\eqref{eq:olt-report} over all the
+hours of the calibration month that share a day type and an hour of the day, such as its 20
+weekday hours from 14:00 to 15:00, instead of over the last 5 minutes, so the two strategies differ only in whether the report is live or learned in advance. Under the broadcast strategy
 the tiers take the OLT's cost only from the broadcast, and Section~\ref{sec:evaluation} tests
 relying on the answers alone, to show what the broadcast adds. It also tests the OLT reporting
 the share instead, as the mean cost per token of its work over its last 5 minutes.
@@ -1030,98 +1037,143 @@ each household sends a message until some tier returns its answer. It runs no mo
 since every answer is the one recorded for its question (Section~\ref{sec:overview}), and
 it charges each tier the energy of Section~\ref{sec:energy-model}, so what it reproduces
 is when the queries arrive, where each policy sends them and how busy the OLT is when
-they get there. It keeps the messages waiting to be sent in time order and takes them
-one at a time. Before each message, it brings the OLT up to that moment, admitting the
-queries that have reached it, finishing the answers it completes and, under the broadcast
-strategy, sending the broadcast every 10 seconds. The message then climbs from the user
-device as Algorithm~\ref{alg:decision} decides, and a query that leaves for the OLT joins
-it after the seconds the tiers below spent on it. When an answer reaches the user, the
-next message of its conversation, if there is one, is queued a pause later. The code of
-the simulator and of the measurements is
-public\footnote{\url{https://github.com/diegohommer/tcc-offloading-ai-edge}}. Each run
-covers a test month of 28 days, preceded by a calibration month
+they get there.
+
+The simulator has five modules, the solid boxes of Figure~\ref{fig:simulator}, while the dashed
+boxes are its data. The traffic generator builds the
+messages the households send, from the data and the drift of
+Sections~\ref{sec:traffic} and~\ref{sec:drift}. The event loop is its core, and since the simulator
+is event-driven, the clock jumps from one event to the next, in time
+order: a message being sent, a query reaching a tier, or a tier finishing a query, the OLT
+included. A query reaches a tier only after the seconds the tiers below spent on it, and each
+tier then asks the routing policy, which applies Algorithm~\ref{alg:decision} with what the tier
+knows at that moment. A query that reaches the OLT joins the batch held by the OLT server,
+which charges the query's energy (Section~\ref{sec:serving}) and computes the OLT's report, also
+sending it every 10 seconds under the broadcast strategy. When an answer reaches the user, the event loop records the query's
+energy, accuracy, latency and bytes, and queues the next message of its conversation, if there
+is one, a pause later. Throughout, the energy model gives the event loop and the OLT server the
+energy rates and speeds they need (Section~\ref{sec:energy-model}).
+
+\begin{figure}[htb]
+  \centering
+  \caption{Modules of the simulator and what passes between them}
+  \label{fig:simulator}
+  \vspace{6pt}
+  \input{figures/simulator_modules}
+  \legend{Source: The author}
+\end{figure}
+
+Each run covers a test month of 28 days, preceded by a calibration month
 of the same length in which the timetable is learned, and every run is repeated with
 three random seeds, which change the households' conversations and the questions they
-ask.
+ask. The code of the simulator and of the measurements is
+public\footnote{\url{https://github.com/diegohommer/tcc-offloading-ai-edge}}.
 
-\subsection{Households and Their Traffic}
+\subsection{Generating the Traffic}
 \label{sec:traffic}
 
-Each run connects between 1,000 and 20,000 households to the OLT, one ONU each, which
-takes at least 8 to 157 PON ports, since G-PON allows at most 128 ONUs per port. We assume
-that a
-household has, on average, one person who uses an LLM every week, because we found no
-measured figure for Brazilian households, and the sweep from 1,000 to 20,000 households shows
-how much the load matters. That person sends 3.6 messages a day, the average
-of ChatGPT's users in July 2025, when more than 700 million people used it every week
-and together sent more than 2.5 billion messages a day~\cite{chatterji2025how}. Some
-people chat far more than others, and in WildChat, the logs of a free ChatGPT service
-used around the world~\cite{zhao2024wildchat}, we found that the busiest 10\% of the
-users who came back over two weeks or more send 59\% of the messages. Each user in the simulation is therefore given
-a random level of activity, chosen so that the busiest 10\% send the same share while
-the average stays at 3.6 messages a day.
+How people chat comes from the WildChat-4.8M release of WildChat, the logs of a free ChatGPT
+service used around the world~\cite{zhao2024wildchat}. WildChat records its times on the server's
+clock, and its users are spread over the world, so each user's times are first moved to their
+own time zone, and every simulated household then shares that one local day, as the households of
+one OLT share a time zone. Users who sent a single message are left out, because WildChat's sudden
+traffic spikes are made mostly of them, which suggests automated traffic rather than people, and
+so are the messages whose time zone cannot be told. The simulator then builds the traffic of a run
+in the following order:
 
-People send their messages in conversations, a few questions a couple of minutes apart,
-and the simulation copies from WildChat when conversations start, how many messages
-they hold and how long people pause between them. WildChat records its times on the
-server's clock, and its users are spread over the world, so each user's times are first
-moved to their own time zone. Every simulated household then shares that one local day,
-as the households of one OLT share a time zone. A conversation is a run of messages less than 10 minutes apart, and it holds
-3.2 messages on average. Conversations start about seven times more often at the busiest
-hour of a weekday, in the afternoon, than at the quietest, before dawn, and a weekend day
-has three quarters of the conversations of a weekday. Users who sent a single message
-are left out, because WildChat's sudden traffic spikes are made mostly of them, which
-suggests automated traffic rather than people, and so are the messages whose time zone
-cannot be told. Every message asks a question drawn at random from GSM8K, and a follow-up is sent
-a pause after the previous answer arrives, with a prompt that carries the earlier turns
-of its conversation, so prompts grow longer as a conversation goes on.
+\begin{enumerate}
+  \item \textbf{Households.} Each run connects 1,000, 2,000, 5,000, 10,000 or 20,000 households to
+  the OLT, one ONU each, which needs at least 8 PON ports for the smallest and 157 for the largest,
+  since G-PON allows at most 128 ONUs per port. Each household has a number of people who use an LLM
+  every week, drawn from a Poisson distribution with a mean of one. We assume this mean because we
+  found no measured figure for Brazilian households, and since the load depends on the number of
+  users, the sweep of households also shows what a different mean would do.
+  \item \textbf{User activity.} Some people chat far more than others, and in WildChat we found that
+  the busiest 10\% of the users active in two or more different weeks send 59\% of the messages.
+  Each simulated user is therefore given a random level of activity from a log-normal distribution
+  with a mean of one and a log standard deviation of 1.5, so that the busiest 10\% send the same
+  share. A typical user then sends about a third of the average, while the busiest 1\% send more
+  than ten times the average. A household's share
+  of the traffic is the sum of its users' levels divided by the sum over all households, so the
+  levels decide only who sends the messages and not how many there are.
+  \item \textbf{Conversations per day.} A user sends 3.6 messages a day on average, the mean of
+  ChatGPT's users in July 2025, when more than 700 million users a week together sent more than 2.5
+  billion messages a day~\cite{chatterji2025how}. People send them in conversations, and a
+  conversation, one chat as WildChat records it, holds 2.4 messages on average, so 10,000 users
+  open about $10{,}000 \times 3.6 / 2.4 = 15{,}000$ conversations a day.
+  \item \textbf{Conversations per hour.} These conversations follow WildChat's average day, in which
+  the busiest hour of a weekday, in the afternoon, sees about five times as many conversations start
+  as the quietest, before dawn, and a weekend day has about five sixths of the conversations of a
+  weekday. The expected number of conversations in each hour is multiplied by the drift of
+  Section~\ref{sec:drift}, and how many of them start in that hour is then drawn from a Poisson
+  distribution with this mean, each at a random moment within the hour.
+  \item \textbf{Length and pauses.} Each conversation draws its number of messages at random from
+  those of WildChat's conversations, of which 63\% hold a single message, even with the users who
+  sent only one left out, and one in ten holds five or more. Each follow-up then draws its own pause from the time between two answers of the same
+  WildChat conversation, about two minutes at the median, since WildChat records only when an
+  answer arrived.
+  \item \textbf{Sender and questions.} Each conversation goes to one household, drawn in
+  proportion to the households' shares, and each of its messages asks a question drawn at random from
+  GSM8K.
+  \item \textbf{Follow-ups and context.} During the run, a follow-up is sent a pause after the previous answer
+  arrives, with a prompt that carries the earlier turns of its conversation, so prompts grow longer
+  as a conversation goes on.
+\end{enumerate}
 
-\subsection{Drift in the Load}
+Drawing the conversation starts from a Poisson process with an hourly rate follows the way
+sessions started by users are usually modeled~\cite{paxson1995wide}. BurstGPT's
+conversation log, from one regional GPT service that an organization such as a company or a
+campus built on Azure OpenAI~\cite{wang2025burstgpt}, supports it, since we found that in its
+busy hours the time between conversation starts varies as much as in a Poisson process, with a
+coefficient of variation of 0.98 against 1, while its messages arrive in clusters mostly because
+each conversation sends several within a few minutes.
+
+\subsection{Adding Drift to the Traffic}
 \label{sec:drift}
 
 If every day followed the average day, a timetable would predict the OLT's load almost
-perfectly, since only the randomness of the arrivals would move an hour away from it.
+perfectly, since an hour's load would differ from it only by the randomness of the arrivals.
 Real load drifts, with hours that run busier or quieter than usual, so the study has
 three scenarios, of which Figure~\ref{fig:traffic-week} shows one test week. With no
 drift every day follows the average day, while with mild and strong drift the load of
 all households is multiplied by a common busyness factor that changes slowly over time.
-The factor's mean is one, so the month carries the same number of messages, but an hour
+The factor's mean is one, so the month carries the same number of messages on average, but an hour
 can run, for example, a quarter busier than the timetable says and stay so for some
 hours before returning to it.
 
-Both scenarios follow the way the arrivals of people's requests are usually modeled. In
-wide-area networks, packets arrive in bursts at every time scale, but the sessions that
-users start, such as remote logins and file transfers, are well modeled as a Poisson
-process whose rate is fixed within each hour~\cite{paxson1995wide}. The conversations of
-our households are sessions of this kind, so with no drift they are drawn from a Poisson
-process that follows the timetable. The rate of the same hour still changes from one day
-to the next, and in call centers, whose arrivals have been studied most closely, the
-count of a period varies more than a Poisson process with a fixed timetable allows and
-busy periods persist. The usual model there multiplies the timetable by a random
+Such drift is well documented in call centers, whose arrivals have been studied most closely,
+since the count of a period there varies more than a Poisson process with a fixed timetable
+allows and busy periods persist. The usual model there multiplies the timetable by a random
 busyness factor whose mean is one and draws the arrivals from a Poisson process at that
-rate~\cite{ibrahim2012modeling}. The factor can be one for the whole day or change from
+rate~\cite{ibrahim2012modeling}. The factor can stay the same for the whole day or change from
 one period to the next while depending on the periods before it, and ours is of the
-second kind. Our measurement below finds the same excess over Poisson counts in
-BurstGPT's conversations, whose arrivals also grow more or less bursty within
-twenty-minute windows during working hours~\cite{wang2025burstgpt}.
+second kind. Our measurement below finds the same excess in
+BurstGPT, whose hourly counts of conversation starts vary around their timetable more than
+the randomness of the arrivals alone explains, and whose authors find the burstiness of its requests changing from
+one twenty-minute window to the next during working hours~\cite{wang2025burstgpt}.
 
 In our simulation the factor $F_k$
-changes every hour $k$ and is shared by every household of the OLT, which makes the arrivals a
-log-Gaussian Cox process~\cite{moller1998log}, and it is built from a number $z_k$ that
-keeps part of the previous hour's departure and receives a small random kick each hour,
+changes every hour $k$ and is shared by every household of the OLT, which makes the
+conversation starts a log-Gaussian Cox process~\cite{moller1998log}, and it is built from a
+number $z_k$ that keeps part of the previous hour's departure and receives a random kick
+each hour,
 as
 \begin{equation}
   z_k = \phi\, z_{k-1} + \varepsilon_k, \qquad F_k = e^{\,z_k - \sigma^2/2},
   \label{eq:drift}
 \end{equation}
-where $\phi = e^{-1/\tau}$ is the share of the departure that the next hour keeps,
-$\varepsilon_k$ is the random kick, drawn from a normal distribution with a mean of zero,
-$\sigma$ sets how large a typical departure is and $\tau$, in hours, how long it lasts.
+where $\phi$ is the share of the departure that the next hour keeps and $\varepsilon_k$ is the
+random kick, drawn from a normal distribution with a mean of zero and a standard deviation of
+$\sigma\sqrt{1-\phi^2}$. The kicks then keep the standard deviation of $z_k$ at $\sigma$, which
+sets how large a typical departure is, while $\tau$, in hours, sets how long it lasts.
+Setting $\phi = e^{-1/\tau}$ makes $\phi^{\tau} = e^{-1}$, so a departure that receives no
+new kicks shrinks to about 37\% of its size after $\tau$ hours.
 The exponential turns $z_k$ into a multiplier, so that equal steps up and down in $z_k$
 make the load equally many times higher or lower, and subtracting $\sigma^2/2$ keeps the
 mean of $F_k$ at one. With the values of the mild drift given below, for example,
-$\phi = 0.73$, so an hour with $z_k = 0.30$, whose load is 31\% above the timetable, is
-followed by hours 21\% and then 14\% above it if no new kick arrives.
+$\phi = 0.68$, so an hour with $z_k = 0.30$, whose load is 31\% above the timetable, is
+followed by hours with $z_k = 0.20$ and $0.14$, 18\% and then 11\% above it, if no new kick
+arrives.
 
 \begin{figure}[htb]
   \centering
@@ -1133,72 +1185,139 @@ followed by hours 21\% and then 14\% above it if no new kick arrives.
 \end{figure}
 
 We measured $\sigma$ and $\tau$ on BurstGPT, whose more than 3,000 users reached the
-models through one regional provider of the kind that serves companies and
-campuses~\cite{wang2025burstgpt}. These users share one provider, which brings them
+models through one regional GPT service, built on Azure OpenAI by a company or
+campus~\cite{wang2025burstgpt}. These users share one service, which brings them
 closer to the users of a single OLT than WildChat's, who are spread over the world and do
 not share one access network. They reach the models from work or study rather than from
 home, though, so their load may drift differently from that of a household. We used the
-conversation log of one file of BurstGPT's second release, which spans 110 of the 213
-days the dataset covers, and compared the number of conversations that start in each
-hour with its timetable, the mean count of that hour over the days
-of the same type, weekday or weekend. The size $\sigma$ comes from how far the hours
-depart from the timetable once the randomness of counting alone is subtracted, since a
-Poisson count with a random rate varies by the variance of its rate plus its
-mean~\cite{cox1955some}, and only the hours with at least 20 conversations expected are
-used, because in quieter hours the departure is mostly counting noise. The duration
+conversation log of one file of BurstGPT's second release, which spans 110 consecutive
+days, and took each of its sessions as one conversation, as its authors
+count them and as WildChat's records are. We then compared the number of conversations $N$
+that start in each hour with its timetable $\lambda$, the mean count of that hour over the
+days of the same type, weekday or weekend. The drift is the factor $F_k$ of
+Equation~\eqref{eq:drift} that would produce these counts. The variance of a Poisson count
+with a random rate is the variance of its rate plus its mean~\cite{ibrahim2012modeling}, and since
+$F_k$ is log-normal with a mean of one, its variance is $e^{\sigma^2} - 1$, which gives
+\begin{equation}
+  \mathrm{E}\!\left[\left(\frac{N}{\lambda} - 1\right)^{2}\right] = \left(e^{\sigma^2} - 1\right) + \frac{1}{\lambda},
+  \label{eq:drift-size}
+\end{equation}
+so $\sigma$ follows from the mean squared departure of the hours once $1/\lambda$, the part
+that the randomness of counting alone explains, is subtracted. Only the hours with at least
+20 conversations expected are used, because in quieter hours the departure is mostly
+counting noise. The duration
 $\tau$ comes from how closely the departures of consecutive hours follow each other, and
 the code that computes both is part of the public repository.
 
-For the mild drift, each day's timetable is first multiplied by the level of its week,
-the mean ratio between the day's count and its timetable over the seven days around it,
-so that a week that runs high or low as a whole counts as part of the timetable and not
-as drift. This gives $\sigma = 0.235$ and $\tau = 3.2$ hours, so a typical hour runs about
-26\% busier or 21\% quieter than its timetable, since $e^{0.235} = 1.26$, and such a
-departure lasts about three hours. Without the weekly level, $\sigma = 0.457$ and
-$\tau = 12.3$ hours, so a typical hour departs by 58\% or 37\% for about 12 hours, which
-gives the strong drift. Most of this larger departure comes from BurstGPT's traffic
-growing over those 110 days, which the simulation turns into random swings of about 12
-hours, so the strong drift is best read as a demanding case. The calibration month
+BurstGPT's traffic also grew over those 110 days, so its late weeks run above the timetable
+in almost every hour and its early weeks below it, and measured as it is, this slow growth
+would count as drift. For the mild drift, each day's timetable is therefore first scaled by
+how busy its week was, the mean ratio between the counts and the timetable over the seven
+days around it. In a week whose days run 30\% above the timetable, for example, an hour that
+usually has 50 conversations is expected to have 65, so a count of 70 is a departure of 8\%
+rather than 40\%, and only the surprises within each week count as drift. This gives
+$\sigma = 0.253$ and $\tau = 2.6$ hours, so a typical hour, with $z_k$
+one $\sigma$ above or below zero, runs about 25\% busier or quieter than its timetable, since
+$e^{0.253 - 0.032} = 1.25$ and $e^{-0.253 - 0.032} = 0.75$, and such a departure lasts about
+two and a half hours. Without this weekly scaling, $\sigma = 0.477$ and $\tau = 9.4$ hours, so a
+typical hour runs about 44\% busier or 45\% quieter for about nine hours, since
+$e^{0.477 - 0.114} = 1.44$ and $e^{-0.477 - 0.114} = 0.55$, which gives the strong drift. Most of this larger departure is the growth, which the
+simulation turns into random swings of about nine hours, so the strong drift is best read as
+a demanding case. The calibration month
 drifts as well, so the timetable learns an average that includes the drift.
 
 \subsection{Serving the Queries}
 \label{sec:serving}
 
-The user device and the ONU answer at the speeds their sources measured. The phone reads
-the prompt at 288 tokens per second and generates 72 tokens per second, while the ONU
-generates 6.3 tokens per second and so takes about 44 seconds for an answer of the mean
-length. It reads the prompt at about 200 tokens per second
-(Section~\ref{sec:user-onu-energy}), so a longer prompt also takes it longer. Each household's
-ONU answers one query at a time, in the order they were sent,
+The user device and the ONU answer at the speeds their sources measured
+(Section~\ref{sec:user-onu-energy}). The phone reads the prompt at 288 tokens per second and
+generates 72 tokens per second, so an answer of its mean length takes it about 2.6 seconds,
+while the ONU reads the prompt at about 200 tokens per second and generates 6.3 tokens per
+second, so an answer of its mean length takes it about 44 seconds, and a longer prompt takes
+either of them longer. Each household's
+ONU answers one query at a time, in the order they reach it,
 so a second query from the same household waits for the first. The OLT serves with continuous
 batching (Section~\ref{sec:olt-energy}), with 64 slots, the largest batch measured, and a
 query that finds every slot busy waits for one. A query reaches the OLT only after the
 seconds the tiers below spent on it, so the batch it meets is the one actually running
-at that moment. Its prefill is charged at the size of the batch it joins but is taken to
-take no time, since it is short next to the decode, and the time spent crossing the
-network, a few milliseconds, is also left out.
+at that moment, and its prefill is charged at the size of that batch. Two short delays are
+left out of the timing: the OLT's prefill, which is short next to its decode, and the few
+milliseconds spent crossing the network.
 
 
 \section{Evaluation}
 \label{sec:evaluation}
 
-\todo{reading every policy at the same accuracy (the energy choice weighs energy alone and
-leaves judging the answers to the quantile test, so it changes accuracy only by changing
-which models answer); the baselines: confidence-only
-escalation, cited as the rule of \citeonline{wu2025recserve}, with and without the ONU,
-and each tier answering alone; the piggyback ablation, where a household hears the
-OLT's cost only on its own answers and blends each one it hears into its estimate with a
-weight of 0.3; the metrics; the sensitivity runs (the OLT's conversion at $\times 1.0$,
-$\times 1.72$ and $\times 3.35$, an ONU twice as efficient, average accounting with the same
-routing, the OLT reporting the share instead of what a query adds) and the sweep of
-$\delta$.}
+A policy that escalates more queries reaches larger models and answers more of them
+correctly, so comparing policies at the same $\beta$ would mix how much energy each spends
+with how accurate it is. We therefore compare them at the same accuracy, with a target of
+80\% in the main results. Every policy runs at
+nine values of $\beta$, from 0.1 to 0.9, each giving one pair of accuracy and energy per
+query, and we drop any pair that another value of $\beta$ beats on both, with higher
+accuracy for less energy. The energy a policy needs to reach a target accuracy is then
+interpolated linearly between the two remaining pairs whose accuracies lie on either side of
+the target, and a policy whose most accurate pair is below the target is reported as not
+reaching it. WattLadder weighs energy alone and leaves judging the
+answers to the quantile test, so it changes accuracy only through which models answer, and
+reading every policy at the same accuracy accounts for that change.
+
+WattLadder is evaluated with both strategies of Section~\ref{sec:policy} for estimating the
+OLT's cost, the timetable and the broadcast, against three baselines. The first is
+escalation by confidence alone, the rule of \citeonline{wu2025recserve}, in which each tier
+answers or passes a query up by the quantile test only. The second is the same rule without
+the ONU, so that a query goes from the phone straight to the OLT, which shows how much of a
+saving comes from skipping the ONU rather than from weighing energy. The third is each tier
+answering every query alone, which gives the energy and accuracy of the phone, the ONU and
+the OLT on their own. A further policy, the piggyback, removes the broadcast, so each
+household learns the OLT's cost only from the OLT's answers to its own queries and blends
+each figure it hears into its estimate with a weight of 0.3. It shows how much the broadcast
+adds over what a household learns by itself.
+
+Each run reports four measures over its test month, each the mean over the three seeds:
+
+\begin{itemize}
+  \item \textbf{Energy per query}, the month's total energy divided by its number of queries,
+  under the marginal accounting of Section~\ref{sec:accounting}.
+  \item \textbf{Accuracy}, the share of questions answered correctly.
+  \item \textbf{Latency}, the time from a message being sent to its answer arriving.
+  \item \textbf{Communication burden}, the measure of \citeonline{wu2025recserve}, the bytes
+  of a query's question and answer counted at both the sending and the receiving node of
+  every hop the query climbs.
+\end{itemize}
+
+The latency and the communication burden are read at the same point as the energy, so each
+policy is described at the setting it would use to reach the target accuracy.
+
+The policies run under the three scenarios of Section~\ref{sec:drift}, with no, mild and
+strong drift, at 1,000, 2,000, 5,000, 10,000 and 20,000 households. Six more runs, without
+drift, each change one assumption. Three price the OLT differently from the $\times 2.44$ of
+Section~\ref{sec:accounting}: at $\times 1.0$ for the GPU card alone, $\times 1.72$ for
+Google's own accounting and $\times 3.35$ for a host that draws as much as its card. The
+other three change one thing each: one makes the ONU twice as efficient, one charges the
+same routing under average accounting, which changes the totals but no decision, and one
+has the OLT report a query's share of its energy instead of what the query adds. Finally, at 10,000 households and without drift, a sweep of the margin $\delta$ through 0, 0.05,
+0.1, 0.2, 0.3, 0.5, 0.7 and 1 moves WattLadder with the broadcast step by step from weighing
+energy alone to escalation by confidence alone, which $\delta = 1$ reproduces exactly.
 
 %==============================================================================
 \chapter{Results}
 \label{chap:results}
 %==============================================================================
 
-% The results sections go here, before the limitations.
+% The results sections go here, before the limitations, one section per analysis
+% (planned 2026-11-06, written from the final re-run's SUMMARY.md and figures):
+%   1. Energy at the same accuracy: every policy at the 80% target across the household
+%      counts, against confidence alone; the single tiers as reference points (the OLT
+%      alone is the most accurate); the control without the ONU.
+%   2. Broadcast against timetable: the gap with no, mild and strong drift, and the
+%      piggyback ablation (what the broadcast adds over a household's own answers).
+%   3. Latency and communication burden: read at the same point as the energy; the
+%      ONU's slowness (see Limitations) and the cost of saving energy.
+%   4. The margin delta: the sweep at 10,000 households, from WattLadder to confidence
+%      alone, in energy, latency and burden.
+%   5. Sensitivity: the OLT at x1.0, x1.72 and x3.35, an ONU twice as efficient, average
+%      accounting with the same routing, the OLT reporting a query's share.
+% Then Limitations, which already exists below.
 
 \section{Limitations}
 \label{sec:limitations}
@@ -1220,7 +1339,11 @@ short answers. Its idle draw of about 3.5~W is an approximate figure~\cite{tumma
 and the energy of reading a prompt assumes that the board draws the same power while
 reading as while generating, which neither source measured. The figures of both devices
 come from recent preprints, the only measurements we found of these devices running these
-models.
+models. The board is also slow, so any query the ONU answers takes about 44 seconds for an
+answer of the mean length, which would be cumbersome in interactive use. This comes mostly
+from the board rather than from the policy, since its generation is limited by how fast the
+Hailo-10H reads its memory~\cite{tummalapalli2026edge}, so a home gateway with faster memory
+would answer sooner, although we found no measurement of one.
 
 The factor of 2.44 that brings the OLT's GPU to the whole system combines Google's shares of
 a prompt's energy, measured on servers that share one host among several
@@ -1249,8 +1372,16 @@ would differ in their models and in what they ask. A follow-up's answer is also 
 recorded for its question alone, even though its prompt carries the conversation.
 
 WildChat's users chose to try a free chatbot, and a user there is an address and a browser
-rather than a household, so they may not chat as a typical household does. Its pauses also
-run from one answer to the next, so they include the time the next answer took. WattLadder
+rather than a household, so they may not chat as a typical household does. Its authors also note
+that a service hosted on Hugging Face and shared on Reddit likely draws mostly from the IT
+community and those forums, which may not reflect the general population~\cite{zhao2024wildchat}. Its pauses also
+run from one answer to the next, so they include the time the next answer took. Within an hour, the
+simulated messages are also less bursty than BurstGPT's conversations, with a variance-to-mean
+ratio of their counts over 5 minutes of 1.9 against 2.5, because the only clustering modeled is
+that of conversations. The drift's duration $\tau$ is fitted to consecutive hours, and while it
+matches how much of a departure BurstGPT keeps one or two hours later, about half of a
+departure is still there four to eight hours later in the data, while the model keeps a fifth
+of it or less. WattLadder
 uses one mean answer length per model, although in our runs on GSM8K the standard deviation
 of a single answer's length is 30 to 40\% of that mean, and the length could be predicted
 from the query itself~\cite{zheng2023response}. The results therefore show what the policy
