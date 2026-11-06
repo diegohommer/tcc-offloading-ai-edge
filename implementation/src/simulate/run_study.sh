@@ -34,8 +34,8 @@ cd "$(dirname "$0")/../.."                        # implementation/
 jobs() {
   for seed in 7 8 9; do
     echo "main $seed"
-    echo "burst_week $seed --burst-sigma 0.235 --burst-hours 3.18"
-    echo "burst_all $seed --burst-sigma 0.457 --burst-hours 12.3"
+    echo "burst_week $seed --burst-sigma 0.253 --burst-hours 2.64"
+    echo "burst_all $seed --burst-sigma 0.477 --burst-hours 9.36"
     echo "average $seed --accounting average"
     echo "report_share $seed --signal share"
     echo "onu0.5 $seed --onu-scale 0.5"

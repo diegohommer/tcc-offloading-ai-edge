@@ -86,7 +86,7 @@ olt_boundary:
     §8.4) the OLT's card figure is its net-of-idle rate at each batch size and the
     ONU loses its idle draw (onu.idle_W). The conversion stays x 2.44: Google's
     share for spare machines, which one query does not strictly add, is kept for
-    simplicity, and since a dearer OLT only shrinks the saving, it can only
+    simplicity, and since a more expensive OLT only shrinks the saving, it can only
     understate it (decided with the advisor, 2026-10-29). Sensitivity runs price the
     OLT at x 1.0 (the card alone) and x 1.72 (Google's own accounting, 1/0.58).
   caveat: >

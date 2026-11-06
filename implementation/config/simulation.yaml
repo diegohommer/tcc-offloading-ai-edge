@@ -61,11 +61,11 @@ traffic:
   # shared factor with mean 1), and how long a departure lasts (correlation
   # time, hours). 0 = every day follows the average day, plus counting noise.
   # BurstGPT's conversation starts, against one hour x weekday/weekend timetable:
-  # sigma 0.457 over 12.3 h; with each week's level taken out (surges within a
-  # week only): sigma 0.235 over 3.18 h (data/load_traces/burstgpt_sessions.json,
+  # sigma 0.477 over 9.36 h; with each week's level taken out (surges within a
+  # week only): sigma 0.253 over 2.64 h (data/load_traces/burstgpt_sessions.json,
   # "drift"). [swept: data]
   burst_sigma: 0.0
-  burst_hours: 12.3
+  burst_hours: 9.36
   # When a conversation's follow-up message is sent. after-answer: the measured pause
   # after the previous answer arrives, as a user reads before writing again. fixed: at
   # the measured pause after the previous message was sent, whether or not its answer
@@ -78,7 +78,7 @@ traffic:
   # recorded answers stay single-turn either way. Needs timing: after-answer, so the
   # answer before is known. [choice]
   context: carry
-  # A household's ONU answers one query at a time, in the order they were sent, so a
+  # A household's ONU answers one query at a time, in the order they reach it, so a
   # second one waits; false: it answers any number at once. [choice]
   onu_queue: true
   # Days simulated, and the days before them the timetable is observed over. A month
@@ -119,9 +119,11 @@ policy:
   stale_factor: 4.0
   # Where static_day and static_hour learn their tables, over the calibration
   # days. recserve: watching plain RecServe at the middle beta, which leaves the
-  # OLT idler than a static policy does, so the OLT looks dear. self: relearned
-  # at each beta while running the static policy itself, three times, as an
-  # operator would keep refreshing them. [choice]
+  # OLT idler than a static policy does, so the OLT looks expensive. self: relearned
+  # at each beta while running the static policy itself, as an operator would keep
+  # refreshing them, from an OLT priced as always busy until a round moves the table
+  # under 1% (at most 12 rounds); started from RecServe's table it would settle on a
+  # more expensive table that keeps the OLT idle. [choice]
   calibration: recserve
 
 learning:

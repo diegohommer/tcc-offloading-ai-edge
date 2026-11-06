@@ -123,7 +123,7 @@ def olt_factor(which: str = "system", accounting: str = "average") -> float:
 
     The same factor serves both accountings: Google's share for the idle machines held for
     load spikes stays in under marginal accounting too, for simplicity, which can only make
-    the OLT dearer (config/energy_sources.yaml, olt_boundary).
+    the OLT more expensive (config/energy_sources.yaml, olt_boundary).
 
     Args:
         which: "system" (whole server at PUE 1.54: x 2.44), "system-low" (PUE 1.09:

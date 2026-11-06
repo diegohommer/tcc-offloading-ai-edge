@@ -5,7 +5,7 @@
 import numpy as np
 import pytest
 
-from households import Households, load_sessions
+from households import Households, load_sessions, TRAFFIC
 
 QUESTIONS = [3, 5, 8, 13]
 
@@ -47,10 +47,10 @@ def test_stream_is_reproducible_from_its_seed(pair_stats):
 
 
 def test_stream_sends_the_population_volume(pair_stats):
-    """Over weekdays the messages match households x users x messages per user a day."""
+    """Over a whole week the messages match households x users x messages per user a day."""
     homes = Households(1000, 2.0, 3.0, pair_stats)
-    stream = homes.stream(QUESTIONS, 5, 0, seed=2)  # days 0-4 are weekdays
-    assert len(stream) == pytest.approx(5 * homes.messages_per_day, rel=0.03)
+    stream = homes.stream(QUESTIONS, 7, 0, seed=2)
+    assert len(stream) == pytest.approx(7 * homes.messages_per_day, rel=0.03)
 
 
 def test_stream_keeps_a_conversation_in_one_household(pair_stats):
@@ -162,3 +162,12 @@ def test_uneven_activity_concentrates_messages_in_fewer_homes(pair_stats):
     """With a wide spread, the busiest tenth of homes sends far more than a tenth."""
     homes = Households(1000, 1.0, 4.0, pair_stats, activity_sigma=1.5, seed=3)
     assert np.sort(homes.share)[-100:].sum() > 0.3
+
+
+@pytest.mark.parametrize("traffic", ["wildchat", "wildchat-brazil", "burstgpt"])
+def test_a_whole_week_carries_the_rate_asked_for_whatever_the_traffic_shape(traffic):
+    """The measured shapes set when messages come, never how many: 3.6 a day stays 3.6."""
+    homes = Households(20_000, 1.0, 3.6, stats=load_sessions(TRAFFIC[traffic]), seed=7)
+    days = 28
+    stream = homes.stream(list(range(50)), days, 0, 7)
+    assert len(stream) / 20_000 / days == pytest.approx(3.6, rel=0.01)

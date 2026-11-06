@@ -159,6 +159,222 @@ def test_run_fixed_chains_measure_no_rate_error(setup):
     assert math.isnan(metrics["olt_rate_error"])
 
 
+# ==========================================
+# Each hop happens at its own moment
+# ==========================================
+def _answer(conf, prompt_tokens=100, generated_tokens=200):
+    """Return one tier's recorded answer."""
+    return {
+        "correct": True,
+        "conf": conf,
+        "tp": prompt_tokens,
+        "tg": generated_tokens,
+        "qb": 200,
+        "ab": 600,
+    }
+
+
+SENT_S = 3600.0
+"""When the message under test is sent, far from anything else in the stream."""
+
+
+def _climbing_setup(curve, prices, **settings):
+    """Return messages that give the phone and the ONU a history, then one that fails at both."""
+    answers = {
+        "sure": {tier: _answer(0.9) for tier in TIERS},
+        "to_onu": {"user": _answer(0.1), "onu": _answer(0.9), "olt": _answer(0.9)},
+        "unsure": {tier: _answer(0.1) for tier in TIERS},
+    }
+    stream = [
+        ("sure", 0.0, 0),
+        ("sure", 0.1, 0),
+        ("sure", 0.2, 0),
+        ("to_onu", 0.3, 0),
+        ("to_onu", 0.4, 0),
+        ("to_onu", 0.5, 0),
+        ("unsure", SENT_S / 3600, 0),
+    ]
+    return RunSetup(
+        answers=answers,
+        stream=stream,
+        curve=curve,
+        prices=prices,
+        static_rates={},
+        settings=_settings(stats="published", escalation="beta", **settings),
+        schedule_key=lambda hour: (0, int(hour) % 24),
+    )
+
+
+def _spy_on_rates(monkeypatch, rate_at):
+    """Make the OLT's believed rate a function of time, and return the times it was read."""
+    reads = []
+
+    def believed(_policy, _setup, _server, _learned, hour):
+        reads.append(hour * 3600)
+        return rate_at(hour * 3600)
+
+    monkeypatch.setattr(cascade, "believed_olt_rate", believed)
+    return reads
+
+
+DEAR, CHEAP = (1.0, 10.0), (1e-9, 1e-9)
+"""OLT rates that make every tier below climb one step, or send the query straight up."""
+
+
+def test_every_decision_reads_the_olt_rate_at_its_own_moment(monkeypatch, marginal_curve, marginal_prices):
+    """Phone on arrival, phone done, ONU on arrival, ONU done: four moments, not one."""
+    reads = _spy_on_rates(monkeypatch, lambda _now: DEAR)
+    setup = _climbing_setup(marginal_curve, marginal_prices)
+    run(setup, 0.5, "broadcast")
+    phone_s = marginal_prices.seconds("user", 1, 100, 200)
+    onu_s = marginal_prices.seconds("onu", 1, 100, 200)
+    assert reads[-4:] == pytest.approx(
+        [SENT_S, SENT_S + phone_s, SENT_S + phone_s, SENT_S + phone_s + onu_s]
+    )
+
+
+def test_a_rate_that_falls_while_the_phone_runs_changes_where_the_query_goes(
+    monkeypatch, marginal_curve, marginal_prices
+):
+    """Dear when sent and cheap when the phone finishes: the query skips the ONU."""
+    phone_s = marginal_prices.seconds("user", 1, 100, 200)
+    _spy_on_rates(monkeypatch, lambda now: DEAR if now < SENT_S + phone_s / 2 else CHEAP)
+    setup = _climbing_setup(marginal_curve, marginal_prices)
+    metrics = run(setup, 0.5, "broadcast")[0]
+    prompt_rate, generated_rate = marginal_prices.rates("onu", 1)
+    one_onu_run = prompt_rate * 100 + generated_rate * 200
+    assert metrics["skipped_on_escalation"] == pytest.approx(1 / 7)
+    assert metrics["J_onu_per_query"] == pytest.approx(3 * one_onu_run / 7)  # the history only
+    assert metrics["final_olt"] == pytest.approx(1 / 7)
+
+
+def test_a_rate_that_falls_while_the_onu_runs_skips_nothing_but_was_read_late(
+    monkeypatch, marginal_curve, marginal_prices
+):
+    """Cheap only once the ONU has run: the phone and the ONU both spent their energy."""
+    phone_s = marginal_prices.seconds("user", 1, 100, 200)
+    onu_s = marginal_prices.seconds("onu", 1, 100, 200)
+    cutoff = SENT_S + phone_s + onu_s / 2
+    _spy_on_rates(monkeypatch, lambda now: DEAR if now < cutoff else CHEAP)
+    setup = _climbing_setup(marginal_curve, marginal_prices)
+    metrics = run(setup, 0.5, "broadcast")[0]
+    prompt_rate, generated_rate = marginal_prices.rates("onu", 1)
+    one_onu_run = prompt_rate * 100 + generated_rate * 200
+    assert metrics["J_onu_per_query"] == pytest.approx(4 * one_onu_run / 7)  # history and this one
+    assert metrics["final_olt"] == pytest.approx(1 / 7)
+
+
+def test_a_query_that_climbs_takes_each_tier_in_turn(marginal_curve, marginal_prices):
+    """Its latency is exactly the phone's seconds, then the ONU's, then the OLT's."""
+    setup = _climbing_setup(marginal_curve, marginal_prices)
+    metrics = run(setup, 0.5, "recserve")[0]
+    phone_s = marginal_prices.seconds("user", 1, 100, 200)
+    onu_s = marginal_prices.seconds("onu", 1, 100, 200)
+    olt_s = marginal_prices.seconds("olt", 1, 100, 200)
+    answered_on_phone, answered_on_onu = 3 * phone_s, 3 * (phone_s + onu_s)
+    expected = (answered_on_phone + answered_on_onu + phone_s + onu_s + olt_s) / 7
+    assert metrics["latency_s_mean"] == pytest.approx(expected)
+
+
+def test_the_onu_serves_queries_in_the_order_they_reach_it(marginal_curve, marginal_prices):
+    """A message sent later that clears the phone first is served first, and the other waits."""
+    long_prompt, short_prompt = 5000, 10
+    answers = {
+        "sure": {tier: _answer(0.9) for tier in TIERS},
+        "slow": {"user": _answer(0.1, long_prompt), "onu": _answer(0.9), "olt": _answer(0.9)},
+        "fast": {"user": _answer(0.1, short_prompt), "onu": _answer(0.9), "olt": _answer(0.9)},
+    }
+    stream = [
+        ("sure", 0.0, 0),
+        ("sure", 0.1, 0),
+        ("sure", 0.2, 0),
+        ("slow", SENT_S / 3600, 0),
+        ("fast", (SENT_S + 1) / 3600, 0),
+    ]
+    setup = RunSetup(
+        answers=answers,
+        stream=stream,
+        curve=marginal_curve,
+        prices=marginal_prices,
+        static_rates={},
+        settings=_settings(stats="published", escalation="beta", onu_queue=True),
+        schedule_key=lambda hour: (0, int(hour) % 24),
+    )
+    metrics = run(setup, 0.5, "recserve")[0]
+    sure_s = marginal_prices.seconds("user", 1, 100, 200)
+    slow_phone = marginal_prices.seconds("user", 1, long_prompt, 200)
+    fast_phone = marginal_prices.seconds("user", 1, short_prompt, 200)
+    onu_s = marginal_prices.seconds("onu", 1, 100, 200)
+    assert 1 + fast_phone < slow_phone < 1 + fast_phone + onu_s  # the setup under test
+    fast_latency = fast_phone + onu_s
+    slow_latency = (1 + fast_phone + onu_s + onu_s) - 0.0
+    expected = (3 * sure_s + fast_latency + slow_latency) / 5
+    assert metrics["latency_s_mean"] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("stats", ["pooled", "published", "household"])
+@pytest.mark.parametrize("policy", ["static_hour", "broadcast", "oracle", "piggyback"])
+def test_decisions_happen_in_time_order(monkeypatch, setup, policy, stats):
+    """No decision reads the OLT's rate at a moment before one already read."""
+    reads = []
+    real = cascade.believed_olt_rate
+
+    def spied(policy_name, run_setup, server, learned, hour):
+        reads.append(hour)
+        return real(policy_name, run_setup, server, learned, hour)
+
+    monkeypatch.setattr(cascade, "believed_olt_rate", spied)
+    setup.settings = _settings(stats=stats, timing="after-answer", escalation="beta")
+    run(setup, 0.5, policy)
+    assert reads == sorted(reads)
+
+
+@pytest.mark.parametrize("interval", [10.0, 120.0])
+def test_a_tier_never_reads_a_broadcast_older_than_the_interval(monkeypatch, setup, interval):
+    """When a tier reads the broadcast, the OLT last sent it within one interval of that moment."""
+    sent = []
+    ages = []
+    real_send = cascade.OltServer.send_broadcast
+    real_belief = cascade.believed_olt_rate
+
+    def send(server):
+        sent.append(server.clock)
+        real_send(server)
+
+    def spied(policy_name, run_setup, server, learned, hour):
+        if sent:
+            ages.append(hour * 3600 - sent[-1])
+        return real_belief(policy_name, run_setup, server, learned, hour)
+
+    monkeypatch.setattr(cascade.OltServer, "send_broadcast", send)
+    monkeypatch.setattr(cascade, "believed_olt_rate", spied)
+    setup.settings = _settings(
+        stats="published", escalation="beta", timing="after-answer", broadcast_interval_s=interval
+    )
+    run(setup, 0.5, "broadcast")
+    assert ages
+    assert 0.0 <= min(ages) and max(ages) < interval
+
+
+@pytest.mark.parametrize("policy", POLICIES)
+def test_the_energy_of_each_tier_adds_up_to_the_total(setup, policy):
+    """However a query's hops are split in time, no joule is lost or counted twice."""
+    setup.settings = _settings(timing="after-answer")
+    metrics = run(setup, 0.5, policy)[0]
+    split = sum(metrics[f"J_{tier}_per_query"] for tier in TIERS)
+    assert split == pytest.approx(metrics["J_per_query"])
+
+
+@pytest.mark.parametrize("policy", ["recserve", "static_hour", "broadcast", "piggyback"])
+def test_a_run_is_exactly_repeatable(setup, policy):
+    """Events at the same moment are always taken in the same order."""
+    setup.settings = _settings(timing="after-answer")
+    first, second = run(setup, 0.5, policy)[0], run(setup, 0.5, policy)[0]
+    assert {key: value for key, value in first.items() if value == value} == {
+        key: value for key, value in second.items() if value == value
+    }
+
+
 def test_run_observed_cells_hold_the_olt_report_over_each_cell(setup, curve):
     """Each cell lies between what joining adds and a lone query, the report's two ends."""
     above_idle = published_rates("marginal")
@@ -191,6 +407,65 @@ def test_calibrate_without_olt_answers_ships_nothing(monkeypatch, setup):
     """With nothing observed there is no table to ship."""
     monkeypatch.setattr(cascade, "run", lambda *_: ({}, [], {}))
     assert not calibrate(setup, 0.5)
+
+
+def test_floor_tables_hold_the_cheapest_report_in_every_cell(curve, marginal_prices, prices):
+    """A table started at the floor reads a full batch's rate at every hour."""
+    added = cascade.floor_tables(marginal_prices)
+    assert added["static_day"] == (marginal_prices.curve.pf_slope, marginal_prices.curve.dec_slope)
+    assert added["static_hour"] == {}
+    assert cascade.floor_tables(prices)["static_day"] == curve.rates(cascade.MAX_BATCH)
+
+
+def test_table_change_compares_each_cell_with_what_it_ran_on():
+    """A cell the round ran without is compared with the day's rate it fell back to."""
+    before = {"static_day": (1.0, 2.0), "static_hour": {(0, 3): (2.0, 4.0)}}
+    after = {"static_day": (1.1, 2.2), "static_hour": {(0, 3): (2.0, 4.0), (0, 4): (1.5, 2.0)}}
+    assert cascade.table_change(before, after, "static_hour") == pytest.approx(0.5 / 4)
+    assert cascade.table_change(before, after, "static_day") == pytest.approx(0.1)
+
+
+def test_relearning_starts_at_the_floor_and_stops_once_settled(monkeypatch, setup):
+    """The first round runs on the floor table; relearning stops when a round barely moves."""
+    rounds = []
+    observed = [
+        {"static_day": (0.5, 1.0), "static_hour": {(0, 3): (0.5, 1.0)}},
+        {"static_day": (0.6, 1.2), "static_hour": {(0, 3): (0.6, 1.2)}},
+        {"static_day": (0.6, 1.2), "static_hour": {(0, 3): (0.601, 1.201)}},
+        {"static_day": (9.0, 9.0), "static_hour": {(0, 3): (9.0, 9.0)}},
+    ]
+
+    def fake_calibrate(run_setup, _beta, _policy="recserve"):
+        rounds.append(run_setup.static_rates)
+        return observed[len(rounds) - 1]
+
+    monkeypatch.setattr(cascade, "calibrate", fake_calibrate)
+    tables = cascade.self_consistent_tables(setup, 0.5, "static_hour")
+    assert rounds[0] == cascade.floor_tables(setup.prices)
+    assert len(rounds) == 3
+    assert tables == observed[2]
+
+
+def test_relearning_stops_after_the_most_rounds(monkeypatch, setup):
+    """A table that never settles is relearned SELF_CALIBRATION_ROUNDS times, no more."""
+    calls = []
+
+    def fake_calibrate(*_):
+        calls.append(1)
+        return {"static_day": (len(calls), len(calls)), "static_hour": {}}
+
+    monkeypatch.setattr(cascade, "calibrate", fake_calibrate)
+    cascade.self_consistent_tables(setup, 0.5, "static_day")
+    assert len(calls) == cascade.SELF_CALIBRATION_ROUNDS
+
+
+def test_relearning_rises_from_the_floor_to_what_the_olt_reports(setup):
+    """On a real run the table settles above the floor, where the OLT's report agrees with it."""
+    floor = cascade.floor_tables(setup.prices)["static_day"]
+    tables = cascade.self_consistent_tables(setup, 0.5, "static_day")
+    assert tables["static_day"][1] > floor[1]
+    again = calibrate(type(setup)(**{**setup.__dict__, "static_rates": tables}), 0.5, "static_day")
+    assert cascade.table_change(tables, again, "static_day") < 0.05
 
 
 def test_believed_olt_rate_static_hour_falls_back_to_static_day(setup):

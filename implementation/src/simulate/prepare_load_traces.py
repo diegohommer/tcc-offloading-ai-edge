@@ -53,22 +53,39 @@ spread of activity is measured, rather than a one-off visitor."""
 BURSTGPT_URL = "https://github.com/HPMLL/BurstGPT/releases/download/v2.0/BurstGPT_3.csv"
 """BurstGPT_3 is the only release carrying a session id, which a household is built from."""
 
-SESSION_GAP_S = 600
-"""A pause longer than this opens a new burst, so one burst is one sitting at the keyboard.
-
-It reproduces BurstGPT's own hourly message curve: resampled bursts give a correlation of
-0.998 and a peak/trough of 51x against the measured 52x.
-"""
-
 ICDF_POINTS = 2000
 """Points of each stored inverse CDF, taken at bin midpoints."""
 
 BUSY_HOUR = 20.0
-"""Expected bursts an hour from which a cell is used to measure drift: quieter hours are
-mostly counting noise."""
+"""Expected conversation starts an hour from which a cell is used to measure drift: quieter
+hours are mostly counting noise."""
 
 WEEK_DAYS = 7
 """Days each week's overall level is averaged over, to set slow growth apart from surges."""
+
+
+def gap_variation(times: np.ndarray, busy_hours: np.ndarray) -> float | None:
+    """Measure how unevenly arrivals are spaced within busy hours.
+
+    A Poisson process with a fixed rate in the hour gives gaps with a coefficient of
+    variation of 1; bunched arrivals give more, evenly spaced ones less.
+
+    Args:
+        times: Arrival times, in seconds since the trace starts.
+        busy_hours: Indices of the hours to measure, counted from the trace's start.
+
+    Returns:
+        The median over those hours of the gaps' coefficient of variation, or None when no
+        hour holds enough arrivals.
+    """
+    ordered = np.sort(times)
+    hour_of = (ordered // 3600).astype(int)
+    variations = []
+    for busy_hour in busy_hours:
+        gaps = np.diff(ordered[hour_of == busy_hour])
+        if len(gaps) >= 5 and gaps.mean() > 0:
+            variations.append(gaps.std() / gaps.mean())
+    return round(float(np.median(variations)), 3) if variations else None
 
 
 def drift_around_timetable(counts: np.ndarray, weekend: np.ndarray, level_days: int) -> dict:
@@ -118,13 +135,14 @@ def drift_around_timetable(counts: np.ndarray, weekend: np.ndarray, level_days: 
 
 
 def burstgpt_sessions(trace: pd.DataFrame) -> dict:
-    """Measure how bursts of conversation are shaped, and how their load drifts.
+    """Measure how BurstGPT's conversations are shaped, and how their load drifts.
 
-    A session is one conversation, the closest the trace comes to a user. Four shapes are
-    kept: how many requests a burst holds, the pause between two of them (both as inverse
-    CDFs), and how many bursts open in each hour of a weekday and of a weekend day. The
-    drift of those openings around a timetable is measured twice: against one timetable for
-    the whole trace, and with each week's level taken out.
+    A conversation is one Session ID, as the dataset's authors count them and as WildChat's
+    records are, however long its pauses. Four shapes are kept: how many requests a
+    conversation holds, the pause between two of them (both as inverse CDFs), and how many
+    conversations start in each hour of a weekday and of a weekend day. The drift of those
+    starts around a timetable is measured twice: against one timetable for the whole trace,
+    and with each week's level taken out.
 
     Args:
         trace: BurstGPT rows with Timestamp, Session ID and Log Type.
@@ -139,14 +157,14 @@ def burstgpt_sessions(trace: pd.DataFrame) -> dict:
     start = chats["Timestamp"].min()
     span_days = (chats["Timestamp"].max() - start) / 86400
 
-    # --- Split each conversation into bursts at a pause longer than SESSION_GAP_S ---
-    pause = chats.groupby("Session ID")["Timestamp"].diff()
-    opens = pause.isna() | (pause > SESSION_GAP_S)
-    requests_per_burst = chats.groupby(opens.cumsum()).size()
-    think_time = pause[(~opens) & (pause > 0)]
+    # --- Each Session ID is one conversation, its first request the start ---
+    conversations = chats.groupby("Session ID")["Timestamp"]
+    pause = conversations.diff()
+    requests_per_conversation = conversations.size()
+    think_time = pause[pause > 0]
 
-    # --- When bursts open, by hour of day, weekday or weekend ---
-    opened_at = (chats["Timestamp"][opens.to_numpy()] - start).to_numpy()
+    # --- When conversations start, by hour of day, weekday or weekend ---
+    opened_at = (conversations.first() - start).to_numpy()
     day = (opened_at // 86400).astype(int)
     hour = (opened_at // 3600 % 24).astype(int)
     opened_per_weekday = [int((day % 7 == weekday).sum()) for weekday in range(7)]
@@ -168,24 +186,33 @@ def burstgpt_sessions(trace: pd.DataFrame) -> dict:
         "within_week": drift_around_timetable(per_hour, weekend_day, WEEK_DAYS),
     }
 
+    # --- How evenly conversations start, and requests arrive, within busy hours ---
+    opened_per_hour = np.bincount((opened_at // 3600).astype(int))
+    busy_hours = np.flatnonzero(opened_per_hour >= BUSY_HOUR)
+    gap_cv = {
+        "busy_hours": int(len(busy_hours)),
+        "starts": gap_variation(opened_at, busy_hours),
+        "requests": gap_variation((chats["Timestamp"] - start).to_numpy(), busy_hours),
+    }
+
     quantiles = (np.arange(ICDF_POINTS) + 0.5) / ICDF_POINTS
     return {
         "source": BURSTGPT_URL,
         "log_type": "Conversation log",
-        "session_gap_s": SESSION_GAP_S,
         "span_days": round(span_days, 1),
-        "sessions": int(len(requests_per_burst)),
+        "sessions": int(len(requests_per_conversation)),
         "requests": int(len(chats)),
-        "sessions_per_day": round(len(requests_per_burst) / span_days, 1),
+        "sessions_per_day": round(len(requests_per_conversation) / span_days, 1),
         "requests_per_day": round(len(chats) / span_days, 1),
-        "requests_per_session_mean": round(float(requests_per_burst.mean()), 3),
+        "requests_per_session_mean": round(float(requests_per_conversation.mean()), 3),
         "requests_per_session_icdf": [
-            int(value) for value in requests_per_burst.quantile(quantiles)
+            int(value) for value in requests_per_conversation.quantile(quantiles)
         ],
         "think_time_s_icdf": [round(float(value), 1) for value in think_time.quantile(quantiles)],
         "weekend_days_mod7": weekend,
         "starts_by_hour": starts_by_hour,
         "drift": drift,
+        "gap_cv": gap_cv,
     }
 
 
@@ -194,16 +221,18 @@ def wildchat_answers(folder: Path) -> pd.DataFrame:
 
     Only assistant turns carry a time: when the server received the full answer. A user is
     a hashed IP with its request header, as WildChat's own card suggests for linking
-    conversations.
+    conversations. Each record of the dataset is one conversation, as its authors linked it.
 
     Args:
         folder: Where WildChat-4.8M's parquet files are.
 
     Returns:
-        One row per answer: user (an integer id), country, state, utc (naive).
+        One row per answer: user (an integer id), conversation (an integer id), country,
+        state, utc (naive).
     """
     ids: dict[str, int] = {}
     parts = []
+    records_before = 0
     for path in sorted(glob.glob(str(folder / "*.parquet"))):
         table = pq.ParquetFile(path).read(
             columns=[
@@ -232,12 +261,14 @@ def wildchat_answers(folder: Path) -> pd.DataFrame:
             pd.DataFrame(
                 {
                     "user": np.asarray(users)[rows],
+                    "conversation": records_before + rows,
                     "country": table["country"].to_numpy(zero_copy_only=False)[rows],
                     "state": table["state"].to_numpy(zero_copy_only=False)[rows],
                     "utc": pc.filter(turns.field("timestamp"), answer).to_pandas().to_numpy(),
                 }
             )
         )
+        records_before += len(users)
     return pd.concat(parts, ignore_index=True)
 
 
@@ -304,27 +335,29 @@ def activity_spread(per_user: pd.Series) -> dict:
 
 
 def wildchat_sessions(answers: pd.DataFrame) -> dict:
-    """Measure WildChat conversations the way burstgpt_sessions() does BurstGPT's.
+    """Measure WildChat's conversations, in burstgpt_sessions()'s format.
 
-    Bursts split at SESSION_GAP_S as there, in each user's local time. The weekend is the
-    calendar's (Saturday and Sunday, days 5 and 6 of a simulation whose day 0 is a Monday),
-    though some countries rest on Friday. Drift stays BurstGPT's, one provider's users
-    being closer to one OLT's than WildChat's, spread over the world. It adds how unevenly
-    the users chat.
+    A conversation is one record of the dataset, as its authors linked it, in each user's
+    local time: a message in it carries the earlier turns, as a follow-up does in the
+    simulation, while a new chat opened right after does not. The weekend is the calendar's
+    (Saturday and Sunday, days 5 and 6 of a simulation whose day 0 is a Monday), though some
+    countries rest on Friday. Drift stays BurstGPT's, one provider's users being closer to
+    one OLT's than WildChat's, spread over the world. It adds how unevenly the users chat.
 
     Args:
-        answers: clean_and_localize()'s rows.
+        answers: clean_and_localize()'s rows, with their "conversation".
 
     Returns:
         The session statistics, in burstgpt_sessions()'s format plus "activity".
     """
-    pause = answers.groupby("user")["local"].diff().dt.total_seconds()
-    opens = pause.isna() | (pause > SESSION_GAP_S)
-    requests_per_burst = answers.groupby(opens.cumsum().to_numpy()).size()
-    think_time = pause[(~opens) & (pause > 0)]
+    in_time = answers.sort_values(["conversation", "local"], kind="stable")
+    conversations = in_time.groupby("conversation")["local"]
+    pause = conversations.diff().dt.total_seconds()
+    requests_per_conversation = conversations.size()
+    think_time = pause[pause > 0]
     span_days = (answers["local"].max() - answers["local"].min()).total_seconds() / 86400
 
-    starts = answers["local"][opens.to_numpy()]
+    starts = conversations.first()
     on_weekend = (starts.dt.dayofweek >= 5).to_numpy()
     starts_by_hour = {}
     for day_type, rows in (("weekday", ~on_weekend), ("weekend", on_weekend)):
@@ -337,16 +370,15 @@ def wildchat_sessions(answers: pd.DataFrame) -> dict:
     quantiles = (np.arange(ICDF_POINTS) + 0.5) / ICDF_POINTS
     return {
         "source": WILDCHAT_URL,
-        "session_gap_s": SESSION_GAP_S,
         "span_days": round(span_days, 1),
         "users": int(len(per_user)),
-        "sessions": int(len(requests_per_burst)),
+        "sessions": int(len(requests_per_conversation)),
         "requests": int(len(answers)),
-        "sessions_per_day": round(len(requests_per_burst) / span_days, 1),
+        "sessions_per_day": round(len(requests_per_conversation) / span_days, 1),
         "requests_per_day": round(len(answers) / span_days, 1),
-        "requests_per_session_mean": round(float(requests_per_burst.mean()), 3),
+        "requests_per_session_mean": round(float(requests_per_conversation.mean()), 3),
         "requests_per_session_icdf": [
-            int(value) for value in requests_per_burst.quantile(quantiles)
+            int(value) for value in requests_per_conversation.quantile(quantiles)
         ],
         "think_time_s_icdf": [round(float(value), 1) for value in think_time.quantile(quantiles)],
         "weekend_days_mod7": [5, 6],
@@ -399,6 +431,11 @@ def main() -> int:
     )
     for name, fit in stats["drift"].items():
         print(f"drift around the timetable ({name}): sigma {fit['sigma']}, {fit['hours']} h")
+    gap_cv = stats["gap_cv"]
+    print(
+        f"gap CV in {gap_cv['busy_hours']} busy hours: starts {gap_cv['starts']}, "
+        f"requests {gap_cv['requests']} (Poisson 1)"
+    )
     return 0
 
 

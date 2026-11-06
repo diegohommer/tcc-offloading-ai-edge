@@ -38,7 +38,7 @@ def test_study_jobs_are_the_runs_run_study_sh_lists():
     assert {seed for _, seed, _ in jobs} == {7, 8, 9}
     flags = {tag: tag_flags for tag, _, tag_flags in jobs}
     assert flags["main"] == []
-    assert flags["burst_all"] == ["--burst-sigma", "0.457", "--burst-hours", "12.3"]
+    assert flags["burst_all"] == ["--burst-sigma", "0.477", "--burst-hours", "9.36"]
     assert flags["olt0.41"] == ["--olt-scale", "0.4094"]
     assert flags["olt1.37"] == ["--olt-scale", "1.3696"]
 

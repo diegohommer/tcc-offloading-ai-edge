@@ -22,7 +22,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # implementation/src
 from energy.three_tier import TIERS
-from olt_server import OltServer
+from olt_server import MAX_BATCH, OltServer
 from routing import Learned, on_arrival, on_escalation, OwnStats, TOP, Window
 
 # ==========================================
@@ -124,10 +124,12 @@ def believed_olt_rate(policy: str, setup: RunSetup, server, learned: Learned, ho
 def run(setup: RunSetup, beta: float, policy: str):
     """Serve every query of the stream under one policy and one RecServe beta.
 
-    Queries are walked in arrival order. One that escalates reaches the OLT only after the
-    seconds the tiers below spent on it, so it waits in `arrivals` until then, and the batch
-    it meets is whoever is genuinely mid-answer at that moment. The OLT's cost is therefore
-    whatever the households' own escalated queries make it.
+    Everything happens in time order. A query reaches each tier at the moment the tier below
+    finishes it, and every decision reads what its tier knows at that moment. One that
+    escalates reaches the OLT only after the seconds the tiers below spent on it, so it waits
+    in `arrivals` until then, and the batch it meets is whoever is genuinely mid-answer at
+    that moment. The OLT's cost is therefore whatever the households' own escalated queries
+    make it.
 
     Args:
         setup: Everything the run needs (RunSetup).
@@ -213,19 +215,21 @@ def run(setup: RunSetup, beta: float, policy: str):
     next_id = 0
     next_broadcast = -math.inf
 
-    # Messages waiting to be sent, as a heap of (time in hours, stream index). With fixed
-    # timing every message is in it from the start; after-answer timing starts with each
-    # conversation's first message and adds the next one when an answer arrives.
+    # What happens next below the OLT, as a heap of (time in hours, stream index, the query's
+    # state): a message being sent, with no state yet, or a tier finishing a query. A message
+    # has one entry at a time. With fixed timing every message is in it from the start;
+    # after-answer timing starts with each conversation's first message and adds the next one
+    # when an answer arrives.
     after_answer = settings.timing == "after-answer"
     if after_answer:
         followers = {link[0] for link in setup.follow if link is not None}
         pending = [
-            (hour, index)
+            (hour, index, None)
             for index, (_, hour, _) in enumerate(setup.stream)
             if index not in followers
         ]
     else:
-        pending = [(hour, index) for index, (_, hour, _) in enumerate(setup.stream)]
+        pending = [(hour, index, None) for index, (_, hour, _) in enumerate(setup.stream)]
     heapq.heapify(pending)
 
     # Earlier turns a message carries (--context carry): stream index -> (tokens, bytes).
@@ -286,7 +290,7 @@ def run(setup: RunSetup, beta: float, policy: str):
         # The user reads the answer, pauses, and sends the conversation's next message.
         if after_answer and setup.follow[index] is not None:
             successor, pause_s = setup.follow[index]
-            heapq.heappush(pending, ((hour * 3600 + took + pause_s) / 3600, successor))
+            heapq.heappush(pending, ((hour * 3600 + took + pause_s) / 3600, successor, None))
             if settings.context == "carry":
                 # the next prompt holds this turn's question and the answer the user got
                 context[successor] = (
@@ -359,28 +363,42 @@ def run(setup: RunSetup, beta: float, policy: str):
                 land(server.advance(stop))
                 return stop >= until
 
-    while pending or (after_answer and (arrivals or server.next_finish() < math.inf)):
-        if not pending:  # only answers still on their way, which may queue more messages
-            hand_over(min(arrivals[0][0] if arrivals else math.inf, server.next_finish()))
-            continue
-        hour, index = pending[0]
+    def read_rates(walk, here, event_hour):
+        """Return the rates a tier believes now, or None while it cannot decide yet.
+
+        Args:
+            walk: The query's state between events.
+            here: Index of the tier reading them.
+            event_hour: The time now, in hours.
+
+        Returns:
+            {tier: (J/prompt token, J/generated token)} for this tier and those above, or None.
+        """
+        learned = walk["learners"].get(TIERS[here])
+        # Not under a fixed chain, not at the OLT, not before it has heard enough.
+        if policy in FIXED or learned is None or not learned.ready(TIERS[here:]):
+            return None
+        # A household knows its own devices' rates; only the OLT's must reach it.
+        if stats != "household":
+            rates = {upper: prices.decision_rates(upper) for upper in TIERS[here:TOP]}
+            rates["olt"] = learned.rates.get("olt")
+        else:
+            rates = {upper: learned.rates[upper] for upper in TIERS[here:]}
+        if policy != "piggyback":
+            rates["olt"] = believed_olt_rate(policy, setup, server, learned, event_hour)
+        if rates["olt"] is None:
+            return None
+        walk["belief"] = rates["olt"][1]
+        return rates
+
+    def start_walk(index, event_hour):
+        """Return the state of a message just sent.
+
+        Args:
+            index: The message's place in the stream.
+            event_hour: When it is sent, in hours.
+        """
         question, _, household = setup.stream[index]
-        now = hour * 3600
-
-        # --- Bring the OLT up to now, stopping at the last broadcast on the way ---
-        if policy == "broadcast":
-            interval = settings.broadcast_interval_s
-            last_send = math.floor(now / interval) * interval
-            if last_send >= next_broadcast:
-                if not hand_over(last_send):
-                    continue  # an answer on the way queued an earlier message
-                server.send_broadcast()
-                next_broadcast = last_send + interval
-        if not hand_over(now):
-            continue
-        heapq.heappop(pending)
-
-        # --- Walk the query up until it is answered, or until it leaves for the OLT ---
         if household not in households:
             households[household] = {
                 tier: Learned(
@@ -398,74 +416,51 @@ def run(setup: RunSetup, beta: float, policy: str):
                 own[household] = {
                     tier: OwnStats(settings.alpha, shipped_tokens[tier]) for tier in TIERS[:TOP]
                 }
-        learners = households[household]
         carried = context.get(index, (0.0, 0.0))[0]  # tokens of earlier turns in the prompt
-        prompt_tokens = setup.answers[question]["user"]["tp"] + carried
-        packet: dict[str, tuple[float, float, float]] = {}
-        spent = took = 0.0
-        here = ALONE.get(policy, 0)
-        rates = belief = None
-        while True:
+        return {
+            "index": index,
+            "question": question,
+            "household": household,
+            "learners": households[household],
+            "hour": event_hour,
+            "carried": carried,
+            "prompt_tokens": setup.answers[question]["user"]["tp"] + carried,
+            "packet": {},
+            "spent": 0.0,
+            "here": ALONE.get(policy, 0),
+            "belief": None,
+            "running": False,
+        }
+
+    while pending or (after_answer and (arrivals or server.next_finish() < math.inf)):
+        if not pending:  # only answers still on their way, which may queue more messages
+            hand_over(min(arrivals[0][0] if arrivals else math.inf, server.next_finish()))
+            continue
+        hour, index, walk = pending[0]
+        now = hour * 3600
+
+        # --- Bring the OLT up to now, stopping at the last broadcast on the way ---
+        if policy == "broadcast":
+            interval = settings.broadcast_interval_s
+            last_send = math.floor(now / interval) * interval
+            if last_send >= next_broadcast:
+                if not hand_over(last_send):
+                    continue  # an answer on the way queued an earlier message
+                server.send_broadcast()
+                next_broadcast = last_send + interval
+        if not hand_over(now):
+            continue
+        heapq.heappop(pending)
+        if walk is None:
+            walk = start_walk(index, hour)
+
+        # --- A tier below has just finished running this query ---
+        if walk["running"]:
+            walk["running"] = False
+            here = walk["here"]
             tier = TIERS[here]
-            learned = learners.get(tier)
-
-            # --- Can this tier decide where the query goes? ---
-            # Not under a fixed chain, not at the OLT, not before it has heard enough.
-            decide = policy not in FIXED and learned is not None and learned.ready(TIERS[here:])
-            if decide:
-                # A household knows its own devices' rates; only the OLT's must reach it.
-                if stats != "household":
-                    rates = {upper: prices.decision_rates(upper) for upper in TIERS[here:TOP]}
-                    rates["olt"] = learned.rates.get("olt")
-                else:
-                    rates = {upper: learned.rates[upper] for upper in TIERS[here:]}
-                if policy != "piggyback":
-                    rates["olt"] = believed_olt_rate(policy, setup, server, learned, hour)
-                decide = rates["olt"] is not None
-                if decide:
-                    belief = rates["olt"][1]
-
-            # --- On arrival: run here, or forward to a cheaper tier above? ---
-            if decide:
-                target = on_arrival(here, prompt_tokens, rates, learned, settings.delta)
-                if target != here:
-                    forwarded += 1
-                    here = target
-                    continue
-
-            # --- The OLT answers in its own time, so the query leaves the walk here ---
-            if here == TOP:
-                in_flight[next_id] = {
-                    "index": index,
-                    "question": question,
-                    "hour": hour,
-                    "spent": spent,
-                    "took": took,
-                    "packet": packet,
-                    "reached": now + took,
-                    "belief": belief,
-                    "carried": carried,
-                }
-                heapq.heappush(arrivals, (now + took, next_id))
-                next_id += 1
-                break
-
-            # --- A tier below answers at once: replay it, charge the true energy ---
+            question, household = walk["question"], walk["household"]
             answer = setup.answers[question][tier]
-            prompt_rate, generated_rate = prices.rates(tier, 1)
-            here_joules = prompt_rate * (answer["tp"] + carried) + generated_rate * answer["tg"]
-            spent += here_joules
-            energy_at[tier] += here_joules
-            seconds = prices.seconds(tier, 1, answer["tp"] + carried, answer["tg"])
-            if tier == "onu" and settings.onu_queue:
-                # the household's ONU serves one query at a time, in the order they were sent
-                start = max(now + took, onu_free.get(household, 0.0))
-                took = start - now
-                onu_free[household] = start + seconds
-            took += seconds
-            # the packet tells the other tiers what they decide on, not what was charged
-            told_prompt_rate, told_generated_rate = prices.decision_rates(tier)
-            packet[tier] = (told_prompt_rate, told_generated_rate, answer["tg"])
 
             # --- RecServe's test: escalate below the beta-quantile of recent confidences ---
             window = window_for(household, tier)
@@ -473,23 +468,77 @@ def run(setup: RunSetup, beta: float, policy: str):
                 policy not in ALONE and len(window) > 1 and answer["conf"] < window.quantile(beta)
             )
             window.add(answer["conf"])
+            # the packet tells the other tiers what they decide on, not what was charged
+            told_prompt_rate, told_generated_rate = prices.decision_rates(tier)
+            walk["packet"][tier] = (told_prompt_rate, told_generated_rate, answer["tg"])
             if stats == "published":
                 own[household][tier].record(answer["tg"], escalate)
-                packet[tier] = (told_prompt_rate, told_generated_rate, own[household][tier])
+                walk["packet"][tier] = (told_prompt_rate, told_generated_rate, own[household][tier])
             if not escalate:
-                settle(index, hour, tier, spent, took, packet)
-                break
+                took = now - walk["hour"] * 3600
+                settle(index, walk["hour"], tier, walk["spent"], took, walk["packet"])
+                continue
 
-            # --- On escalation: the next tier up, or a cheaper later one? ---
+            # --- On escalation: the next tier up, or a cheaper later one, by what it hears now ---
+            rates = read_rates(walk, here, hour)
             target = (
-                on_escalation(here, prompt_tokens, rates, learned, settings.delta)
-                if decide
+                on_escalation(
+                    here, walk["prompt_tokens"], rates, walk["learners"][tier], settings.delta
+                )
+                if rates is not None
                 else here + 1
             )
             if policy == "recserve_no_onu":
                 target = TOP
             skipped += target > here + 1
-            here = target
+            walk["here"] = target
+
+        # --- The query reaches a tier now: run it there, or forward it to a cheaper one above ---
+        while True:
+            here = walk["here"]
+            tier = TIERS[here]
+            rates = read_rates(walk, here, hour)
+            if rates is None:
+                break
+            target = on_arrival(
+                here, walk["prompt_tokens"], rates, walk["learners"][tier], settings.delta
+            )
+            if target == here:
+                break
+            forwarded += 1
+            walk["here"] = target
+
+        # --- The OLT answers in its own time, so the query leaves the walk here ---
+        if here == TOP:
+            in_flight[next_id] = {
+                "index": index,
+                "question": walk["question"],
+                "hour": walk["hour"],
+                "spent": walk["spent"],
+                "took": now - walk["hour"] * 3600,
+                "packet": walk["packet"],
+                "reached": now,
+                "belief": walk["belief"],
+                "carried": walk["carried"],
+            }
+            heapq.heappush(arrivals, (now, next_id))
+            next_id += 1
+            continue
+
+        # --- A tier below runs it, and comes back to it when it finishes ---
+        answer = setup.answers[walk["question"]][tier]
+        prompt_rate, generated_rate = prices.rates(tier, 1)
+        here_joules = prompt_rate * (answer["tp"] + walk["carried"]) + generated_rate * answer["tg"]
+        walk["spent"] += here_joules
+        energy_at[tier] += here_joules
+        seconds = prices.seconds(tier, 1, answer["tp"] + walk["carried"], answer["tg"])
+        start = now
+        if tier == "onu" and settings.onu_queue:
+            # the household's ONU serves one query at a time, in the order they reach it
+            start = max(now, onu_free.get(walk["household"], 0.0))
+            onu_free[walk["household"]] = start + seconds
+        walk["running"] = True
+        heapq.heappush(pending, ((start + seconds) / 3600, index, walk))
 
     # --- Nobody else is coming: let the OLT take and finish what is left ---
     hand_over(max((reached for reached, _ in arrivals), default=server.clock))
@@ -591,17 +640,59 @@ def calibrate(setup: RunSetup, beta: float, policy: str = "recserve") -> dict:
     }
 
 
-SELF_CALIBRATION_ROUNDS = 3
-"""Times a static policy's tables are relearned from the traffic it sends itself."""
+SELF_CALIBRATION_ROUNDS = 12
+"""Most times a static policy's tables are relearned from the traffic it sends itself."""
+
+SELF_CALIBRATION_SETTLED = 0.01
+"""Mean relative change of a table's rates below which relearning stops."""
+
+
+def floor_tables(prices) -> dict:
+    """Return the tables of an OLT busy all the time: the cheapest it can ever report.
+
+    A cell with no rate of its own falls back to static_day, so one rate covers every cell.
+
+    Args:
+        prices: The run's Energy, whose signal decides what the OLT reports.
+    """
+    # a query joining a full batch: the added signal's slope, or the share signal's share
+    busiest = prices.added_rates(MAX_BATCH - 1)
+    return {"static_day": busiest, "static_hour": {}}
+
+
+def table_change(before: dict, after: dict, policy: str) -> float:
+    """Return how much the rates a static policy reads moved between two rounds.
+
+    Args:
+        before: The tables a round ran with.
+        after: The tables it observed.
+        policy: static_day or static_hour, whose own table is compared.
+
+    Returns:
+        The mean relative change of its rates, prompt and generated alike.
+    """
+    if policy != "static_hour":
+        pairs = [(before["static_day"], after["static_day"])]
+    else:
+        pairs = [
+            (before["static_hour"].get(cell, before["static_day"]), rates)
+            for cell, rates in after["static_hour"].items()
+        ]
+    changes = [abs(new / old - 1) for old_rates, new_rates in pairs
+               for old, new in zip(old_rates, new_rates) if old > 0]
+    return statistics.mean(changes) if changes else 0.0
 
 
 def self_consistent_tables(setup: RunSetup, beta: float, policy: str) -> dict:
     """Return a static policy's tables, relearned from the traffic the policy itself sends.
 
-    Tables observed under RecServe make the OLT look dearer than it is once a static policy
-    sends it more work, which it then makes cheaper. Starting from RecServe's, the tables
-    are relearned over the calibration days while running the policy with them, as an
-    operator would keep refreshing them, SELF_CALIBRATION_ROUNDS times.
+    What the OLT costs depends on the traffic the tables send it: a table that makes it
+    look expensive keeps it idle, and an idle OLT is expensive, so more than one table
+    agrees with the traffic it makes. Starting from the cheapest the OLT can be, the relearning rises
+    to the cheapest of them, the strongest timetable. The tables are relearned over the
+    calibration days while running the policy with them, as an operator would keep
+    refreshing them, until they move less than SELF_CALIBRATION_SETTLED, at most
+    SELF_CALIBRATION_ROUNDS times.
 
     Args:
         setup: A setup whose stream covers the calibration days.
@@ -611,9 +702,13 @@ def self_consistent_tables(setup: RunSetup, beta: float, policy: str) -> dict:
     Returns:
         {"static_day": rates, "static_hour": {cell: rates}}, as calibrate() returns them.
     """
-    tables = calibrate(setup, beta)
+    tables = floor_tables(setup.prices)
     for _ in range(SELF_CALIBRATION_ROUNDS):
-        if not tables:
+        observed = calibrate(dataclasses.replace(setup, static_rates=tables), beta, policy)
+        if not observed:
             break
-        tables = calibrate(dataclasses.replace(setup, static_rates=tables), beta, policy)
+        settled = table_change(tables, observed, policy) < SELF_CALIBRATION_SETTLED
+        tables = observed
+        if settled:
+            break
     return tables

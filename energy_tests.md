@@ -247,12 +247,15 @@ measured as below.
 Input: BurstGPT_3's conversation log, 233,617 requests over 110 days. Only the time of
 each request and its session id are used.
 
-1. **Bursts.** Within a session, a pause longer than 600 s starts a new burst, so one
-   burst is one sitting at the keyboard. This gives 97,348 bursts, 2.4 requests each.
-2. **Counts.** Let $c_{d,h}$ be the bursts that open in hour $h$ (0–23) of day $d$ (0–109),
-   days counted from the first request.
-3. **Weekend.** Days are grouped by $d \bmod 7$. The two groups with the fewest bursts are
-   the weekend (groups 2 and 3, 500 and 542 bursts a day, against 957–1,122 for the
+1. **Conversations.** Each session id is one conversation, however long its pauses, as
+   BurstGPT's authors count them (35.5% with one request, median 2, 75.4% with four or
+   fewer, their Section 3.2) and as WildChat's records are. This gives 55,920
+   conversations, 4.2 requests each. (Until 2026-11-05 a pause over 600 s split a session
+   into bursts, 97,348 of 2.4 requests, which gave σ 0.235 / τ 3.18 h and 0.457 / 12.3 h.)
+2. **Counts.** Let $c_{d,h}$ be the conversations that start in hour $h$ (0–23) of day $d$
+   (0–109), days counted from the first request.
+3. **Weekend.** Days are grouped by $d \bmod 7$. The two groups with the fewest starts are
+   the weekend (groups 2 and 3, 287 and 307 conversations a day, against 563–640 for the
    other five). Every other day is a weekday.
 4. **Timetable.** For each day type $t$ (weekday, weekend) and hour, the mean over the
    days of that type is $\bar c_{t,h}$. The expected count of hour $h$ of day $d$ is
@@ -263,7 +266,7 @@ each request and its session id are used.
    runs high or low as a whole is then part of the expectation, not of the drift. The
    strong drift skips this step.
 6. **Excess.** For each hour, $x_{d,h} = c_{d,h}/e_{d,h} - 1$. Only busy hours are used
-   ($e_{d,h} \ge 20$ bursts), since in quieter hours the excess is mostly counting noise.
+   ($e_{d,h} \ge 20$ starts), since in quieter hours the excess is mostly counting noise.
 7. **Size.** If the true rate is $e \cdot F$ with $E[F] = 1$ and the count is Poisson,
    $E[x^2] = \mathrm{Var}(F) + 1/e$. So $\mathrm{Var}(F) = \mathrm{mean}(x^2 - 1/e)$ over
    busy hours, and the log-sd of a log-normal $F$ is
@@ -277,32 +280,33 @@ each request and its session id are used.
 | Scenario | Step 5 | σ | τ | One standard deviation of the factor |
 |---|---|---|---|---|
 | No drift (`main`) | – | 0 | – | ×1 |
-| Mild drift (`burst_week`) | yes | 0.235 | 3.2 h | ×0.79 to ×1.26 |
-| Strong drift (`burst_all`) | no | 0.457 | 12.3 h | ×0.63 to ×1.58 |
+| Mild drift (`burst_week`) | yes | 0.253 | 2.64 h | ×0.75 to ×1.25 |
+| Strong drift (`burst_all`) | no | 0.477 | 9.36 h | ×0.55 to ×1.44 |
 
 What step 5 removes is mostly growth. BurstGPT's weekly level $L_d$ sits between 0.6 and
 0.9 for its first ten weeks and between 1.3 and 1.8 for its last five (0.59 to 1.92 over
 the whole trace), so the strong drift's larger σ and τ come largely from the service growing
 over the 110 days. The simulation does not reproduce that trend. It turns the extra
-variance into departures that last about 12 hours, as random as the mild ones.
+variance into departures that last about nine hours, as random as the mild ones.
 
 Checked against seven timetables, one per day of the week instead of weekday and weekend,
-σ barely moves: 0.458 and 13.2 h for the strong drift, 0.208 and 3.6 h for the mild one.
+σ barely moves: 0.462 and 9.05 h for the strong drift, 0.229 and 2.61 h for the mild one.
 The weekdays differ by about ±8% in volume, little next to the drift.
 
 #### 8.1.2 Applying it in the simulation (`households.py`)
 
-1. The expected bursts in hour $k$ of the run are the population's bursts per day times
-   the timetable's share of that hour, weekday or weekend, measured in step 4.
+1. The expected conversation starts in hour $k$ of the run are the population's
+   conversations per day times WildChat's share for that hour, weekday or weekend
+   (BurstGPT gives only σ and τ).
 2. A factor shared by all households follows
    $z_k = \phi z_{k-1} + \varepsilon_k$, with $\phi = e^{-1/\tau}$,
    $\varepsilon_k \sim N(0, \sigma^2(1-\phi^2))$ and $z_0 \sim N(0, \sigma^2)$, so the
    log-factor has sd σ and fades with correlation time τ. The factor is
    $F_k = e^{z_k - \sigma^2/2}$, whose mean is 1, so the month's volume does not change.
-3. The bursts that open in hour $k$ are Poisson with mean expected × $F_k$ (a doubly
-   stochastic, or Cox, process). Each opens at a uniform time within the hour, takes its
-   number of requests and its pauses from BurstGPT's measured distributions, and belongs
-   to a household drawn uniformly.
+3. The conversations that start in hour $k$ are Poisson with mean expected × $F_k$ (a
+   doubly stochastic, or Cox, process). Each starts at a uniform time within the hour,
+   takes its number of messages and its pauses from WildChat's measured distributions,
+   and belongs to a household drawn in proportion to its activity share.
 
 The calibration month drifts too, so the timetable learns an average that includes the
 drift.
@@ -316,8 +320,9 @@ population: a household sends about 100 messages a month, too few to fill its ow
 window per household, starting empty, the broadcast's saving over RecServe at 0.80 moves
 from 42.5% to 42.3% (10,000 households, one seed); the noisier thresholds lower both curves'
 top accuracy (RecServe 0.872 to 0.847), so RecServe no longer reaches 0.85. Lower tiers
-answer at once and are charged their published energy; the OLT answers in its own time
-(§8.3).
+take their published seconds and are charged their published energy; the OLT answers in its
+own time (§8.3). A query's arrival and finish at each tier are events of their own, in time
+order, so every decision reads what its tier knows at that moment.
 
 Energy-aware policies also choose where a query goes, by expected energy to an answer:
 C(j) = E_j + p_j · C(j+1), where p_j is how often a query that reached tier j went further.
@@ -362,7 +367,7 @@ and the static tables carry, is a separate setting, the signal (`--signal`):
   5 J for a query on a busy OLT: a smooth estimate, where differences between adjacent
   measured batches are too noisy to route on.
 - **share**: the mean cost per token of the OLT's recent work, the share a query pays under
-  the accounting in use. This makes a busy OLT look dearer than joining it really is.
+  the accounting in use. This makes a busy OLT look more expensive than joining it really is.
 
 The study charges under marginal accounting and decides on the added signal. Each of the
 two is changed alone in a sensitivity run: `average` keeps the routing and counts everything
@@ -397,11 +402,23 @@ Figures from `src/analyze/plot_study.py` (`implementation/results/study/figures/
 
 A timetable is only as good as the traffic it was learned from. Observed during a month
 of plain RecServe, the OLT is idle more often than once a static policy sends it more
-work, which it then makes cheaper. The table makes the OLT look dear and the timetable
+work, which it then makes cheaper. The table makes the OLT look expensive and the timetable
 under-uses it. In the main, `burst_week` and `burst_all` runs the static policies are
-therefore also relearned at each beta while running themselves, three times, as an
-operator would keep refreshing a table (`--calibration self`, reported as
-`static_hour_self`). Both versions are kept. The first is a table built before
+therefore also relearned at each beta while running themselves, as an operator would
+keep refreshing a table (`--calibration self`, reported as `static_hour_self`). The
+relearning starts from an OLT priced as always busy (`floor_tables`) and stops once a
+round moves the table less than 1% on average, at most 12 rounds. The start matters,
+because a table that makes the OLT look expensive keeps it idle and so stays expensive: at 10,000
+households, β = 0.5 and no drift (28 + 28 days), relearning from RecServe's table settled
+at 1.231 J per generated token, 238.9 J/query and 0.743 accuracy, the floor start at
+0.810, 231.7 J and 0.868, and the broadcast itself ran at 231.9 J and 0.844. The old three
+rounds from RecServe's table stopped at 241.5 J and 0.721. Checked at other settings (same
+size and days, RecServe start / floor start / broadcast, J/query and accuracy): β = 0.2
+112.7 J 0.566 / 173.2 J 0.782 / 112.7 J 0.566; β = 0.8 all three at 255.4 J 0.911 (one
+table, whatever the start); β = 0.5 under strong drift 238.7 J 0.697 / 225.6 J 0.764 /
+217.7 J 0.839. The floor start is never worse at equal accuracy, and under strong drift the
+broadcast still beats it on both counts. At β = 0.2 the broadcast sits on the expensive table too:
+a live report can also keep an idle OLT idle. Both versions are kept. The first is a table built before
 energy-aware routing is deployed; the second is the fairest timetable, the one a live
 signal has to beat. The sensitivity runs have only the first.
 

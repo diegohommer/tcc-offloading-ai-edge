@@ -80,16 +80,17 @@ class Households:
             burst_hours: Its correlation time, in hours.
             activity_sigma: None for households that all talk alike. Otherwise each holds a
                 Poisson number of active users (mean `users`), each as active as a
-                log-normal factor with mean 1 and this log-sd says.
+                log-normal factor with this log-sd says. Only shares of the total are used,
+                so the factor's own scale never matters.
             seed: Random seed of who lives where, the same for every stream drawn.
         """
         self.stats = stats or load_sessions()
         self.count, self.users, self.per_user_day = count, users, per_user_day
         self.burst_sigma, self.burst_hours = burst_sigma, burst_hours
         self.messages_per_day = count * users * per_user_day
-        self.sessions_per_day = self.messages_per_day / self.stats["requests_per_session_mean"]
-
         self._len = np.array(self.stats["requests_per_session_icdf"])
+        self.sessions_per_day = self.messages_per_day / self._len.mean()
+
         self._think = np.array(self.stats["think_time_s_icdf"])
         self.weekend = set(self.stats["weekend_days_mod7"])
         """Days of the week (index mod 7) the trace runs quiet."""
@@ -98,20 +99,21 @@ class Households:
         if activity_sigma is not None:
             rng = np.random.default_rng([seed, 4242])
             residents = rng.poisson(users, count)
-            activity = np.exp(
-                rng.normal(-(activity_sigma**2) / 2, activity_sigma, int(residents.sum()))
-            )
+            activity = np.exp(rng.normal(0.0, activity_sigma, int(residents.sum())))
             per_home = np.bincount(np.repeat(np.arange(count), residents), activity, count)
             if per_home.sum() > 0:
                 self.share = per_home / per_home.sum()
 
-        per_day = self.stats["sessions_per_day"]
+        shapes = self.stats["starts_by_hour"]
+        per_day = sum(
+            sum(shapes["weekend" if day in self.weekend else "weekday"]) for day in range(7)
+        ) / 7
         self._starts = {
-            name: np.array(shape, dtype=float) / per_day
-            for name, shape in self.stats["starts_by_hour"].items()
+            name: np.array(shape, dtype=float) / per_day for name, shape in shapes.items()
         }
-        """Bursts opening in each hour of a weekday and of a weekend day, per burst of an
-        average day, so scaling by this population's own rate keeps both shapes."""
+        """Bursts opening in each hour of a weekday and of a weekend day, per burst of a day
+        of an average week, so scaling by this population's own rate keeps both shapes and
+        the week carries exactly its rate."""
 
     # ==========================================
     # The query stream

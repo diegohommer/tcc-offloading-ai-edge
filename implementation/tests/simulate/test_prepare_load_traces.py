@@ -9,7 +9,7 @@ from prepare_load_traces import (
     burstgpt_sessions,
     clean_and_localize,
     drift_around_timetable,
-    SESSION_GAP_S,
+    gap_variation,
     wildchat_sessions,
 )
 
@@ -19,22 +19,23 @@ def _trace(rows):
     return pd.DataFrame(rows, columns=["Timestamp", "Session ID", "Log Type"])
 
 
-def test_burstgpt_sessions_splits_a_conversation_at_a_long_pause():
-    """Two requests a minute apart form one burst; one after a long pause opens another."""
+def test_burstgpt_sessions_keeps_a_long_pause_inside_a_conversation():
+    """A Session ID is one conversation, however long its pauses, as in WildChat."""
     stats = burstgpt_sessions(
         _trace(
             [
                 (0, 1, "Conversation log"),
                 (60, 1, "Conversation log"),
-                (60 + SESSION_GAP_S + 1, 1, "Conversation log"),
+                (60 + 3 * 3600, 1, "Conversation log"),
                 (86400 * 7, 2, "Conversation log"),
             ]
         )
     )
-    assert stats["sessions"] == 3
+    assert stats["sessions"] == 2
     assert stats["requests"] == 4
-    assert stats["requests_per_session_mean"] == pytest.approx(4 / 3, abs=1e-3)
-    assert set(stats["think_time_s_icdf"]) == {60.0}
+    assert stats["requests_per_session_mean"] == pytest.approx(2.0)
+    assert min(stats["think_time_s_icdf"]) < 120
+    assert max(stats["think_time_s_icdf"]) > 0.95 * 3 * 3600
 
 
 def test_burstgpt_sessions_ignores_the_api_log():
@@ -77,6 +78,24 @@ def _timetable_with_drift(sigma, hours, days=60, level=200.0, seed=4):
     return rng.poisson(rate).reshape(days, 24).astype(float), np.zeros(days, dtype=bool)
 
 
+def test_gap_variation_of_poisson_arrivals_is_one():
+    """Poisson arrivals at a fixed rate in each hour give gaps with a CV close to 1."""
+    rng = np.random.default_rng(3)
+    arrivals = np.concatenate(
+        [hour * 3600 + np.sort(rng.uniform(0, 3600, 60)) for hour in range(200)]
+    )
+    assert gap_variation(arrivals, np.arange(200)) == pytest.approx(1.0, abs=0.05)
+
+
+def test_gap_variation_of_even_and_bunched_arrivals():
+    """Evenly spaced arrivals give 0; bunches of five a second apart give more than 1."""
+    even = np.arange(0, 3600, 60, dtype=float)
+    bunches = np.concatenate([start + np.arange(5) for start in range(0, 3600, 600)]).astype(float)
+    assert gap_variation(even, np.array([0])) == 0.0
+    assert gap_variation(bunches, np.array([0])) > 1.5
+    assert gap_variation(even, np.array([5])) is None
+
+
 def test_drift_around_timetable_recovers_a_known_drift():
     """Counts drawn with sigma 0.4 over 6 hours measure back close to both, despite the noise."""
     counts, weekend = _timetable_with_drift(0.4, 6.0)
@@ -94,31 +113,65 @@ def test_drift_around_timetable_of_pure_counting_noise_is_none():
 
 
 def _answers(rows):
-    """Return wildchat_answers()-like rows from (user, local time) pairs."""
-    frame = pd.DataFrame(rows, columns=["user", "local"])
+    """Return wildchat_answers()-like rows from (user, conversation, local time) tuples."""
+    frame = pd.DataFrame(rows, columns=["user", "conversation", "local"])
     frame["local"] = pd.to_datetime(frame["local"])
     frame["state"] = "São Paulo"
     return frame.sort_values(["user", "local"])
 
 
-def test_wildchat_sessions_splits_bursts_and_reads_the_calendar_weekend():
-    """A user's answers a minute apart form one burst; a Saturday burst counts as weekend."""
+def test_wildchat_sessions_follows_the_records_and_reads_the_calendar_weekend():
+    """A record is one conversation, whatever its pauses; a Saturday one counts as weekend."""
     stats = wildchat_sessions(
         _answers(
             [
-                ("a", "2023-05-01 21:00:00"),  # Monday
-                ("a", "2023-05-01 21:01:00"),
-                ("a", "2023-05-01 23:00:00"),
-                ("b", "2023-05-06 10:30:00"),  # Saturday
+                ("a", 1, "2023-05-01 21:00:00"),  # Monday
+                ("a", 1, "2023-05-01 21:01:00"),
+                ("a", 2, "2023-05-01 23:00:00"),
+                ("b", 3, "2023-05-06 10:30:00"),  # Saturday
             ]
         )
     )
     assert stats["sessions"] == 3
+    assert stats["requests_per_session_mean"] == pytest.approx(4 / 3, abs=0.001)
     assert stats["weekend_days_mod7"] == [5, 6]
     assert stats["starts_by_hour"]["weekday"][21] == 1.0
     assert stats["starts_by_hour"]["weekday"][23] == 1.0
     assert stats["starts_by_hour"]["weekend"][10] == 1.0
     assert set(stats["think_time_s_icdf"]) == {60.0}
+
+
+def test_wildchat_sessions_keeps_a_long_pause_inside_a_conversation():
+    """A chat resumed an hour later is still one conversation, and its pause is measured."""
+    stats = wildchat_sessions(
+        _answers(
+            [
+                ("a", 1, "2023-05-01 21:00:00"),
+                ("a", 1, "2023-05-01 22:00:00"),
+                ("b", 2, "2023-05-06 10:30:00"),
+            ]
+        )
+    )
+    assert stats["sessions"] == 2
+    assert set(stats["think_time_s_icdf"]) == {3600.0}
+
+
+def test_wildchat_sessions_separates_a_new_chat_opened_right_after():
+    """A chat opened a minute after another is its own conversation, with no pause between."""
+    stats = wildchat_sessions(
+        _answers(
+            [
+                ("a", 1, "2023-05-01 21:00:00"),
+                ("a", 1, "2023-05-01 21:02:00"),
+                ("a", 2, "2023-05-01 21:03:00"),
+                ("b", 3, "2023-05-06 10:30:00"),
+            ]
+        )
+    )
+    assert stats["sessions"] == 3
+    assert stats["requests_per_session_mean"] == pytest.approx(4 / 3, abs=0.001)
+    assert set(stats["think_time_s_icdf"]) == {120.0}
+    assert stats["starts_by_hour"]["weekday"][21] == 2.0
 
 
 def test_activity_spread_reads_sigma_off_the_busiest_tenth():

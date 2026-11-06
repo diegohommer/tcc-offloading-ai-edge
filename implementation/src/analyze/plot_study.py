@@ -422,7 +422,7 @@ def plot_traffic() -> Path:
     """Messages per hour over one test week, at 10,000 households, in each scenario."""
     questions = list(range(1319))
     figure, panels = new_figure(height=TRAFFIC_HEIGHT, rows=3, sharex=True, sharey=True)
-    drift = {"main": (0.0, 12.3), "burst_week": (0.235, 3.18), "burst_all": (0.457, 12.3)}
+    drift = {"main": (0.0, 9.36), "burst_week": (0.253, 2.64), "burst_all": (0.477, 9.36)}
     rows = []
     for axes, (scenario, (sigma, hours)) in zip(panels, drift.items()):
         homes = Households(
