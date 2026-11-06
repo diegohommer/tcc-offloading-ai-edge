@@ -10,6 +10,10 @@ Launch detached, so the study keeps running if this machine sleeps or disconnect
 collect whatever has finished at any time:
     modal run --detach src/simulate/run_study_modal.py
     modal run src/simulate/run_study_modal.py --collect
+For a long study, deploy and spawn one call per piece instead, so no client or dispatcher
+has to stay alive (a preempted dispatcher once took its whole map down):
+    modal deploy src/simulate/run_study_modal.py
+    modal run src/simulate/run_study_modal.py --sizes 10000,20000 --spawn
     modal run --detach src/simulate/run_study_modal.py --self-calibration --only main
         # static_day and static_hour relearned under themselves, split by beta, added to
         # the runs already in results/study/ as static_day_self and static_hour_self
@@ -347,6 +351,7 @@ def main(
     sizes: str = "",
     skip: str = "",
     remote: bool = False,
+    spawn: bool = False,
 ):
     """Launch every piece not yet collected, or collect what the volume holds, then merge.
 
@@ -364,6 +369,8 @@ def main(
         skip: Comma-separated piece names not to launch, e.g. those the laptop is running.
         remote: Dispatch the pieces from inside Modal (with --detach), so this machine can
             sleep or disconnect; collect them later with --collect.
+        spawn: Spawn every piece on the deployed app (modal deploy first), one call each,
+            so nothing has to stay alive; collect them later with --collect.
     """
     folder = Path(out) if out else STUDY
     if self_calibration and label == "study":
@@ -414,6 +421,11 @@ def main(
                 and piece_name(tag, seed, size) not in skip.split(",")
             ]
         print(f"{len(jobs)} pieces on Modal, one container each, writing to {folder}")
+        if spawn:
+            deployed = modal.Function.from_name("tcc-case-study", "simulate_piece")
+            calls = [deployed.spawn(*job) for job in jobs]
+            print(f"spawned {len(calls)} calls on the deployed app; collect later with --collect")
+            return
         if remote:
             print("dispatched from Modal: safe to disconnect; collect later with --collect")
             for line in dispatch.remote(jobs):
