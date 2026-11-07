@@ -1,0 +1,34 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,10000,Phone alone,accuracy,0.472725,J_per_query,31.4891,31.3225,31.6377
+,main,10000,ONU alone,accuracy,0.687831,J_per_query,104.988,104.836,105.089
+,main,10000,OLT alone,accuracy,0.916855,J_per_query,257.433,257.052,257.958
+,main,10000,Confidence only,accuracy,0.509504,J_per_query,64.5812,64.3565,64.9012
+,main,10000,Confidence only,accuracy,0.565572,J_per_query,112.332,111.831,112.718
+,main,10000,Confidence only,accuracy,0.607076,J_per_query,156.24,155.806,156.586
+,main,10000,Confidence only,accuracy,0.650726,J_per_query,203.224,202.903,203.47
+,main,10000,Confidence only,accuracy,0.697328,J_per_query,245.552,245.372,245.794
+,main,10000,Confidence only,accuracy,0.74797,J_per_query,285.282,284.99,285.652
+,main,10000,Confidence only,accuracy,0.795889,J_per_query,319.074,318.724,319.444
+,main,10000,Confidence only,accuracy,0.833096,J_per_query,347.86,347.48,348.258
+,main,10000,Confidence only,accuracy,0.873018,J_per_query,373.751,373.358,373.964
+,main,10000,Confidence only at 0.80,accuracy,0.8,J_per_query,322.255,321.88,322.468
+,main,10000,"WattLadder, timetable",accuracy,0.606447,J_per_query,97.3562,86.9194,107.59
+,main,10000,"WattLadder, timetable",accuracy,0.784567,J_per_query,174.074,171.586,177.49
+,main,10000,"WattLadder, timetable",accuracy,0.823492,J_per_query,198.35,197.227,199.071
+,main,10000,"WattLadder, timetable",accuracy,0.854486,J_per_query,218.012,217.605,218.275
+,main,10000,"WattLadder, timetable",accuracy,0.867457,J_per_query,231.671,231.49,231.823
+,main,10000,"WattLadder, timetable",accuracy,0.883509,J_per_query,243.828,243.534,244.092
+,main,10000,"WattLadder, timetable",accuracy,0.898938,J_per_query,252.031,251.759,252.317
+,main,10000,"WattLadder, timetable",accuracy,0.91085,J_per_query,255.479,255.069,255.918
+,main,10000,"WattLadder, timetable",accuracy,0.915774,J_per_query,257.229,256.838,257.768
+,main,10000,"WattLadder, timetable at 0.80",accuracy,0.8,J_per_query,183.332,180.91,185.136
+,main,10000,"WattLadder, broadcast",accuracy,0.509504,J_per_query,64.5812,64.3565,64.9012
+,main,10000,"WattLadder, broadcast",accuracy,0.565572,J_per_query,112.332,111.831,112.718
+,main,10000,"WattLadder, broadcast",accuracy,0.607076,J_per_query,156.24,155.806,156.586
+,main,10000,"WattLadder, broadcast",accuracy,0.686645,J_per_query,204.328,204.127,204.439
+,main,10000,"WattLadder, broadcast",accuracy,0.842885,J_per_query,231.72,231.294,231.999
+,main,10000,"WattLadder, broadcast",accuracy,0.882956,J_per_query,244.133,243.703,244.454
+,main,10000,"WattLadder, broadcast",accuracy,0.901508,J_per_query,251.732,251.412,251.96
+,main,10000,"WattLadder, broadcast",accuracy,0.910891,J_per_query,255.508,255.123,255.949
+,main,10000,"WattLadder, broadcast",accuracy,0.915836,J_per_query,257.193,256.752,257.693
+,main,10000,"WattLadder, broadcast at 0.80",accuracy,0.8,J_per_query,224.193,223.427,224.937

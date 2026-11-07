@@ -1,0 +1,10 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,10000,Phone,case,Confidence only,J_per_query_at_target,34.4818,,
+,main,10000,Phone,case,"WattLadder, $\delta = 0.3$",J_per_query_at_target,23.6167,,
+,main,10000,Phone,case,"WattLadder, $\delta = 0$",J_per_query_at_target,16.6761,,
+,main,10000,ONU,case,Confidence only,J_per_query_at_target,73.9665,,
+,main,10000,ONU,case,"WattLadder, $\delta = 0.3$",J_per_query_at_target,28.5882,,
+,main,10000,ONU,case,"WattLadder, $\delta = 0$",J_per_query_at_target,19.5478,,
+,main,10000,OLT,case,Confidence only,J_per_query_at_target,213.97,,
+,main,10000,OLT,case,"WattLadder, $\delta = 0.3$",J_per_query_at_target,200.095,,
+,main,10000,OLT,case,"WattLadder, $\delta = 0$",J_per_query_at_target,187.992,,

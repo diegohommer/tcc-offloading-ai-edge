@@ -43,7 +43,7 @@ from households import Households, load_sessions, TRAFFIC  # noqa: E402
 from summarize_study import at_column, ORDER  # noqa: E402
 
 DELTA = STUDY.parent / "delta"
-"""The delta sweep (src/simulate/run_delta.sh) and its diagnostic runs."""
+"""The delta sweep (src/simulate/run_delta.sh)."""
 
 FIGURES = STUDY / "figures"
 """Where the figures are written."""
@@ -1197,10 +1197,12 @@ def plot_delta() -> Path:
 
 def plot_energy_split() -> Path:
     """Joules per query spent at each tier, under RecServe and under the broadcast."""
+    # Every run records the joules each tier spent, so the main study's seed 7 gives delta 0
+    # and the delta sweep gives 0.3.
     cases = (
-        ("RecServe", "delta0_seed7.json", "recserve"),
-        (r"Broadcast, $\delta = 0.3$", "delta0.3_seed7.json", "broadcast"),
-        (r"Broadcast, $\delta = 0$", "delta0_seed7.json", "broadcast"),
+        ("Confidence only", STUDY / "study_main_seed7.json", "recserve"),
+        (r"WattLadder, $\delta = 0.3$", DELTA / "delta0.3_seed7.json", "broadcast"),
+        (r"WattLadder, $\delta = 0$", STUDY / "study_main_seed7.json", "broadcast"),
     )
     figure, (axes,) = new_figure()
     style(axes, f"{ENERGY} at {TARGET} accuracy", "")
@@ -1210,7 +1212,7 @@ def plot_energy_split() -> Path:
         values = np.array(
             [
                 at_column(
-                    json.loads((DELTA / "diagnostic" / file).read_text(encoding="utf-8")),
+                    json.loads(file.read_text(encoding="utf-8")),
                     SIZE,
                     TARGET,
                     f"J_{tier}_per_query",

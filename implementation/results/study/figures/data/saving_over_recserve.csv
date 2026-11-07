@@ -1,0 +1,11 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,,"WattLadder, timetable",households,1000,saving_over_recserve_percent,0.0281448,0.0221005,0.039024
+,main,,"WattLadder, timetable",households,2000,saving_over_recserve_percent,0.615906,0.566176,0.69171
+,main,,"WattLadder, timetable",households,5000,saving_over_recserve_percent,10.3368,10.1281,10.4723
+,main,,"WattLadder, timetable",households,10000,saving_over_recserve_percent,43.1101,42.5879,43.7957
+,main,,"WattLadder, timetable",households,20000,saving_over_recserve_percent,51.8171,51.625,52.1424
+,main,,"WattLadder, broadcast",households,1000,saving_over_recserve_percent,0.102919,0.08028,0.134661
+,main,,"WattLadder, broadcast",households,2000,saving_over_recserve_percent,0.791958,0.739526,0.849718
+,main,,"WattLadder, broadcast",households,5000,saving_over_recserve_percent,11.0965,11.0448,11.1335
+,main,,"WattLadder, broadcast",households,10000,saving_over_recserve_percent,30.43,30.2451,30.5869
+,main,,"WattLadder, broadcast",households,20000,saving_over_recserve_percent,46.4621,46.3739,46.573

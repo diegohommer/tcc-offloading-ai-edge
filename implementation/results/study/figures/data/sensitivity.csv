@@ -1,0 +1,19 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,10000,over RecServe,scenario,No drift (main),saving_percent,30.43,30.2451,30.5869
+,burst_week,10000,over RecServe,scenario,Mild drift,saving_percent,31.8239,31.2652,32.7302
+,burst_all,10000,over RecServe,scenario,Strong drift,saving_percent,35.5171,33.6733,37.4253
+,average,10000,over RecServe,scenario,Average accounting,saving_percent,33.9955,33.8618,34.103
+,report_share,10000,over RecServe,scenario,OLT reports the share,saving_percent,20.9158,20.8714,20.9386
+,onu0.5,10000,over RecServe,scenario,ONU energy ×0.5,saving_percent,22.449,22.1967,22.7751
+,olt0.41,10000,over RecServe,scenario,OLT ×1.0 (GPU card alone),saving_percent,52.8172,52.7864,52.8734
+,olt0.70,10000,over RecServe,scenario,OLT ×1.72 (Google's accounting),saving_percent,39.2753,38.9778,39.465
+,olt1.37,10000,over RecServe,scenario,OLT ×3.35 (host draws as much as the card),saving_percent,23.0381,22.8165,23.1973
+,main,10000,over the timetable,scenario,No drift (main),saving_percent,-22.2964,-23.5015,-21.4985
+,burst_week,10000,over the timetable,scenario,Mild drift,saving_percent,-10.0459,-10.684,-9.36624
+,burst_all,10000,over the timetable,scenario,Strong drift,saving_percent,11.919,7.69845,17.1588
+,average,10000,over the timetable,scenario,Average accounting,saving_percent,-24.2304,-25.6907,-23.2451
+,report_share,10000,over the timetable,scenario,OLT reports the share,saving_percent,0.0165577,-0.00678504,0.0394446
+,onu0.5,10000,over the timetable,scenario,ONU energy ×0.5,saving_percent,-23.5056,-23.7051,-23.3045
+,olt0.41,10000,over the timetable,scenario,OLT ×1.0 (GPU card alone),saving_percent,-14.6856,-14.8445,-14.3933
+,olt0.70,10000,over the timetable,scenario,OLT ×1.72 (Google's accounting),saving_percent,-21.7752,-22.3999,-21.2541
+,olt1.37,10000,over the timetable,scenario,OLT ×3.35 (host draws as much as the card),saving_percent,-12.9508,-13.5853,-12.2074
