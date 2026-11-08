@@ -842,7 +842,7 @@ def plot_savings_over_recserve() -> Path:
     """Each energy-aware policy's saving over RecServe, by population, no drift."""
     runs = load_runs("main")
     figure, (axes,) = new_figure()
-    style(axes, "Households on the OLT", f"Energy saved over RecServe at {TARGET} (%)")
+    style(axes, "Households on the OLT", f"Energy saved over confidence only at {TARGET} (%)")
     rows = []
     for policy in ("static_hour", "broadcast"):
         name, color, marker = SERIES[policy]
@@ -966,7 +966,7 @@ def plot_bandwidth() -> Path:
     panels[0].axvline(float(TARGET), color=MUTED, linewidth=0.8, linestyle="--")
     legend(panels[0])
 
-    style(panels[1], "", f"Change against RecServe at {TARGET} (%)", "(b)")
+    style(panels[1], "", f"Change against confidence only at {TARGET} (%)", "(b)")
     panels[1].axhline(0, color=MUTED, linewidth=0.6)
     measures = (
         ("Energy per query", "J_per_query"),
@@ -1033,13 +1033,12 @@ SCENARIO_LABELS = {
     "burst_week": "Mild drift",
     "burst_all": "Strong drift",
     "average": "Average accounting",
-    "report_share": "OLT reports the share",
     "onu0.5": "ONU energy \u00d70.5",
     "olt0.41": "OLT \u00d71.0 (GPU card alone)",
     "olt0.70": "OLT \u00d71.72 (Google's accounting)",
     "olt1.37": "OLT \u00d73.35 (host draws as much as the card)",
 }
-"""How each scenario is named in the figures."""
+"""How each scenario is named in the figures; a run with no name here is not drawn."""
 
 
 def saving_at(runs: list[dict], policy: str, reference: str, size: int) -> tuple:
@@ -1090,20 +1089,22 @@ def plot_traffic_profiles() -> Path:
 
 
 def plot_sensitivity() -> Path:
-    """The broadcast's saving over RecServe and over the timetable, in every scenario."""
+    """Each WattLadder strategy's saving over confidence only, in every scenario."""
     figure, (axes,) = new_figure(height=3.6)
-    style(axes, f"Broadcast's saving at {TARGET} accuracy, {SIZE:,} households (%)", "")
-    scenarios = [name for name in ORDER if (STUDY / f"study_{name}_seed7.json").exists()]
+    style(
+        axes, f"Saving over confidence only at {TARGET} accuracy, {SIZE:,} households (%)", ""
+    )
+    scenarios = [
+        name
+        for name in ORDER
+        if name in SCENARIO_LABELS and (STUDY / f"study_{name}_seed7.json").exists()
+    ]
     height = 0.38
     rows = []
-    for slot, (reference, name, color) in enumerate(
-        (
-            ("recserve", "over RecServe", SERIES["recserve"][1]),
-            ("static_hour", "over the timetable", SERIES["static_hour"][1]),
-        )
-    ):
+    for slot, policy in enumerate(("static_hour", "broadcast")):
+        name, color, _ = SERIES[policy]
         points = [
-            saving_at(load_runs(scenario), "broadcast", reference, SIZE) for scenario in scenarios
+            saving_at(load_runs(scenario), policy, "recserve", SIZE) for scenario in scenarios
         ]
         positions = np.arange(len(scenarios)) + (slot - 0.5) * height
         axes.barh(
@@ -1135,7 +1136,7 @@ def plot_sensitivity() -> Path:
     axes.invert_yaxis()
     axes.axvline(0, color=MUTED, linewidth=0.6)
     axes.grid(axis="y", visible=False)
-    legend(axes, "upper right")
+    legend(axes, "lower right")
     return save(figure, "sensitivity", rows)
 
 
@@ -1152,8 +1153,8 @@ def delta_runs(delta: str) -> list[dict]:
 def plot_delta() -> Path:
     """What the margin delta trades: energy, against RecServe's burden and the latency."""
     figure, panels = new_figure(columns=2)
-    style(panels[0], r"Margin $\delta$", f"Saving over RecServe at {TARGET} (%)", "(a)")
-    style(panels[1], r"Margin $\delta$", f"Change against RecServe at {TARGET} (%)", "(b)")
+    style(panels[0], r"Margin $\delta$", f"Saving over confidence only at {TARGET} (%)", "(a)")
+    style(panels[1], r"Margin $\delta$", f"Change against confidence only at {TARGET} (%)", "(b)")
     xs = [float(delta) for delta in DELTAS]
     rows = []
     points = [saving_at(delta_runs(delta), "broadcast", "recserve", SIZE) for delta in DELTAS]
