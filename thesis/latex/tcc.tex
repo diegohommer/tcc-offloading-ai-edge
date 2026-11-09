@@ -2,9 +2,8 @@
 % tcc.tex --- Energy-Aware Recursive Offloading for LLM Inference: A Case
 % Study on Passive Optical Networks
 %
-% Metadata, the abstracts (no text yet), the table of contents and lists, the
-% chapter/section skeleton and the references. Running text so far: the
-% Introduction (two \todo placeholders left); the rest is still to be written.
+% Metadata, the abstracts, the table of contents and lists, the chapters and the
+% references.
 %
 % Written in English (class option `english'); UFRGS also requires an
 % abstract in Portuguese, the `translatedabstract' environment below.
@@ -28,6 +27,9 @@
 \usepackage[ruled,vlined,linesnumbered,algochapter]{algorithm2e}
 % Marks unfinished text in red; remove every \todo before submission.
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+% Lets a paragraph that cannot otherwise be set without a line running into the
+% margin use slightly looser spacing instead; well-set paragraphs are unaffected.
+\setlength{\emergencystretch}{1em}
 
 %------------------------------------------------------------------------------
 % Document metadata
@@ -69,15 +71,66 @@
 \maketitle
 
 %------------------------------------------------------------------------------
+% English heading on purpose: the class's agradecimentos environment prints
+% "Agradecimentos", and this thesis is written in English.
+\chapter*{Acknowledgments}
+I thank my advisor, Prof.~Dr.~Gabriel Luca Nazar, and co-advisor, Prof.~Dr.~\mbox{Dennis} Giovani
+Balreira, for their guidance and feedback on this work. I also thank the many professors I had
+during my degree, who built the educational foundation I have today.
+
+I am grateful to my parents, Enio and Lisiane, for supporting me throughout my undergraduate
+years, and also to my family for their patience while I was busy with my studies. I would like
+to thank my girlfriend, Gabrielly, who has accompanied me through a large part of my academic
+journey, for her love and for standing by my side in many difficult moments. I thank
+all my friends, both those from outside UFRGS and those I met there. My friends from UFRGS,
+through study groups and constant cooperation, helped me get this far, and most of them I am
+sure I will keep for life.
+
+%------------------------------------------------------------------------------
 \begin{abstract}
-\mbox{} % The class ends the abstract with a \\ (before the keywords), which
-        % needs a line already open; this empty \mbox{} avoids a build
-        % error until the abstract is written.
+Large Language Models (LLMs) are increasingly served across the tiers of a network, from the
+user's device to servers at its edge. In recursive tiered inference, a query climbs these tiers
+one at a time, and each one either answers it or passes it up. Current approaches make this
+choice from the confidence of the answer alone, ignoring the energy each tier spends, even
+though a server that batches queries can answer one more query at little extra cost while it is
+busy. This
+work integrates energy awareness into recursive tiered
+inference through WattLadder, a policy in which each tier also weighs whether answering a query
+itself or further up would cost less energy. We study it on a Passive Optical Network (PON), with the user's
+phone, the Optical Network Unit (ONU) and the Optical Line Terminal (OLT) as the three tiers and
+the OLT's energy measured by us on a GPU. The tiers learn the OLT's cost either from a timetable
+built in advance or from a live report that the OLT broadcasts on the PON downstream. In
+simulations driven by
+recorded conversation traffic, with and without drift in the load, WattLadder reaches the same
+accuracy as escalation by confidence alone with less energy and a shorter wait for an answer.
+The saving appears once the OLT serves enough households to batch their queries, reaching about
+half the energy at 20,000 households. The timetable saves more in most scenarios, while the
+broadcast saves more when changes in the load move the OLT between batching and idling.
 \end{abstract}
 
 %------------------------------------------------------------------------------
 \begin{translatedabstract}
-\mbox{} % Portuguese abstract (Resumo); same placeholder as above.
+Modelos de Linguagem de Grande Porte (LLMs) são cada vez mais executados ao longo da rede, do
+dispositivo do usuário a servidores na borda. Na inferência recursiva em níveis, a consulta
+parte do usuário, e cada nível responde ou a encaminha ao seguinte. As abordagens atuais fazem
+essa escolha com base apenas na confiança da resposta, ignorando a energia que cada um deles
+gasta, embora um servidor que processa consultas em lote possa responder a mais uma consulta
+com pouco custo adicional enquanto está ocupado.
+Este trabalho torna a inferência recursiva em níveis sensível à energia por meio do
+WattLadder, uma política em que cada nível também avalia se custaria menos energia responder à
+consulta por conta própria ou mais acima. Avaliamos o WattLadder em uma Rede Óptica Passiva (PON), com o celular do
+usuário, a Unidade de Rede Óptica (ONU) e o Terminal de Linha Óptica (OLT) como os três níveis
+e com a energia da OLT medida por nós em uma GPU. Os níveis obtêm o custo da OLT de uma tabela
+de custos por horário, aprendida previamente, ou de um relatório em tempo real que a OLT envia em
+\textit{broadcast} no \textit{downstream} da PON. Em simulações com registros reais de
+conversas, com a carga seguindo ou não seu padrão habitual, o WattLadder alcança a mesma
+acurácia do encaminhamento baseado apenas na confiança com menos energia e menor tempo de
+espera pelas respostas. A economia aparece quando a OLT atende domicílios suficientes para
+agrupar suas consultas em lotes e chega a cerca da metade da energia com 20 mil domicílios.
+A tabela economiza mais na maioria dos cenários, enquanto o \textit{broadcast} economiza mais
+quando as variações da carga fazem a OLT alternar entre agrupar consultas em lotes e ficar
+ociosa.
+\par % the class puts the keywords right after the text, without a line break
 \end{translatedabstract}
 
 \tableofcontents
@@ -159,10 +212,13 @@ larger model than the one below. We evaluate WattLadder with two strategies for 
 OLT's cost: one that
 follows a fixed timetable of the OLT's cost and one that takes advantage of the PON
 downstream broadcast, with the OLT periodically announcing its current cost to every
-ONU. Both are compared with escalation by confidence alone at the same target accuracy, in energy per query
-and in communication burden, under recorded conversation traffic with and without
-drift in the load. \todo{one or two sentences with the main results, once the Results
-chapter is settled.}
+ONU. Both are compared with escalation by confidence alone at the same target accuracy, in energy per query,
+in latency and in communication burden, under recorded conversation traffic with and without
+drift in the load. In our simulations, WattLadder reaches the same accuracy as escalation by
+confidence alone with less energy, about half as much at 20,000 households, a saving that grows
+with the number of households the OLT serves, since more of their queries can share a batch. The timetable saves more than
+the broadcast in most scenarios, while the broadcast follows changes in the load as they happen
+and needs no training.
 
 The contributions of this work are:
 \begin{itemize}
@@ -171,19 +227,24 @@ The contributions of this work are:
   account the energy spent at each tier, and not only confidence;
   \item An energy model of the user device, the ONU and the OLT counted toward a single
   measurement boundary, with the OLT's energy measured by us on a Graphics Processing Unit (GPU);
-  \item An offloading strategy that uses the PON downstream broadcast to share the
-  OLT's current cost with every ONU;
+  \item Two strategies for sharing the OLT's cost with the tiers below, a timetable learned
+  in advance and a report broadcast on the PON downstream, with the conditions under which
+  each saves more;
   \item A simulation study on recorded conversation traffic, with and without
   drift in the load, comparing the energy-aware strategies with confidence-only
-  escalation in energy per query and communication burden.
+  escalation in energy per query, latency and communication burden.
 \end{itemize}
 
 The remainder of this work is organized as follows. Chapter~\ref{chap:review}
 presents the background on PONs, LLM inference and how its energy is measured, and
-reviews the work on tiered LLM inference and on energy-aware LLM serving. Chapter~\ref{chap:methodology} describes
-WattLadder, the energy model, and the simulation setup. Chapter~\ref{chap:results}
-presents the results of the case study, and Chapter~\ref{chap:conclusion} concludes the
-work. \todo{revise the descriptions of Chapters~\ref{chap:methodology} and~\ref{chap:results} once they are written.}
+reviews the work on tiered LLM inference and on energy-aware LLM serving.
+Chapter~\ref{chap:methodology} presents the case study and WattLadder, with its two strategies
+for learning the OLT's cost, then the energy model of the three tiers, the simulator and how the
+policies are compared. Chapter~\ref{chap:results} compares the energy each policy needs to reach
+the same accuracy, the two strategies, and the latency and traffic that come with the saving,
+then covers a margin that trades energy for traffic, the sensitivity of the results and the
+limitations of the study. Chapter~\ref{chap:conclusion} concludes the work and points to future
+work.
 
 \section{Use of Artificial Intelligence Tools}
 \label{sec:ai-tools}
@@ -302,9 +363,10 @@ and network condition, so a model can instead compare each confidence with the o
 has seen recently. It keeps the confidences of its last $k$ answers and accepts an answer
 whose confidence reaches their $\beta$-quantile, so about a fraction $\beta$ of its
 answers are rejected by construction, whatever the scale of the score. This test was
-proposed by \citeonline{wu2025recserve}, with a normalized perplexity, the geometric
-mean of the probabilities of the answer's tokens, as the confidence of generated text,
-and we refer to it as the quantile test.
+proposed by \citeonline{wu2025recserve}, who turn the perplexity of generated text into a
+confidence between 0 and 1 as $1/(1+\text{perplexity})$, and we refer to it as the quantile
+test. We score an answer by the geometric mean of the probabilities of its tokens, which is one
+over the perplexity, so it orders answers the same way and the test makes the same decisions.
 
 \subsection{Model Cascades and Tiered Inference}
 \label{sec:cascades-tiers}
@@ -334,8 +396,8 @@ query in the cloud~\cite{wu2025recserve}.
 \label{sec:metrics}
 \label{sec:measurements}
 
-Studies report the energy of LLM inference per generated token or per
-query~\cite{solovyeva2026green,elsworth2025measuring,chung2025mlenergy}, and either unit
+Studies report the energy of LLM inference either per generated token or per
+query~\cite{solovyeva2026green,elsworth2025measuring,chung2025mlenergy}, and each unit
 can be further split into the prefill and decode phases~\cite{solovyeva2026green}. Of
 these units, this work compares tiers per query, since different
 models can answer the same prompt with responses of very different lengths, and a figure
@@ -516,10 +578,11 @@ serving with continuous batching.
 
 The third is that the cost of the OLT changes with its load, and the tiers below cannot
 observe it. One more query joining a busy batch costs far less than a query that finds
-the OLT idle, so the same decision can save or waste energy depending on the moment. A
-timetable learned in advance follows the daily pattern of the load but not the moments
-that depart from it, so we use the PON downstream broadcast (Section~\ref{sec:pon}) to
-let the OLT announce its current cost to every ONU at once, with no extra upstream traffic.
+the OLT idle, so the same decision can save or waste energy depending on the moment. We
+compare two ways of letting the tiers know this cost, a timetable learned in advance, which
+follows the daily pattern of the load but not the moments that depart from it, and the PON
+downstream broadcast (Section~\ref{sec:pon}), with which the OLT announces its current cost to
+every ONU at once, with no extra upstream traffic.
 
 The fourth is how such policies are compared. RecServe is evaluated on the trade-off
 between accuracy and communication~\cite{wu2025recserve}, and the network-side work of
@@ -528,7 +591,8 @@ system spends to reach a given accuracy. A policy that sends more queries to lar
 models is also more accurate, so comparing policies at the same $\beta$ would mix the two
 effects. We compare every policy at the same target accuracy, under recorded
 conversation traffic with and without departures from its daily pattern, against
-escalation by confidence alone, a timetable and each tier answering every query alone.
+escalation by confidence alone, the same rule without the ONU and each tier answering every
+query alone.
 
 %==============================================================================
 \chapter{Methodology}
@@ -589,8 +653,9 @@ The task is GSM8K, a set of grade-school math problems whose answer is a single
 number~\cite{cobbe2021training}, so each answer can be graded exactly by comparing its
 final number with the reference, without a judge model. The problems take between two
 and eight steps to solve, which spreads the accuracies of the three models far apart.
-Every tier answered each of the 1,319 test problems once, and the simulation replays
-these recorded answers, together with the confidence computed from the probabilities of
+Every tier answered each of the 1,319 test problems once, with its model in the quantization
+of Table~\ref{tab:tiers} run on an NVIDIA L4 GPU rented in the cloud, and the simulation
+replays these recorded answers, together with the confidence computed from the probabilities of
 their tokens (Section~\ref{sec:llm-background}), instead of running the models again.
 
 \section{Energy-Aware Recursive Offloading}
@@ -642,7 +707,8 @@ why Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$.
 The policy uses $C_j$ for two decisions in Algorithm~\ref{alg:decision}, both made when a
 query arrives at a tier $i < J$. The first is whether to run the query at all (lines 2
 to 6). Running it costs $E_i$ and, if its answer escalates, the expected energy of the
-cheapest tier above, so the tier forwards the query to $k^*$ without running it if
+cheapest tier above, taken as $C_{k^*}$ even when the margin $\delta$ would keep the escalation
+at tier $i+1$, so the tier forwards the query to $k^*$ without running it if
 \begin{equation}
   C_{k^*} < (1-\delta)\left(E_i + p_i \, C_{k^*}\right),
   \label{eq:on-arrival}
@@ -897,7 +963,7 @@ bandwidth (Section~\ref{sec:llm-background}), and a batch reads the model's weig
 all its queries. It falls short of 64 times in part because the GPU already reaches its
 power limit with a single query, so as the batch grows it lowers its clock instead of
 drawing more. With the two phases separated, the decode costs 2.464~J per generated token
-alone and 0.047~J in a batch of 64, about 50 times less (Figure~\ref{fig:batching}a). The
+alone and 0.047~J in a batch of 64, about 50 times less. The
 prefill, which is limited by computation rather than memory
 (Section~\ref{sec:llm-background}), gains far less, falling from 0.033~J per prompt token
 to about 0.015~J by a batch of 16 and staying there.
@@ -988,8 +1054,9 @@ between the OLT's energy with the query and without it, which in the same batch 
 of one query alone, so each of the other 63 adds $(1{,}180 - 840)/63 \approx 5$~J. A query that
 finds the OLT idle, in contrast, adds the full 840~J, since without it the GPU would be at rest.
 
-The OLT reports what a query adds above idle, since that is what the tiers decide on
-(Section~\ref{sec:energy-model}). A tier cannot know whether its query will find the OLT idle or busy, so the OLT weights the two cases by the share $b$ of
+The OLT reports what a query adds above idle (Section~\ref{sec:energy-model}), since sending a
+query to the OLT changes its energy by that amount, while the query's share also carries part
+of what its batch would spend without it. A tier cannot know whether its query will find the OLT idle or busy, so the OLT weights the two cases by the fraction $b$ of
 the last 5 minutes it spent busy, with at least one query generating, and reports the energy rate
 \begin{equation}
   r = b \, r_{\text{busy}} + (1-b) \, r_{\text{idle}},
@@ -1001,9 +1068,9 @@ Both rates are fixed, so only $b$ changes over time. For a query of the mean len
 to about 840~J and 5~J, and an OLT that was busy half of the time reports
 $0.5 \times 5 + 0.5 \times 840 \approx 420$~J.
 
-The first rate is read from Table~\ref{tab:olt-sweep} at a batch of one and multiplied by 2.44,
-which gives 0.044~J per prompt token and 3.33~J per generated token.
-The second follows the idea of the calculation above, which used only the two ends of the table,
+The idle rate $r_{\text{idle}}$ is read from Table~\ref{tab:olt-sweep} at a batch of one and
+multiplied by 2.44, which gives 0.044~J per prompt token and 3.33~J per generated token.
+The busy rate $r_{\text{busy}}$ follows the idea of the calculation above, which used only the two ends of the table,
 but draws on every measured size. Separately for prompt and generated tokens, we take the energy
 above idle of a whole batch at each size, divide it by the tokens of one query, multiply it by
 2.44 and fit a least-squares line of the result against the batch size, over batches 1 to 64
@@ -1014,7 +1081,7 @@ at small batches and, for such a query, stays between about 4 and 6~J above four
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy of a whole batch above idle, per prompt token (a) and per generated token (b) of each query}
+  \caption{Energy above idle per prompt token (a) and generated token (b)}
   \label{fig:batch-energy}
   \includegraphics[width=\textwidth]{figures/batch_energy.pdf}
   \legend{Source: The author}
@@ -1109,7 +1176,7 @@ in the following order:
   distribution with this mean, each at a random moment within the hour.
   \item \textbf{Length and pauses.} Each conversation draws its number of messages at random from
   those of WildChat's conversations, of which 63\% hold a single message, even with the users who
-  sent only one left out, and one in ten holds five or more. Each follow-up then draws its own pause from the time between two answers of the same
+  sent only one left out, and about one in eight holds five or more. Each follow-up then draws its own pause from the time between two answers of the same
   WildChat conversation, about two minutes at the median, since WildChat records only when an
   answer arrived.
   \item \textbf{Sender and questions.} Each conversation goes to one household, drawn in
@@ -1136,8 +1203,7 @@ the duration of the drift (Section~\ref{sec:drift}).
 
 \begin{figure}[htb]
   \centering
-  \caption{Share of the day's conversations starting in each hour, in local time, on weekdays
-  (a) and weekends (b), for WildChat's users worldwide, its Brazilian users and BurstGPT}
+  \caption{Conversations starting in each hour of weekdays (a) and weekends (b)}
   \label{fig:traffic-profiles}
   \includegraphics[width=\textwidth]{figures/traffic_profiles.pdf}
   \legend{Source: The author, with data from \citeonline{zhao2024wildchat} and
@@ -1193,8 +1259,7 @@ arrives.
 
 \begin{figure}[htb]
   \centering
-  \caption{Messages per hour over one test week of 10,000 households, with no, mild and
-  strong drift}
+  \caption{Messages per hour over one test week of 10,000 households}
   \label{fig:traffic-week}
   \includegraphics[width=\textwidth]{figures/traffic_week.pdf}
   \legend{Source: The author}
@@ -1336,17 +1401,19 @@ gathers the limitations of the study.
 
 The energy WattLadder saves depends on how busy the OLT can be, and it grows with the number
 of households (Figure~\ref{fig:saving-households}). At 1,000 and 2,000 households it saves
-nothing, since the OLT almost never holds two queries at once and every answer it gives pays
+less than 1\%, since the OLT almost never holds two queries at once and every answer it gives pays
 the cost of a lone query, so moving work to it gains nothing. From 5,000 households onward,
 the OLT starts to batch, and WattLadder spends 10.3\% less energy than escalation by confidence alone
 with the timetable and 11.1\% less with the broadcast. The saving reaches 43.1\% and 30.4\% at
-10,000 households and 51.8\% and 46.5\% at 20,000, and the three seeds never differ by more
-than a percentage point.
+10,000 households and 51.8\% and 46.5\% at 20,000, and the three seeds differ by at most 1.2
+percentage points. At 20,000 households the timetable reaches 85\% accuracy already at
+$\beta = 0.1$, its lowest value, and about 81 to 84\% under drift, so its figures there are read
+at that point (Section~\ref{sec:evaluation}), and its saving comes with more accuracy than
+confidence alone delivers.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy WattLadder saves over escalation by confidence alone at 80\% accuracy, with
-  no drift, by number of households}
+  \caption{Energy saved over confidence alone, by number of households}
   \label{fig:saving-households}
   \includegraphics[width=\textwidth]{figures/saving_over_recserve.pdf}
   \legend{Source: The author}
@@ -1364,15 +1431,13 @@ the phone the queries the phone answers with confidence. The OLT alone is more a
 though, at 91.7\%, and near that accuracy WattLadder spends about as much as it does.
 
 Neither of these fixed rules is the best choice at every size. At 1,000 households, sending
-every query to the OLT costs 748~J, 39\% more than confidence alone, because the OLT never
+every query to the OLT costs 748~J, 39\% more than confidence alone, because the OLT rarely
 batches, while at 20,000 households it costs 147~J, 38\% less. WattLadder matches the better of
 the two when the OLT is idle and spends less than both when the OLT batches.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy per query against accuracy at 10,000 households with no drift, one marker
-  per value of $\beta$, with $\beta$ rising from 0.1 to 0.9 along each line, and the tiers
-  answering alone as reference points}
+  \caption{Energy per query against accuracy at 10,000 households}
   \label{fig:equal-accuracy}
   \includegraphics[width=\textwidth]{figures/equal_accuracy.pdf}
   \legend{Source: The author}
@@ -1387,8 +1452,7 @@ because they batch.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy per query spent at each tier at 80\% accuracy, at 10,000 households with no
-  drift, under escalation by confidence alone and WattLadder with the broadcast}
+  \caption{Energy per query spent at each tier at 10,000 households}
   \label{fig:energy-split}
   \includegraphics[width=\textwidth]{figures/energy_split.pdf}
   \legend{Source: The author}
@@ -1396,7 +1460,7 @@ because they batch.
 
 In absolute terms, the saving is modest for a single OLT. A test month of 28 days carries about
 1.0 million queries at 10,000 households, so the timetable saves about 39~kWh and the broadcast
-about 28~kWh, and at 20,000 households, with about 2.0 million queries, it saves about 69~kWh
+about 27~kWh, and at 20,000 households, with about 2.0 million queries, it saves about 69~kWh
 and 62~kWh. The saving grows with the number of queries, since more queries both add up and
 batch more, and an operator runs many OLTs.
 
@@ -1405,14 +1469,13 @@ batch more, and an operator runs many OLTs.
 
 Of the two ways of estimating the OLT's cost, the timetable spends less energy in most cases
 (Figure~\ref{fig:broadcast-timetable}). With no drift, the broadcast spends 22.3\% more than
-the timetable at 10,000 households and 11.1\% more at 20,000, and below 5,000 households the
-two coincide. The broadcast spends less only at 5,000 households under drift, by 3.4\% with
-mild and 9.1\% with strong drift, and at 10,000 households under strong drift, by 11.9\%.
+the timetable at 10,000 households and 11.1\% more at 20,000, and up to 5,000 households the
+two coincide. The broadcast spends less only under drift, by 3.4\% with mild drift at 5,000
+households, and with strong drift by 3.3\% at 2,000, 9.1\% at 5,000 and 11.9\% at 10,000.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy the broadcast saves over the timetable at 80\% accuracy, by number of
-  households and drift}
+  \caption{Energy the broadcast saves over the timetable, by households and drift}
   \label{fig:broadcast-timetable}
   \includegraphics[width=\textwidth]{figures/broadcast_over_timetable.pdf}
   \legend{Source: The author}
@@ -1421,7 +1484,8 @@ mild and 9.1\% with strong drift, and at 10,000 households under strong drift, b
 The reason lies in how the OLT's cost depends on the load the policy itself sends it
 (Figure~\ref{fig:beta-knob}). At a low $\beta$ few queries escalate, so the OLT is mostly idle,
 and the broadcast reports, correctly, that one more query would cost it a lot. No tier then
-sends it work, it stays idle and expensive, and from $\beta = 0.1$ to 0.3 WattLadder with the
+forwards or skips a query to it, so it receives only what escalates by confidence and stays
+idle and expensive, and from $\beta = 0.1$ to 0.3 WattLadder with the
 broadcast takes exactly the routes of confidence alone, with the same energy and accuracy. At the
 same low $\beta$, the timetable behaves the other way, since it starts every hour at the cost
 of a busy OLT and is relearned until it agrees with the load it produces
@@ -1439,8 +1503,7 @@ and the ONU first.
 
 \begin{figure}[htb]
   \centering
-  \caption{Accuracy (a) and energy per query (b) against $\beta$ at 10,000 households with no
-  drift, with the tiers answering alone as reference lines}
+  \caption{Accuracy (a) and energy per query (b) against $\beta$}
   \label{fig:beta-knob}
   \includegraphics[width=\textwidth]{figures/beta_knob.pdf}
   \legend{Source: The author}
@@ -1453,10 +1516,10 @@ is wrong more often as the load departs from its usual pattern, while the broadc
 the timetable therefore depends on two opposite effects: what it gains by following the drift,
 and what it loses by starting from an idle OLT. Both depend on the number of households, since
 following the drift only helps when a departure moves the OLT between batching and idling,
-which changes where a query should go. At 5,000 households the OLT sits just below the load at which batching starts to pay,
-batching 1.3
-queries on average against 4.0 at 10,000, so a busy start gains the timetable little and an
-idle start costs the broadcast little, and with no drift the two coincide. Under drift, busy
+which changes where a query should go. At 5,000 households the OLT sits just below the load at
+which batching starts to pay, batching 1.8 queries on average under either strategy, against
+4.2 with the timetable and 3.3 with the broadcast at 10,000, so a busy start gains the timetable
+little and an idle start costs the broadcast little, and with no drift the two coincide. Under drift, busy
 spells push the OLT into batching for a while, and since only the broadcast notices them, its
 advantage grows with the drift. At 10,000 households
 starting from an idle OLT costs the broadcast more, and mild drift does not make up for it,
@@ -1469,8 +1532,7 @@ a dip, where the broadcast should gain most, although our scenarios do not inclu
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy per query at 80\% accuracy at 10,000 households with no, mild and strong
-  drift}
+  \caption{Energy per query with no, mild and strong drift}
   \label{fig:drift}
   \includegraphics[width=\textwidth]{figures/drift.pdf}
   \legend{Source: The author}
@@ -1491,17 +1553,16 @@ follows such changes as they happen.
 \label{sec:results-traffic}
 
 The energy WattLadder saves costs little traffic (Figure~\ref{fig:bandwidth}). At 10,000
-households, reaching 80\% accuracy carries 10.8~MB per 1,000 queries between the tiers under
+households, the communication burden at 80\% accuracy is 10.8~MB per 1,000 queries under
 confidence alone and 11.8~MB under WattLadder with either strategy, 9\% more, while sending
-every query to the OLT carries 17.4~MB, 60\% more. At 20,000 households the two strategies
-part, since the timetable sends most queries to the OLT and carries 13.7~MB, 13\% more than
-the broadcast's 12.1~MB, for 10\% less energy.
+every query to the OLT gives 17.4~MB, 60\% more. At 20,000 households the two strategies part,
+since the timetable, read at the 85\% accuracy it reaches with $\beta = 0.1$, sends most queries
+to the OLT and has a burden of 13.7~MB, 13\% more than the broadcast's 12.1~MB at 80\%, for 10\%
+less energy.
 
 \begin{figure}[htb]
   \centering
-  \caption{Communication burden against accuracy (a), and change in energy per query and in
-  communication burden against escalation by confidence alone at 80\% accuracy (b), at 10,000
-  households with no drift}
+  \caption{Communication burden against accuracy (a), and change in energy and burden against confidence alone (b)}
   \label{fig:bandwidth}
   \includegraphics[width=\textwidth]{figures/bandwidth.pdf}
   \legend{Source: The author}
@@ -1520,7 +1581,8 @@ answer (Section~\ref{sec:limitations}).
 The margin $\delta$ moves WattLadder from weighing energy alone to escalation by confidence
 alone, trading energy against traffic (Figure~\ref{fig:delta}). At 10,000 households with the
 broadcast, $\delta = 0$ saves 30.4\% of the energy for 9\% more traffic and a wait 61\% shorter,
-$\delta = 0.3$ saves 21.7\% for 4\% more traffic, and $\delta = 0.5$ still saves 12.3\% while
+$\delta = 0.3$ saves 21.7\% for 4\% more traffic, with more of its energy spent at the phone
+and the ONU (Figure~\ref{fig:energy-split}), and $\delta = 0.5$ still saves 12.3\% while
 carrying 4\% less traffic than confidence alone, with $\delta = 1$ reproducing confidence alone
 exactly. With $\delta = 0.5$ the traffic is lower because the OLT's larger model answers most
 of the queries WattLadder escalates, so it reaches 80\% with a lower $\beta$ and more queries
@@ -1530,9 +1592,7 @@ at no cost in traffic or as much as possible.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy saved over escalation by confidence alone (a), and change in communication
-  burden and mean latency (b), against the margin $\delta$, for WattLadder with the broadcast
-  at 10,000 households with no drift}
+  \caption{Energy saved (a), burden and latency (b) against the margin $\delta$}
   \label{fig:delta}
   \includegraphics[width=\textwidth]{figures/delta.pdf}
   \legend{Source: The author}
@@ -1542,19 +1602,21 @@ at no cost in traffic or as much as possible.
 \label{sec:sensitivity}
 
 WattLadder saves energy in every sensitivity run, which stop at 10,000 households
-(Figure~\ref{fig:sensitivity}). The more the OLT costs, the smaller the saving, since each
-query that reaches it costs more: with the GPU card alone, at $\times 1.0$, WattLadder saves
+(Figure~\ref{fig:sensitivity}). The more the OLT costs, the smaller the saving, since WattLadder
+spends a larger part of its energy at the OLT, 84\% with the broadcast against 66\% under
+confidence alone in the main runs (Figure~\ref{fig:energy-split}), so a dearer OLT raises its
+energy more: with the GPU card alone, at $\times 1.0$, WattLadder saves
 58.9\% with the timetable and 52.8\% with the broadcast, with Google's own accounting, at
 $\times 1.72$, 50.1\% and 39.3\%, and with a host that draws as much as its card, at
 $\times 3.35$, 31.9\% and 23.0\%, against 43.1\% and 30.4\% at the $\times 2.44$ of the main
-runs. An ONU twice as efficient lowers the saving to 37.2\% and 22.4\%, since confidence alone
+runs. At $\times 1.0$ and $\times 1.72$, the timetable again exceeds the target at its lowest
+$\beta$, with 83\% and 82\% accuracy. An ONU twice as efficient lowers the saving to 37.2\% and 22.4\%, since confidence alone
 then wastes less on the ONU. Charging the same routing under average accounting, which adds the
 idle energy to every query's charge, raises it to 46.9\% and 34.0\%.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy saved over escalation by confidence alone at 80\% accuracy at 10,000
-  households, in every scenario}
+  \caption{Energy saved over confidence alone in each scenario}
   \label{fig:sensitivity}
   \includegraphics[width=\textwidth]{figures/sensitivity.pdf}
   \legend{Source: The author}
@@ -1610,8 +1672,8 @@ community and those forums, which may not reflect the general population~\cite{z
 WildChat's pauses run from one answer to the next, so they include the time the next answer
 took. The drift comes from BurstGPT instead, and its duration $\tau$ is fitted to consecutive
 hours, so it matches how much of a departure BurstGPT keeps one or two hours later. In the
-data, though, about half of a departure is still there four to eight hours later, while the
-model keeps a fifth of it or less.
+data, though, 40 to 50\% of a departure is still there four to eight hours later, while the
+model of the mild drift keeps a fifth of it or less.
 
 The simulation reproduces how the OLT's cost changes over time, following the load of the
 households and its drift, and holds the other quantities WattLadder reads still. The user
@@ -1642,13 +1704,13 @@ batches. Weighing energy therefore matters most where a tier batches, since ther
 query depends on the load, which a rule based on confidence alone ignores.
 
 WattLadder also shortens the wait for an answer, since fewer queries pass through the slow ONU.
-It carries only slightly more traffic between the tiers, and the margin $\delta$ can remove even
+It carries somewhat more traffic between the tiers, and the margin $\delta$ can remove even
 that in exchange for part of the energy saving.
 
 Of the two ways of learning the OLT's cost, the timetable saves more in most of our scenarios,
 since it leads the households to keep the OLT busy and cheap. The broadcast does better when
-drift moves the OLT between batching and idling, and since it needs no training, it suits an OLT
-whose load is hard to predict.
+drift moves the OLT between batching and idling, and since it needs no training, it also suits
+an OLT whose number of clients changes, where a timetable would first have to be relearned.
 
 As future work, the two strategies could run together, with households following the timetable
 and turning to the broadcast's live report when the load departs from its usual pattern. This
