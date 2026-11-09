@@ -1,7 +1,7 @@
 panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
-,main,10000,Confidence only,scenario,No drift,J_per_query_at_target,322.255,321.88,322.468
-,burst_week,10000,Confidence only,scenario,Mild drift,J_per_query_at_target,317.857,314.907,319.373
-,burst_all,10000,Confidence only,scenario,Strong drift,J_per_query_at_target,305.984,298.957,312.35
+,main,10000,Confidence alone,scenario,No drift,J_per_query_at_target,322.255,321.88,322.468
+,burst_week,10000,Confidence alone,scenario,Mild drift,J_per_query_at_target,317.857,314.907,319.373
+,burst_all,10000,Confidence alone,scenario,Strong drift,J_per_query_at_target,305.984,298.957,312.35
 ,main,10000,"WattLadder, timetable",scenario,No drift,J_per_query_at_target,183.332,180.91,185.136
 ,burst_week,10000,"WattLadder, timetable",scenario,Mild drift,J_per_query_at_target,196.95,191.389,200.669
 ,burst_all,10000,"WattLadder, timetable",scenario,Strong drift,J_per_query_at_target,224.258,214.439,232.515

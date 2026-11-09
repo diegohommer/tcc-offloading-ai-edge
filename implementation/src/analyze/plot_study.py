@@ -98,7 +98,7 @@ plt.rcParams.update(
 # and marker. Some slots sit below 3:1 against white, so every series also has a legend
 # entry and a marker of its own, and reads in greyscale print too.
 SERIES = {
-    "recserve": ("Confidence only", "#2a78d6", "o"),
+    "recserve": ("Confidence alone", "#2a78d6", "o"),
     "static_hour": ("WattLadder, timetable", "#1baf7a", "^"),
     "broadcast": ("WattLadder, broadcast", "#eda100", "D"),
 }
@@ -842,7 +842,7 @@ def plot_savings_over_recserve() -> Path:
     """Each energy-aware policy's saving over RecServe, by population, no drift."""
     runs = load_runs("main")
     figure, (axes,) = new_figure()
-    style(axes, "Households on the OLT", f"Energy saved over confidence only at {TARGET} (%)")
+    style(axes, "Households on the OLT", f"Energy saved over confidence alone at {TARGET} (%)")
     rows = []
     for policy in ("static_hour", "broadcast"):
         name, color, marker = SERIES[policy]
@@ -966,7 +966,7 @@ def plot_bandwidth() -> Path:
     panels[0].axvline(float(TARGET), color=MUTED, linewidth=0.8, linestyle="--")
     legend(panels[0])
 
-    style(panels[1], "", f"Change against confidence only at {TARGET} (%)", "(b)")
+    style(panels[1], "", f"Change against confidence alone at {TARGET} (%)", "(b)")
     panels[1].axhline(0, color=MUTED, linewidth=0.6)
     measures = (
         ("Energy per query", "J_per_query"),
@@ -1089,10 +1089,10 @@ def plot_traffic_profiles() -> Path:
 
 
 def plot_sensitivity() -> Path:
-    """Each WattLadder strategy's saving over confidence only, in every scenario."""
+    """Each WattLadder strategy's saving over confidence alone, in every scenario."""
     figure, (axes,) = new_figure(height=3.6)
     style(
-        axes, f"Saving over confidence only at {TARGET} accuracy, {SIZE:,} households (%)", ""
+        axes, f"Saving over confidence alone at {TARGET} accuracy, {SIZE:,} households (%)", ""
     )
     scenarios = [
         name
@@ -1153,8 +1153,8 @@ def delta_runs(delta: str) -> list[dict]:
 def plot_delta() -> Path:
     """What the margin delta trades: energy, against RecServe's burden and the latency."""
     figure, panels = new_figure(columns=2)
-    style(panels[0], r"Margin $\delta$", f"Saving over confidence only at {TARGET} (%)", "(a)")
-    style(panels[1], r"Margin $\delta$", f"Change against confidence only at {TARGET} (%)", "(b)")
+    style(panels[0], r"Margin $\delta$", f"Saving over confidence alone at {TARGET} (%)", "(a)")
+    style(panels[1], r"Margin $\delta$", f"Change against confidence alone at {TARGET} (%)", "(b)")
     xs = [float(delta) for delta in DELTAS]
     rows = []
     points = [saving_at(delta_runs(delta), "broadcast", "recserve", SIZE) for delta in DELTAS]
@@ -1201,9 +1201,9 @@ def plot_energy_split() -> Path:
     # Every run records the joules each tier spent, so the main study's seed 7 gives delta 0
     # and the delta sweep gives 0.3.
     cases = (
-        ("Confidence only", STUDY / "study_main_seed7.json", "recserve"),
-        (r"WattLadder, $\delta = 0.3$", DELTA / "delta0.3_seed7.json", "broadcast"),
-        (r"WattLadder, $\delta = 0$", STUDY / "study_main_seed7.json", "broadcast"),
+        ("Confidence alone", STUDY / "study_main_seed7.json", "recserve"),
+        (r"WattLadder, broadcast, $\delta = 0.3$", DELTA / "delta0.3_seed7.json", "broadcast"),
+        (r"WattLadder, broadcast, $\delta = 0$", STUDY / "study_main_seed7.json", "broadcast"),
     )
     figure, (axes,) = new_figure()
     style(axes, f"{ENERGY} at {TARGET} accuracy", "")
