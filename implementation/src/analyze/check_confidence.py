@@ -2,7 +2,8 @@
 """Check that a collected answers file's confidence scores are sound before anything routes on them.
 
 Per tier: every generated token has one logprob, all <= 0; the stored confidence equals
-exp(mean token logprob), RecServe's; how many answers hit the token limit; and how well
+exp(mean token logprob) = 1 / perplexity, which ranks answers as RecServe's
+1 / (1 + perplexity) does; how many answers hit the token limit; and how well
 confidence separates correct from wrong answers (Welch t, for exp(mean) and exp(min)).
 
 Usage: python src/analyze/check_confidence.py results/measurements/<answers>.raw.jsonl

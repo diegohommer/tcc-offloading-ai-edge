@@ -169,7 +169,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     add(
         "--confidence",
         choices=("mean", "min"),
-        help="exp(mean logprob), RecServe's, or exp(min logprob)",
+        help="exp(mean logprob) (ranks as RecServe's 1/(1+perplexity)) or exp(min logprob)",
     )
     add("--onu-scale", type=float, help="multiply the ONU's J per generated token")
     add("--olt-scale", type=float, help="multiply the OLT's energy after the boundary conversion")

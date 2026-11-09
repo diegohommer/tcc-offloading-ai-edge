@@ -162,7 +162,9 @@ def collect(tier: str, spec: dict, prompts: list[str], max_tokens: int, max_mode
 
 
 def confidence(logprobs: list) -> float:
-    """Return RecServe's generative confidence: exp(mean token logprob) = 1 / perplexity.
+    """Return the generative confidence exp(mean token logprob) = 1 / perplexity.
+
+    It ranks answers as RecServe's 1 / (1 + perplexity) does, so the quantile test decides alike.
 
     Args:
         logprobs: The generated tokens' logprobs (None where missing).

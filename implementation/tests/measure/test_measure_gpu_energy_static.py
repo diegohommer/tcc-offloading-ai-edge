@@ -45,6 +45,6 @@ def test_add_per_query_marginal_is_the_slope_between_batches():
 
 
 def test_confidence_is_exp_of_the_mean_logprob():
-    """RecServe's confidence is 1 / perplexity, skipping missing logprobs."""
+    """The confidence is 1 / perplexity, skipping missing logprobs."""
     assert confidence([math.log(0.5), None, math.log(0.5)]) == pytest.approx(0.5)
     assert confidence([]) == 0.0
