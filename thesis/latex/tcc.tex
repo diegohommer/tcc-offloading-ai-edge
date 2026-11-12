@@ -437,10 +437,14 @@ only the energy of the whole batch, so each query's part has to be split out of 
 rule. The usual rule divides the batch's energy in proportion to each query's tokens, but
 \citeonline{luo2026request} measured what each query actually adds to its batch and found
 that this rule overcharges some queries and undercharges others by a wide margin, under
-static and continuous batching alike. Average
-accounting charges each query its share of the batch's energy, while marginal accounting
-leaves out the power the hardware draws at rest and shares among the queries only the
-energy their work adds to it (Chapter~\ref{chap:methodology}).
+static and continuous batching alike. Any such rule still adds up to the batch's energy, so
+its error moves energy between queries without changing the total, and the energy per query
+that this work reports, the total divided by the number of queries, does not depend on it.
+The other choice is whether to charge the power the hardware draws at rest, which is what
+separates average from marginal accounting. Average accounting charges each query its share
+of everything the hardware draws while serving its batch, while marginal accounting shares
+among the queries only the energy their work adds above idle
+(Chapter~\ref{chap:methodology}).
 
 The boundary also depends on the tool, since each class of hardware is measured
 differently. GPUs report their own energy in software, read through the NVIDIA
