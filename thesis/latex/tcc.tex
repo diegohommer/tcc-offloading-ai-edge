@@ -594,9 +594,17 @@ every ONU at once, with no extra upstream traffic.
 The fourth is how such policies are compared. RecServe is evaluated on the trade-off
 between accuracy and communication~\cite{wu2025recserve}, and the network-side work of
 \citeonline{pakpahan2026continuum} on latency, so neither reports the energy a tiered
-system spends to reach a given accuracy. A policy that sends more queries to larger
-models is also more accurate, so comparing policies at the same $\beta$ would mix the two
-effects. We compare every policy at the same target accuracy, under recorded
+system spends to reach a given accuracy. Comparing policies at the same $\beta$ is not
+enough for this, because $\beta$ fixes how often each tier escalates, not how many queries
+end up at the OLT. At $\beta = 0.5$, for instance, escalation by confidence alone sends
+about a quarter of the queries to the OLT, since half of them leave the phone and half of
+those leave the ONU, while the same rule without the ONU sends about half, and WattLadder,
+which can send a query past a tier without testing it there, may send nearly all of them
+when the OLT is busy. The more queries reach the OLT, the more are answered correctly, so at
+the same $\beta$ these policies differ in accuracy as well as in energy, and one could seem
+to save energy only because it answers fewer queries correctly. We therefore compare every
+policy at the same target accuracy, reading the energy each needs to reach it
+(Section~\ref{sec:evaluation}), under recorded
 conversation traffic with and without departures from its daily pattern, against
 escalation by confidence alone, the same rule without the ONU and each tier answering every
 query alone.
