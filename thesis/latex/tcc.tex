@@ -929,6 +929,10 @@ separately. \citeonline{tummalapalli2026edge} timed the same board reading a pro
 power while reading as while generating, a prompt token costs $5.58/200 = 0.028$~J, or
 $2.08/200 = 0.010$~J above idle. With the mean prompt of 122 tokens, a query then costs
 the ONU $243 + 122 \times 0.028 = 246$~J, or $91 + 122 \times 0.010 = 92$~J above idle.
+The ONU's mean prompt is shorter than the phone's although every tier receives the same
+question, because each model wraps the question in its own chat template and splits it into
+tokens with its own tokenizer, and the OLT, whose model is also a Qwen, sees the same 122
+tokens as the ONU.
 
 \begin{table}[htb]
   \centering
