@@ -432,9 +432,12 @@ Orca and FasterTransformer at the same latency~\cite{kwon2023vllm}. We refer to 
 of serving as continuous batching.
 
 Because a query's energy then depends on the other queries in its batch, and because the
-hardware draws power even at rest, there is more than one way to charge it. The GPU reports only the energy of the whole batch, and the
-rules used in practice to split it among queries can differ substantially from a fair
-split, with static and continuous batching alike~\cite{luo2026request}. Average
+hardware draws power even at rest, there is more than one way to charge it. The GPU reports
+only the energy of the whole batch, so each query's part has to be split out of it by some
+rule. The usual rule divides the batch's energy in proportion to each query's tokens, but
+\citeonline{luo2026request} measured what each query actually adds to its batch and found
+that this rule overcharges some queries and undercharges others by a wide margin, under
+static and continuous batching alike. Average
 accounting charges each query its share of the batch's energy, while marginal accounting
 leaves out the power the hardware draws at rest and shares among the queries only the
 energy their work adds to it (Chapter~\ref{chap:methodology}).
