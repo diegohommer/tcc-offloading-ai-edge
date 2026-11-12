@@ -877,9 +877,13 @@ only the energy above idle. The tiers therefore decide on energy above idle unde
 accountings. The study charges under marginal accounting, and its main runs are repeated under
 average accounting as a sensitivity analysis, with the queries routed the same way, so that only
 the energy counted changes. Table~\ref{tab:energy} lists
-what each source measures and how close it comes to the boundary, together with the energy
-each tier spends on a query of its mean prompt and answer lengths on GSM8K under both
-accountings. The OLT's energy depends on how many queries it batches, so the table gives its
+what each source measures, the factor by which we multiply its figure to bring it to the
+boundary, and the energy each tier spends on a query of its mean prompt and answer lengths
+on GSM8K under both accountings. The ONU's source already measures the whole board at the
+plug, so its figure is used as it is, and so is the phone's, since no measurement we found
+tells how much the rest of the phone adds to its chip (Section~\ref{sec:limitations}), while
+the OLT's GPU energy is multiplied by 2.44 to add the rest of its server and the building
+around it (Section~\ref{sec:accounting}). The OLT's energy depends on how many queries it batches, so the table gives its
 range, which Sections~\ref{sec:olt-energy} and~\ref{sec:accounting} explain.
 
 \begin{table}[htb]
