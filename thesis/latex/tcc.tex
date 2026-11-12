@@ -830,17 +830,20 @@ depends on how many other queries the OLT is serving at the moment
 times a day. We compare two strategies for giving the tiers a current estimate of it:
 
 \begin{itemize}
-  \item \textbf{Timetable.} One OLT rate per hour of the day, for weekdays and for
-  weekends, learned over a month of calibration and shipped to every device in advance.
-  The OLT's cost depends on how many queries the policy sends it, and a timetable that
-  makes the OLT look expensive keeps it idle, which makes it expensive in turn, so where
-  the timetable settles depends on where it starts. We start every hour at the OLT's cost
-  when it is busy ($r_{\text{busy}}$, Section~\ref{sec:accounting}), the lowest it can
-  report, and replay the calibration month with the policy using the latest timetable,
-  recording the OLT's cost again each time, until the timetable changes by less than 1\%
-  on average, or after at most 12 replays. Rising from below, it settles on the cheapest
-  timetable that agrees with the load it produces, which in our runs also spends the
-  least energy for a given accuracy.
+  \item \textbf{Timetable.} Every device receives in advance a table with one OLT rate for
+  each hour of the day, one for weekdays and one for weekends, built over a month of
+  calibration. Building it is not straightforward, because the rate the OLT reports
+  depends on the table itself. If the table says the OLT is expensive at some hour, the
+  tiers below answer the queries themselves, the OLT receives few of them and stays idle,
+  and an idle OLT really is expensive, while a table that says the OLT is cheap sends it
+  enough queries to keep it busy and cheap. We therefore build the table in rounds. The
+  first table sets every hour to $r_{\text{busy}}$ (Section~\ref{sec:accounting}), the
+  lowest rate the OLT can report, and each round replays the calibration month with the
+  policy using the current table, records the rate the OLT reports in each hour, and takes
+  these rates as the next table. We stop when the table changes by less than 1\% on
+  average from one round to the next, or after 12 rounds. Starting from the lowest rate
+  keeps the table from settling on rates that are high only because they keep the OLT
+  idle.
   \item \textbf{Broadcast.} Every 10 seconds, the OLT sends downstream the energy one
   more query would add to its consumption, averaged over its last 5 minutes
   (Section~\ref{sec:accounting}). The 5 minutes smooth out the batches that form and
