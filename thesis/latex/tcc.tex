@@ -705,9 +705,15 @@ ends the recursion: the top tier $J$ has no tier above it to pass a query to, so
 runs the query and returns its answer, and its cost is only its own energy. The cost of
 every other tier depends on the costs of the tiers above it, so the costs are computed from
 the top tier down, starting from $C_J = E_J$. We call a tier's energy per prompt token and per generated token its energy
-rates, and $E_j$ is the first rate times the length of the prompt plus the second times
-the average length of the tier's past answers, which stands in for the length of this
-answer because that length is only known after the tier runs. When confidence alone decides, no tier forwards a query
+rates, written $r^{\text{p}}_j$ and $r^{\text{g}}_j$, and the energy tier $j$ is expected
+to spend on a query whose prompt has $P$ tokens is
+\begin{equation}
+  E_j = r^{\text{p}}_j \, P + r^{\text{g}}_j \, \bar{L}_j,
+  \label{eq:expected-energy}
+\end{equation}
+where $\bar{L}_j$ is the average length of the tier's past answers, in tokens, which stands
+in for the length of this answer because that length is only known after the tier runs.
+When confidence alone decides, no tier forwards a query
 and every escalation goes to the next tier, and Equation~\eqref{eq:cost-to-completion}
 reduces to $C_j = E_j + p_j \, C_{j+1}$, a simpler form that would charge a tier for
 climbs that the tiers above it would skip.
@@ -818,7 +824,7 @@ threshold works from the first query.
 
 For the answer lengths, each tier ships with the mean answer length of its model, measured
 on the benchmark before deployment, and then moves this average 5\% of the way toward the
-length $L$ of each new answer, $\bar{L} \leftarrow 0.95\,\bar{L} + 0.05\,L$, so that each
+length $L$ of each new answer, $\bar{L}_j \leftarrow 0.95\,\bar{L}_j + 0.05\,L$, so that each
 older answer counts 5\% less than the one after it and the last 20 answers carry about two
 thirds of the weight. Since an answer travels back to the user through every tier below the
 one that produced it, it can carry these averages at no extra cost, and each tier below
