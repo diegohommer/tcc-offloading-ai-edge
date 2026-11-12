@@ -724,7 +724,7 @@ why Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$.
 
 The policy uses $C_j$ for two decisions in Algorithm~\ref{alg:decision}, both made when a
 query arrives at a tier $i < J$. The first is whether to run the query at all (lines 2
-to 6). Running it costs $E_i$ and, if its answer escalates, the expected energy of the
+to 5). Running it costs $E_i$ and, if its answer escalates, the expected energy of the
 cheapest tier above, taken as $C_{k^*}$ even when the margin $\delta$ would keep the escalation
 at tier $i+1$, so the tier forwards the query to $k^*$ without running it if
 \begin{equation}
@@ -732,11 +732,10 @@ at tier $i+1$, so the tier forwards the query to $k^*$ without running it if
   \label{eq:on-arrival}
 \end{equation}
 and runs it otherwise. The second is where the query goes if the tier runs it and its
-answer fails the test (lines 11 to 14), which is tier $i+1$, or directly $k^*$ if
+answer fails the test (lines 10 to 12), which is tier $i+1$, or directly $k^*$ if
 $C_{k^*} < (1-\delta)\,C_{i+1}$, with the energy rates the tier holds once it has finished the
 query. Forwarding therefore spends nothing at tier $i$, while
-escalating comes after the tier has spent $E_i$. A tier that cannot decide yet keeps the default of
-line 1, so it escalates by confidence alone. The top tier has nowhere to send a query and
+escalating comes after the tier has spent $E_i$. The top tier has nowhere to send a query and
 always returns its answer.
 
 The margin $\delta$ keeps a tier from moving a query for a negligible saving, and it also
@@ -762,24 +761,20 @@ running a query is wasted.
     tier $i$'s recent confidences; the average answer lengths of the tiers above; the
     energy rates of tier $i$ and of every tier above}
   $\mathit{next} \leftarrow i+1$\;
-  \If{tier $i$ can decide}{
-    compute $C_k$ for every $k > i$, from the top tier
-    down\tcp*{Equation~\eqref{eq:cost-to-completion}}
-    $k^* \leftarrow \arg\min_{k>i} C_k$\;
-    \If(\tcp*[f]{Equation~\eqref{eq:on-arrival}}){$C_{k^*} < (1-\delta)\,(E_i + p_i\,C_{k^*})$}{
-      forward $q$ to tier $k^*$ and stop\;
-    }
+  compute $C_k$ for every $k > i$, from the top tier
+  down\tcp*{Equation~\eqref{eq:cost-to-completion}}
+  $k^* \leftarrow \arg\min_{k>i} C_k$\;
+  \If(\tcp*[f]{Equation~\eqref{eq:on-arrival}}){$C_{k^*} < (1-\delta)\,(E_i + p_i\,C_{k^*})$}{
+    forward $q$ to tier $k^*$ and stop\;
   }
   run $q$, giving the answer $a$ with confidence $s$\;
   $\theta \leftarrow$ the $\beta$-quantile of $W_i$, then add $s$ to $W_i$\;
   \If{$s \geq \theta$}{
     return $a$ to the user and stop\;
   }
-  \If{tier $i$ can decide}{
-    compute $C_k$ and $k^*$ again, with the energy rates it holds now\;
-    \If{$C_{k^*} < (1-\delta)\,C_{i+1}$}{
-      $\mathit{next} \leftarrow k^*$\;
-    }
+  compute $C_k$ and $k^*$ again, with the energy rates it holds now\;
+  \If{$C_{k^*} < (1-\delta)\,C_{i+1}$}{
+    $\mathit{next} \leftarrow k^*$\;
   }
   pass $q$ to tier $\mathit{next}$\;
 \end{algorithm}
@@ -832,8 +827,7 @@ The energy rates of the user device and the ONU do not change, and answers carry
 the same way, so the rates a tier hears on past answers stay valid. The OLT's rate, however,
 depends on how many other queries the OLT is serving at the moment
 (Section~\ref{sec:olt-energy}), and a household hears it on its own answers only a few
-times a day. Until a tier has an estimate, it runs every query that reaches it and
-escalates by confidence alone, and we compare two strategies for giving it one:
+times a day. We compare two strategies for giving the tiers a current estimate of it:
 
 \begin{itemize}
   \item \textbf{Timetable.} One OLT rate per hour of the day, for weekdays and for
@@ -852,7 +846,9 @@ escalates by confidence alone, and we compare two strategies for giving it one:
   (Section~\ref{sec:accounting}). The 5 minutes smooth out the batches that form and
   dissolve within seconds, and sending every 10 seconds keeps the figure current at the
   cost of one small message per PON port, a negligible load on its downstream. A single message on each of its PON ports reaches every
-  ONU on that port, and each ONU passes it on to the devices in its home.
+  ONU on that port, and each ONU passes it on to the devices in its home. Before the
+  OLT's first message, a tier has no figure to use, so it runs every query that reaches it
+  and escalates by confidence alone.
 \end{itemize}
 
 \section{Energy Model}
@@ -1372,7 +1368,8 @@ saving comes from skipping the ONU rather than from weighing energy. The third i
 answering every query alone, which gives the energy and accuracy of the phone, the ONU and
 the OLT on their own. A further policy, the piggyback, removes the broadcast, so each
 household learns the OLT's cost only from the OLT's answers to its own queries and blends
-each figure it hears into its estimate with a weight of 0.3. It shows how much the broadcast
+each figure it hears into its estimate with a weight of 0.3, and until it hears the first
+one, it escalates by confidence alone. It shows how much the broadcast
 adds over what a household learns by itself.
 
 Each run reports four measures over its test month, each the mean over the three seeds:
