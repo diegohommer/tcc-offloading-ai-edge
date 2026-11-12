@@ -757,15 +757,6 @@ def plot_batching_validation() -> Path:
         ]
     limits = (4, 25)
     panels[1].plot(limits, limits, color=MUTED, linewidth=0.8, linestyle=":", label="Perfect match")
-    panels[1].fill_between(
-        limits,
-        [0.9 * x for x in limits],
-        [1.1 * x for x in limits],
-        color=GRID,
-        alpha=0.7,
-        linewidth=0,
-        label="Within 10%",
-    )
     panels[1].set_xlim(*limits)
     panels[1].set_ylim(*limits)
     legend(panels[1])
