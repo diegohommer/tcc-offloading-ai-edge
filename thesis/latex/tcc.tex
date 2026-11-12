@@ -713,10 +713,6 @@ to spend on a query whose prompt has $P$ tokens is
 \end{equation}
 where $\bar{L}_j$ is the average length of the tier's past answers, in tokens, which stands
 in for the length of this answer because that length is only known after the tier runs.
-When confidence alone decides, no tier forwards a query
-and every escalation goes to the next tier, and Equation~\eqref{eq:cost-to-completion}
-reduces to $C_j = E_j + p_j \, C_{j+1}$, a simpler form that would charge a tier for
-climbs that the tiers above it would skip.
 
 The quantile test escalates about a fraction $\beta$ of a tier's answers by construction
 (Section~\ref{sec:llm-background}), so WattLadder sets $p_j = \beta$. The policy does not
