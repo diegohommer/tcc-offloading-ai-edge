@@ -166,26 +166,26 @@ ociosa.
 %==============================================================================
 
 As the use of Large Language Models (LLMs) becomes widespread, both at work and at
-home~\cite{bick2026rapid}, the challenge of adapting the network architecture to handle 
-this rapidly evolving technology remains an active research
-topic~\cite{chen2026network}. Since evolution seldom happens in isolation, the network
-itself has also been undergoing changes, one of which is the adoption of Passive Optical
-Network (PON) technology in the access network~\cite{effenberger2007introduction}. Driven
-by the demand for greater capacity, lower latency, and reduced operating costs, PON is
-being deployed alongside or in place of the Hybrid Fiber-Coaxial (HFC)
-plant~\cite{prodnik2025migration}. Quality of service, scalability, security, and energy
-cost are some of the broad topics that need to be taken into account as both of these
-changes happen in parallel.
+home~\cite{bick2026rapid}, the challenge of adapting the network architecture to serve
+this rapidly evolving technology closer to the user remains an active research
+topic~\cite{chen2026network}. The part of the network closest to the user, the access
+network that connects homes to the operator's central office, has itself been undergoing
+changes, one of which is the adoption of Passive Optical Network (PON)
+technology~\cite{effenberger2007introduction}. Driven by the demand for greater capacity,
+lower latency, and reduced operating costs, PON is being deployed alongside or in place
+of the Hybrid Fiber-Coaxial (HFC) plant~\cite{prodnik2025migration}. Quality of service,
+scalability, security, and energy cost are some of the broad topics that need to be taken
+into account as these two changes meet in the access network.
 
 On the models' side, cost is a concern as well, since LLM inference is
-expensive~\cite{chen2026network}, and one way of making it cheaper is the model cascade,
+expensive~\cite{chen2026network}. One way of making it cheaper is the model cascade,
 in which a smaller model answers what it can and passes a query to a larger one only when
 its answer is not reliable enough~\cite{chen2024frugalgpt}. What counts as expensive
 depends on the setting, from the price of an API call to the energy spent answering
 each query, and energy is the cost this work is concerned with. Treating it as a cost
 of its own is the idea behind Green AI, which argues that efficiency should be reported alongside
-accuracy~\cite{schwartz2020green}, and some serving systems already use it to decide
-which model answers a query. GreenServ, for instance, picks a model from a heterogeneous
+accuracy~\cite{schwartz2020green}, and some serving systems already consider energy when
+deciding which model answers a query. GreenServ, for instance, picks a model from a heterogeneous
 pool based on the accuracy and energy it has observed, and uses 31\% less energy than
 routing at random~\cite{ziller2026greenserv}.
 
@@ -326,7 +326,7 @@ prompt~\cite{zhao2023survey}. The same size, however, places heavy demands on me
 computation and energy when these models are served~\cite{chen2026network}.
 
 These demands come from how an LLM answers a query, which happens in two
-phases~\cite{zhou2024survey}. In the prefill phase, the LLM processes the whole user prompt at once, storing
+phases. In the prefill phase, the LLM processes the whole user prompt at once, storing
 intermediate results for every prompt token (the Key-Value, or KV, cache) and generating
 the first output token. In the decode phase, it generates the rest of the answer one
 token at a time, each step reusing the KV cache and adding the new token to it
@@ -342,13 +342,13 @@ reported separately for each phase (Section~\ref{sec:metrics}).
   \label{fig:prefill-decode}
   \vspace{6pt}
   \input{figures/prefill_decode}
-  \legend{Source: Adapted from \cite{zhou2024survey,zhong2024distserve}}
+  \legend{Source: Adapted from \cite{zhong2024distserve}}
 \end{figure}
 
 To generate each token, the LLM assigns a probability to every token in its vocabulary,
 and a low probability on the tokens it picks is a sign that it is unsure of the
-answer~\cite{zhao2023survey}. A confidence score turns these probabilities into
-a single number per answer, and for generated text the most common scores combine the
+answer. A confidence score turns these probabilities into
+a single number per answer, and for generated text, widely used scores combine the
 probabilities of all the generated tokens, for example through their average, their
 minimum, or the likelihood of the whole answer normalized by its
 length~\cite{geng2023survey}. Perplexity, closely related to the last one, is the
@@ -622,7 +622,7 @@ measurements~\cite{cai2026npu,renney2026cloud}, while that of the OLT was measur
 on a GPU (Section~\ref{sec:energy-model}).
 
 The hierarchy stops at the OLT, without the cloud tier that those architectures place
-above it, for two reasons. The first is that this work focuses on the PON access network,
+above it, for two reasons. The first is that this work focuses on edge inference at the PON access network,
 whose tiers end at the OLT. The second is that a cloud tier was beyond the resources of
 this work, since the size ranges we follow put it at more than 70 billion parameters, a
 model we could not run on every test problem and measure against batch size without a
@@ -793,7 +793,7 @@ idle, which is why the tiers need a current estimate of the OLT's cost.
   \legend{Source: The author}
 \end{table}
 
-To compute $C_k$, a tier needs three things from the other tiers: their average answer
+To compute $C_k$, a tier needs three pieces of information from the other tiers: their average answer
 lengths, the energy rates of the user device and the ONU, and the current energy rate of
 the OLT. The quantile test needs nothing from them, since each device keeps its own window
 of its last 1,000 confidences, within the 300 to 1,000 that \citeonline{wu2025recserve}
