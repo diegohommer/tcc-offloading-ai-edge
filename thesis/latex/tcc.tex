@@ -969,9 +969,13 @@ avoids the power sampling that, on GPUs such as the A100 and H100, was found to 
 a quarter of the runtime~\cite{yang2023part}.
 
 We gave the GPU static batches of 1 to 64 queries, in which every query starts and ends
-together, drawn from 64 GSM8K problems whose prompts average 92 tokens, and each query
-was made to generate exactly 300 tokens, near the 251 tokens of the OLT's average answer on
-GSM8K. To separate the two
+together, drawn from 64 GSM8K problems whose prompts average 92 tokens without the chat
+template. A model normally stops when it generates its end-of-answer token, so the queries of
+a batch would finish at different times and the batch would shrink as it ran. We therefore
+had the model ignore this token and generate exactly 300 tokens for every query, a round
+length close to the 251 tokens of the OLT's average answer on GSM8K, so that each batch keeps
+its size from start to end and each row of Table~\ref{tab:olt-sweep} measures a single batch
+size. To separate the two
 phases of inference (Section~\ref{sec:llm-background}), each batch was also run
 generating a single token, which measures the prefill alone, and the decode is the
 difference between the full run and this one. Every measurement was repeated five times after one
