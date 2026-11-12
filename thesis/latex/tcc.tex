@@ -695,18 +695,19 @@ $n$, which is $k^*$ unless the margin $\delta$ introduced below keeps it at $j+1
   C_j =
   \begin{cases}
     C_{k^*} & \text{if tier } j \text{ forwards the query},\\
-    E_j + p_j \, C_n & \text{otherwise},
+    E_j + p_j \, C_n & \text{if tier } j \text{ runs it and } j < J,\\
+    E_J & \text{if } j = J \text{, the top tier},
   \end{cases}
-  \qquad C_J = E_J,
   \label{eq:cost-to-completion}
 \end{equation}
-where $J$ is the top tier and $E_j$ is the energy tier $j$ is expected to spend running
-the query. We call a tier's energy per prompt token and per generated token its energy
+where $E_j$ is the energy tier $j$ is expected to spend running the query. The last line
+ends the recursion: the top tier $J$ has no tier above it to pass a query to, so it always
+runs the query and returns its answer, and its cost is only its own energy. The cost of
+every other tier depends on the costs of the tiers above it, so the costs are computed from
+the top tier down, starting from $C_J = E_J$. We call a tier's energy per prompt token and per generated token its energy
 rates, and $E_j$ is the first rate times the length of the prompt plus the second times
 the average length of the tier's past answers, which stands in for the length of this
-answer because that length is only known after the tier runs. Both decisions of tier $j$
-depend only on the costs of the tiers above it, as described below, so the costs are
-computed from the top tier down. When confidence alone decides, no tier forwards a query
+answer because that length is only known after the tier runs. When confidence alone decides, no tier forwards a query
 and every escalation goes to the next tier, and Equation~\eqref{eq:cost-to-completion}
 reduces to $C_j = E_j + p_j \, C_{j+1}$, a simpler form that would charge a tier for
 climbs that the tiers above it would skip.
