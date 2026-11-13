@@ -873,8 +873,8 @@ charging it (Section~\ref{sec:measurements}): average accounting, which counts e
 tier draws while it answers, and marginal accounting, which counts only what it draws above idle, so
 nothing is charged for keeping the hardware on. We assume that the hardware stays on wherever a
 query goes, so the power it draws at rest is spent either way and a routing decision changes
-only the energy above idle. The tiers therefore decide on energy above idle under both
-accountings. The study charges under marginal accounting, and its main runs are repeated under
+only the energy above idle. The tiers therefore always decide on energy above idle, and
+the accounting only sets what the study counts in its results. The study charges under marginal accounting, and its main runs are repeated under
 average accounting as a sensitivity analysis, with the queries routed the same way, so that only
 the energy counted changes. Table~\ref{tab:energy} lists
 what each source measures, the factor by which we multiply its figure to bring it to the
