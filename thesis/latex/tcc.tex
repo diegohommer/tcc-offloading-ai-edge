@@ -1082,9 +1082,11 @@ between the OLT's energy with the query and without it, which in the same batch 
 of one query alone, so each of the other 63 adds $(1{,}180 - 840)/63 \approx 5$~J. A query that
 finds the OLT idle, in contrast, adds the full 840~J, since without it the GPU would be at rest.
 
-The OLT reports what a query adds above idle (Section~\ref{sec:energy-model}), since sending a
-query to the OLT changes its energy by that amount, while the query's share also carries part
-of what its batch would spend without it. A tier cannot know whether its query will find the OLT idle or busy, so the OLT weights the two cases by the fraction $b$ of
+The OLT therefore reports what a query adds, 5~J or 840~J in the example above depending on
+whether it finds the OLT busy or idle, because this is the energy that sending the query
+actually causes, while the share also charges the query part of the energy the other queries
+would spend even without it. Like every decision in this work, it counts only the energy
+above idle, since the hardware stays on wherever a query goes. A tier cannot know whether its query will find the OLT idle or busy, so the OLT weights the two cases by the fraction $b$ of
 the last 5 minutes it spent busy, with at least one query generating, and reports the energy rate
 \begin{equation}
   r = b \, r_{\text{busy}} + (1-b) \, r_{\text{idle}},
