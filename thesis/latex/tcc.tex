@@ -1087,16 +1087,18 @@ whether it finds the OLT busy or idle, because this is the energy that sending t
 actually causes, while the share also charges the query part of the energy the other queries
 would spend even without it. Like every decision in this work, it counts only the energy
 above idle, since the hardware stays on wherever a query goes. A tier cannot know whether its query will find the OLT idle or busy, so the OLT weights the two cases by the fraction $b$ of
-the last 5 minutes it spent busy, with at least one query generating, and reports the energy rate
+the last 5 minutes it spent busy, with at least one query generating, and reports its energy
+rates $r^{\text{p}}_J$ and $r^{\text{g}}_J$, the energy per prompt token and per generated
+token that the tiers use for the OLT in Equation~\eqref{eq:expected-energy}, each computed as
 \begin{equation}
-  r = b \, r_{\text{busy}} + (1-b) \, r_{\text{idle}},
+  r_J = b \, r_{\text{busy}} + (1-b) \, r_{\text{idle}},
   \label{eq:olt-report}
 \end{equation}
-for prompt and generated tokens separately, where $r_{\text{idle}}$ is the rate of a query that
-finds the OLT idle and $r_{\text{busy}}$ is the rate of a query that joins a running batch.
-Both rates are fixed, so only $b$ changes over time. For a query of the mean lengths, they come
-to about 840~J and 5~J, and an OLT that was busy half of the time reports
-$0.5 \times 5 + 0.5 \times 840 \approx 420$~J.
+where $r_{\text{idle}}$ is the rate of a query that finds the OLT idle and $r_{\text{busy}}$ is
+the rate of a query that joins a running batch. Both rates are fixed, so only $b$ changes over
+time. Applied to a query of the mean lengths, they come to about 840~J and 5~J, and an OLT that
+was busy half of the time reports rates that come to $0.5 \times 5 + 0.5 \times 840 \approx
+420$~J.
 
 The idle rate $r_{\text{idle}}$ is read from Table~\ref{tab:olt-sweep} at a batch of one and
 multiplied by 2.44, which gives 0.044~J per prompt token and 3.33~J per generated token.
