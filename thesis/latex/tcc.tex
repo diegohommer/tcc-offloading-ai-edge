@@ -718,8 +718,8 @@ The quantile test escalates about a fraction $\beta$ of a tier's answers by cons
 (Section~\ref{sec:llm-background}), so WattLadder sets $p_j = \beta$. The policy does not
 depend on this test, though, because Equation~\eqref{eq:cost-to-completion} needs only
 the probability that a tier escalates, and so it works with any escalation test, such as
-a fixed threshold or a separate scoring model~\cite{chen2024frugalgpt}. A test whose rate
-is not fixed in advance would need $p_j$ to be learned from the answers instead, which is
+a fixed threshold or a separate scoring model~\cite{chen2024frugalgpt}. A test whose escalation
+rate is not fixed in advance would need $p_j$ to be learned from the answers instead, which is
 why Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$.
 
 The policy uses $C_j$ for two decisions in Algorithm~\ref{alg:decision}, both made when a
@@ -1094,8 +1094,8 @@ token that the tiers use for the OLT in Equation~\eqref{eq:expected-energy}, eac
   r_J = b \, r_{\text{busy}} + (1-b) \, r_{\text{idle}},
   \label{eq:olt-report}
 \end{equation}
-where $r_{\text{idle}}$ is the rate of a query that finds the OLT idle and $r_{\text{busy}}$ is
-the rate of a query that joins a running batch. Both rates are fixed, so only $b$ changes over
+where $r_{\text{idle}}$ is the OLT's rate when a query finds it idle and $r_{\text{busy}}$ its
+rate when a query joins a running batch. Both rates are fixed, so only $b$ changes over
 time. Applied to a query of the mean lengths, they come to about 840~J and 5~J, and an OLT that
 was busy half of the time reports rates that come to $0.5 \times 5 + 0.5 \times 840 \approx
 420$~J.
