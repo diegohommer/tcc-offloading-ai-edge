@@ -1208,7 +1208,8 @@ in the following order:
   as the quietest, before dawn, and a weekend day has about five sixths of the conversations of a
   weekday. The expected number of conversations in each hour is multiplied by the drift of
   Section~\ref{sec:drift}, and how many of them start in that hour is then drawn from a Poisson
-  distribution with this mean, each at a random moment within the hour.
+  distribution with this mean, each at a moment drawn uniformly within the hour, with no
+  rounding, since the simulator keeps time as a real number rather than in steps.
   \item \textbf{Length and pauses.} Each conversation draws its number of messages at random from
   those of WildChat's conversations, of which 63\% hold a single message, even with the users who
   sent only one left out, and about one in eight holds five or more. Each follow-up then draws its own pause from the time between two answers of the same
