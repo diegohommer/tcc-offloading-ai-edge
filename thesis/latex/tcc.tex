@@ -1223,8 +1223,12 @@ in the following order:
   as a conversation goes on.
 \end{enumerate}
 
-Drawing the conversation starts from a Poisson process with an hourly rate follows the way
-sessions started by users are usually modeled~\cite{paxson1995wide}. BurstGPT's
+Drawing the conversation starts from a Poisson process with an hourly rate follows a classic
+finding about how people start sessions on a network. In traces of wide-area Internet traffic,
+\citeonline{paxson1995wide} found that sessions a user starts by hand, such as remote logins
+and file transfers, arrive like a Poisson process with a fixed rate within each hour, even
+though the packets inside those sessions arrive in bursts, and we assume that conversations
+with a chatbot, which people also start by hand, behave the same way. BurstGPT's
 conversation log, from one regional GPT service that an organization such as a company or a
 campus built on Azure OpenAI~\cite{wang2025burstgpt}, supports it, since we found that in its
 busy hours the time between conversation starts varies as much as in a Poisson process, with a
