@@ -1346,9 +1346,11 @@ one $\sigma$ above or below zero, runs about 25\% busier or quieter than its tim
 $e^{0.253 - 0.032} = 1.25$ and $e^{-0.253 - 0.032} = 0.75$, and such a departure lasts about
 two and a half hours. Without this weekly scaling, $\sigma = 0.477$ and $\tau = 9.4$ hours, so a
 typical hour runs about 44\% busier or 45\% quieter for about nine hours, since
-$e^{0.477 - 0.114} = 1.44$ and $e^{-0.477 - 0.114} = 0.55$, which gives the strong drift. Most of this larger departure is the growth, which the
-simulation turns into random swings of about nine hours, so the strong drift is best read as
-a demanding case. The calibration month
+$e^{0.477 - 0.114} = 1.44$ and $e^{-0.477 - 0.114} = 0.55$, which gives the strong drift. Most of this larger departure comes from the growth, a steady
+rise over weeks rather than a surprise, but the simulation turns it into random swings of about
+nine hours, much larger and longer than those of the mild drift. The strong drift is therefore
+an exaggerated case, used to test how the policies cope when the load departs far and for long
+from the timetable, rather than an estimate of how households behave. The calibration month
 drifts as well, with the same $\sigma$ and $\tau$ as the test month but its own random
 departures, so the timetable learns the average of each hour, drift included, but not when the
 next departure will come.
