@@ -1173,8 +1173,15 @@ public\footnote{\url{https://github.com/diegohommer/tcc-offloading-ai-edge}}.
 \subsection{Generating the Traffic}
 \label{sec:traffic}
 
-How people chat comes from the WildChat-4.8M release of WildChat, the logs of a free ChatGPT
-service used around the world~\cite{zhao2024wildchat}. WildChat records its times on the server's
+The traffic comes from two public logs of chatbot use. WildChat, in its WildChat-4.8M release,
+holds the conversations of a free ChatGPT service used by people around the
+world~\cite{zhao2024wildchat}, and gives the simulator how people chat: how active each user is,
+how their day is shaped, and how long their conversations and the pauses within them are.
+BurstGPT holds the conversations that the users of a single organization, such as a company or a
+campus, held with a GPT service it built on Azure OpenAI~\cite{wang2025burstgpt}. Its users are
+fewer and closer to those of one OLT, so it gives the study how the load departs from its usual
+day (Section~\ref{sec:drift}), but its day follows office hours, so WildChat gives the daily
+shape. WildChat records its times on the server's
 clock, and its users are spread over the world, so each user's times are first moved to their
 own time zone, and every simulated household then shares that one local day, as the households of
 one OLT share a time zone. Users who sent a single message are left out, because WildChat's sudden
@@ -1229,17 +1236,14 @@ finding about how people start sessions on a network. In traces of wide-area Int
 and file transfers, arrive like a Poisson process with a fixed rate within each hour, even
 though the packets inside those sessions arrive in bursts, and we assume that conversations
 with a chatbot, which people also start by hand, behave the same way. BurstGPT's
-conversation log, from one regional GPT service that an organization such as a company or a
-campus built on Azure OpenAI~\cite{wang2025burstgpt}, supports it, since we found that in its
+conversation log supports it, since we found that in its
 busy hours the time between conversation starts varies as much as in a Poisson process, with a
 coefficient of variation of 0.98 against 1, while its messages arrive in clusters mostly because
 each conversation sends several within a few minutes.
 
-WildChat's Brazilian users follow almost the same daily shape as its users worldwide
-(Figure~\ref{fig:traffic-profiles}), so the worldwide traffic stands in for Brazilian
-households. BurstGPT's day instead follows office hours, with peaks in the morning and the
-afternoon and little traffic in the evening, which is why it gives the study only the size and
-the duration of the drift (Section~\ref{sec:drift}).
+WildChat's Brazilian users follow almost the same daily shape as its users worldwide, while
+BurstGPT's day peaks in the morning and the afternoon (Figure~\ref{fig:traffic-profiles}), so the
+worldwide WildChat traffic stands in for Brazilian households.
 
 \begin{figure}[htb]
   \centering
