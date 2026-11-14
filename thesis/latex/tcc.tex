@@ -1150,8 +1150,9 @@ tier then asks the routing policy, which applies Algorithm~\ref{alg:decision} wi
 knows at that moment. A query that reaches the OLT joins the batch held by the OLT server,
 which charges the query's energy (Section~\ref{sec:serving}) and computes the OLT's report, also
 sending it every 10 seconds under the broadcast strategy. When an answer reaches the user, the event loop records the query's
-energy, accuracy, latency and bytes, and queues the next message of its conversation, if there
-is one, a pause later. Throughout, the energy model gives the event loop and the OLT server the
+energy, accuracy, latency and bytes, and, if the conversation has another message, schedules it
+to be sent after a pause that stands for the time the user takes before writing again
+(Section~\ref{sec:traffic}). Throughout, the energy model gives the event loop and the OLT server the
 energy rates and speeds they need (Section~\ref{sec:energy-model}).
 
 \begin{figure}[htb]
