@@ -1086,16 +1086,18 @@ The OLT therefore builds its report from what a query adds rather than from its 
 840~J in the example above depending on whether the query finds the OLT busy or idle, because
 this is the energy that sending the query actually causes, while the share also charges the query part of the energy the other queries
 would spend even without it. Like every decision in this work, it counts only the energy
-above idle, since the hardware stays on wherever a query goes. A tier cannot know whether its query will find the OLT idle or busy, so the OLT weights the two cases by the fraction $b$ of
-the last 5 minutes it spent busy, with at least one query generating, and reports its energy
-rates $r^{\text{p}}_J$ and $r^{\text{g}}_J$, the energy per prompt token and per generated
-token that the tiers use for the OLT in Equation~\eqref{eq:expected-energy}, each computed as
+above idle, since the hardware stays on wherever a query goes. Queries differ in length, so
+the OLT reports this energy per token rather than per query, as its energy rates
+$r^{\text{p}}_J$ and $r^{\text{g}}_J$, which each tier multiplies by the lengths of its own
+query in Equation~\eqref{eq:expected-energy} to obtain $E_J$. A tier cannot know whether its
+query will find the OLT idle or busy, so the OLT weights the two cases by the fraction $b$ of
+the last 5 minutes it spent busy, with at least one query generating, and computes each rate as
 \begin{equation}
   r_J = b \, r_{\text{busy}} + (1-b) \, r_{\text{idle}},
   \label{eq:olt-report}
 \end{equation}
-where $r_{\text{idle}}$ is the OLT's rate when a query finds it idle and $r_{\text{busy}}$ its
-rate when a query joins a running batch. Both rates are fixed, so only $b$ changes over
+where $r_{\text{idle}}$ is the OLT's energy rate when a query finds it idle and
+$r_{\text{busy}}$ its energy rate when a query joins a running batch. Both rates are fixed, so only $b$ changes over
 time. Applied to a query of the mean lengths, they come to about 840~J and 5~J, and an OLT that
 was busy half of the time reports rates that come to $0.5 \times 5 + 0.5 \times 840 \approx
 420$~J.
