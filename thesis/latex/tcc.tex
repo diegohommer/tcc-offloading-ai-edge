@@ -1714,6 +1714,8 @@ idle energy to every query's charge, raises it to 46.9\% and 34.0\%.
 The results above rest on a few simplifications, gathered here so that the method could be
 described without interruptions.
 
+\subsection{The Phone's Energy}
+
 The energies of the phone and the ONU come from recent preprints, the only measurements we
 found of these devices running these models, and both have limitations for our use. The
 telemetry of \citeonline{cai2026npu} covers the phone's chip but not its memory, so the
@@ -1722,6 +1724,8 @@ power, so under marginal accounting the phone is charged its full figure, includ
 the chip draws at rest, while the ONU and the OLT are charged only their energy above idle.
 The first makes the phone look cheaper than it is and the second more expensive, and we found
 no measurement of the same phone and model that would tell how far the two cancel.
+
+\subsection{The ONU}
 
 No commercial ONU runs an LLM today, so the ONU is represented by a single-board computer with
 a neural accelerator, the class of device an AI-capable home gateway could carry.
@@ -1734,6 +1738,8 @@ interactive use. This comes mostly from the board rather than from the policy, s
 generation is limited by how fast the Hailo-10H reads its memory~\cite{tummalapalli2026edge}.
 A home gateway with faster memory would therefore answer sooner, although we found no
 measurement of one.
+
+\subsection{The OLT's Energy}
 
 The factor of 2.44 that brings the OLT's GPU to the whole system combines Google's shares of
 a prompt's energy, measured on servers that share one host among several
@@ -1751,6 +1757,8 @@ less from batching, so the OLT's figures hold for a small power-capped card like
 assume that the hardware stays on when it is idle, so an operator that powers down idle GPUs
 would save idle energy that our figures do not count.
 
+\subsection{The Traffic}
+
 WildChat's users chose to try a free chatbot, and a user there is an address and a browser
 rather than a household, so they may not chat as a typical household does. Its authors also
 note that a service hosted on Hugging Face and shared on Reddit likely draws mostly from the IT
@@ -1760,6 +1768,8 @@ took. The drift comes from BurstGPT instead, and its duration $\tau$ is fitted t
 hours, so it matches how much of a departure BurstGPT keeps one or two hours later. In the
 data, though, 40 to 50\% of a departure is still there four to eight hours later, while the
 model of the mild drift keeps a fifth of it or less.
+
+\subsection{What the Simulation Holds Still}
 
 The simulation reproduces how the OLT's cost changes over time, following the load of the
 households and its drift, and holds the other quantities WattLadder reads still. The user
