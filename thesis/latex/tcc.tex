@@ -1579,8 +1579,8 @@ and idling,
 which changes where a query should go. At 5,000 households the OLT sits just below the load at
 which batching starts to pay, batching 1.8 queries on average under either strategy, against
 4.2 with the timetable and 3.3 with the broadcast at 10,000, so a busy start gains the timetable
-little and an idle start costs the broadcast little, and with no drift the two coincide. Under drift, busy
-spells push the OLT into batching for a while, and since only the broadcast notices them, its
+little and an idle start costs the broadcast little, and with no drift the two coincide. Under drift, hours
+busier than usual push the OLT into batching for a while, and since only the broadcast notices them, its
 advantage grows with the drift. At 10,000 households
 starting from an idle OLT costs the broadcast more, and mild drift does not make up for it,
 since its dips of about 25\% still leave the OLT batching. Only strong drift, with dips of about
