@@ -1,0 +1,26 @@
+panel,scenario,households,series,x_name,x,y_name,y,y_low,y_high
+,main,,Confidence alone,households,1000,latency_s_mean,47.2617,47.1514,47.3564
+,main,,Confidence alone,households,2000,latency_s_mean,47.4753,47.4002,47.5934
+,main,,Confidence alone,households,5000,latency_s_mean,47.5536,47.3846,47.6432
+,main,,Confidence alone,households,10000,latency_s_mean,47.6403,47.505,47.724
+,main,,Confidence alone,households,20000,latency_s_mean,47.6905,47.6376,47.77
+,main,,"WattLadder, timetable",households,1000,latency_s_mean,47.1561,47.0685,47.2684
+,main,,"WattLadder, timetable",households,2000,latency_s_mean,45.5161,45.2088,45.8098
+,main,,"WattLadder, timetable",households,5000,latency_s_mean,23.0701,22.6024,23.38
+,main,,"WattLadder, timetable",households,10000,latency_s_mean,12.6989,12.3836,12.9035
+,main,,"WattLadder, timetable",households,20000,latency_s_mean,10.2328,10.2208,10.245
+,main,,"WattLadder, broadcast",households,1000,latency_s_mean,46.9049,46.7947,47.0501
+,main,,"WattLadder, broadcast",households,2000,latency_s_mean,45.3273,45.0417,45.5516
+,main,,"WattLadder, broadcast",households,5000,latency_s_mean,25.3066,25.0916,25.4413
+,main,,"WattLadder, broadcast",households,10000,latency_s_mean,18.5063,18.3559,18.6524
+,main,,"WattLadder, broadcast",households,20000,latency_s_mean,13.3641,13.3537,13.3754
+,main,,"Confidence alone, without the ONU",households,1000,latency_s_mean,12.3631,12.3548,12.3703
+,main,,"Confidence alone, without the ONU",households,2000,latency_s_mean,12.4974,12.4565,12.5427
+,main,,"Confidence alone, without the ONU",households,5000,latency_s_mean,12.4382,12.3646,12.4834
+,main,,"Confidence alone, without the ONU",households,10000,latency_s_mean,12.4768,12.4385,12.5116
+,main,,"Confidence alone, without the ONU",households,20000,latency_s_mean,12.5367,12.5292,12.5422
+,main,,OLT alone,households,1000,latency_s_mean,8.64278,8.63418,8.6479
+,main,,OLT alone,households,2000,latency_s_mean,8.66301,8.65916,8.66506
+,main,,OLT alone,households,5000,latency_s_mean,8.70433,8.70129,8.70778
+,main,,OLT alone,households,10000,latency_s_mean,8.77613,8.77344,8.78129
+,main,,OLT alone,households,20000,latency_s_mean,8.9504,8.9501,8.95092
