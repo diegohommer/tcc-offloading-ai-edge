@@ -251,6 +251,7 @@ thesis/papers/
 
 # olcli (Overleaf sync) local state
 thesis/latex/.olcli.json
+thesis/slides/.olcli.json
 .claude/scheduled_tasks.lock
 implementation/results/study/parts/
 implementation/results/study/parts_self/
