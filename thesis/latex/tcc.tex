@@ -1571,10 +1571,11 @@ and the ONU first.
 Drift works the other way (Figure~\ref{fig:drift}). At 10,000 households, the timetable needs
 183~J with no drift, 197~J with mild drift and 224~J with strong drift, since its expectation
 is wrong more often as the load departs from its usual pattern, while the broadcast needs
-224~J, 217~J and 197~J, since it sees each departure as it happens. Whether the broadcast beats
+224~J, 217~J and 197~J, since it sees each rise or fall of the load as it happens. Whether the broadcast beats
 the timetable therefore depends on two opposite effects: what it gains by following the drift,
 and what it loses by starting from an idle OLT. Both depend on the number of households, since
-following the drift only helps when a departure moves the OLT between batching and idling,
+following the drift only helps when a rise or fall of the load moves the OLT between batching
+and idling,
 which changes where a query should go. At 5,000 households the OLT sits just below the load at
 which batching starts to pay, batching 1.8 queries on average under either strategy, against
 4.2 with the timetable and 3.3 with the broadcast at 10,000, so a busy start gains the timetable
