@@ -1689,14 +1689,13 @@ at no cost in traffic or as much as possible.
 \label{sec:sensitivity}
 
 WattLadder saves energy in every sensitivity run at 10,000 households, the largest number these
-runs cover (Figure~\ref{fig:sensitivity}). The more the OLT costs, the smaller the saving, since WattLadder
-spends a larger part of its energy at the OLT, 84\% with the broadcast against 66\% under
-confidence alone in the main runs (Figure~\ref{fig:energy-split}), so a more expensive OLT raises its
-energy more: with the GPU card alone, at $\times 1.0$, WattLadder saves
-58.9\% with the timetable and 52.8\% with the broadcast, with Google's own accounting, at
-$\times 1.72$, 50.1\% and 39.3\%, and with a host that draws as much as its card, at
-$\times 3.35$, 31.9\% and 23.0\%, against 43.1\% and 30.4\% at the $\times 2.44$ of the main
-runs. At $\times 1.0$ and $\times 1.72$, the timetable again exceeds the target at its lowest
+runs cover (Figure~\ref{fig:sensitivity}). The more the OLT costs, the smaller the saving, because
+WattLadder spends a larger part of its energy at the OLT than confidence alone does (84\% with
+the broadcast against 66\% in the main runs, Figure~\ref{fig:energy-split}). Counting only the
+GPU card ($\times 1.0$), WattLadder saves 58.9\% with the timetable and 52.8\% with the
+broadcast, and this falls to 50.1\% and 39.3\% with Google's own accounting ($\times 1.72$) and
+to 31.9\% and 23.0\% with a host that draws as much as its card ($\times 3.35$), against 43.1\%
+and 30.4\% at the $\times 2.44$ of the main runs. At $\times 1.0$ and $\times 1.72$, the timetable again exceeds the target at its lowest
 $\beta$, with 83\% and 82\% accuracy. An ONU twice as efficient lowers the saving to 37.2\% and 22.4\%, since confidence alone
 then wastes less on the ONU. Charging the same routing under average accounting, which adds the
 idle energy to every query's charge, raises it to 46.9\% and 34.0\%.
