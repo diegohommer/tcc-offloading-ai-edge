@@ -194,6 +194,11 @@ CAPTIONS = {
         "accuracy. (b) Change in energy and in communication burden against RecServe at "
         "0.80 accuracy. No drift, 10,000 households; bars: range over three seeds."
     ),
+    "latency": (
+        "Mean time from a message being sent to its answer arriving, at 0.80 accuracy, by "
+        "number of households. No drift; bars: range over three seeds. The timetable at "
+        "20,000 households is read at 0.85, the accuracy it already reaches at its lowest beta."
+    ),
     "sensitivity": (
         "Energy the broadcast saves over RecServe and over the timetable at 0.80 accuracy, "
         "10,000 households, in every scenario of the study. Bars: range over three seeds."
@@ -1019,6 +1024,47 @@ def plot_bandwidth() -> Path:
     return save(figure, "bandwidth", rows)
 
 
+def plot_latency() -> Path:
+    """Mean wait for an answer at 0.80 accuracy, by population, no drift.
+
+    Each policy is read at the same frontier point as its energy, so a policy whose least
+    accurate run is already above the target (the timetable at 20,000) is read there.
+    """
+    runs = load_runs("main")
+    figure, (axes,) = new_figure()
+    style(axes, "Households on the OLT", f"Mean wait for an answer at {TARGET} accuracy (s)")
+    rows = []
+    series = (
+        *SERIES.items(),
+        ("recserve_no_onu", ("Confidence alone, without the ONU", "#4a3aa7", "s")),
+    )
+    for policy, (name, color, marker) in series:
+        points = [
+            spread([at_column(run, size, TARGET, "latency_s_mean")[policy] for run in runs])
+            for size in SIZES
+        ]
+        ranged_line(axes, SIZES, points, name, color, marker)
+        rows += ranged(
+            name, zip(SIZES, points), scenario="main", x_name="households", y_name="latency_s_mean"
+        )
+    olt = [
+        spread([at_column(run, size, TARGET, "latency_s_mean")["olt_alone"] for run in runs])
+        for size in SIZES
+    ]
+    axes.plot(SIZES, [value[0] for value in olt], color=MUTED, linewidth=1.0, linestyle=":",
+              label="OLT alone")
+    rows += ranged(
+        "OLT alone", zip(SIZES, olt), scenario="main", x_name="households", y_name="latency_s_mean"
+    )
+    households_axis(axes)
+    axes.set_ylim(0, 55)
+    # matplotlib lists plain lines before error-bar series; keep the reference line last
+    handles, labels = axes.get_legend_handles_labels()
+    order = sorted(range(len(labels)), key=lambda index: labels[index] == "OLT alone")
+    legend(axes, "center left", handles=[handles[i] for i in order], labels=[labels[i] for i in order])
+    return save(figure, "latency", rows)
+
+
 SCENARIO_LABELS = {
     "main": "No drift (main)",
     "burst_week": "Mild drift",
@@ -1323,6 +1369,7 @@ def main() -> int:
         plot_broadcast_over_timetable,
         plot_drift,
         plot_bandwidth,
+        plot_latency,
         plot_sensitivity,
         plot_delta,
         plot_energy_split,

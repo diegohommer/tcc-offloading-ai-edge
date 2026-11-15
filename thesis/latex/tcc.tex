@@ -1644,14 +1644,23 @@ energy than the broadcast but carries 13\% more traffic (13.7~MB against 12.1~MB
   \legend{Source: The author}
 \end{figure}
 
-The saving does not cost waiting time either. Under confidence alone a message waits 47.6~s on
-average for its answer at 10,000 households, mostly because many queries are answered by the
-ONU or pass through it, and the ONU takes about 44~s to produce an answer, since it generates
-only 6.34 tokens per second and its answers average 276 tokens
-(Section~\ref{sec:user-onu-energy}). WattLadder skips the ONU more often, so a
-message waits 12.7~s with the timetable and 18.5~s with the broadcast, against 8.8~s when the
-OLT answers every query. The ONU's slowness remains a limitation for the queries it does
-answer (Section~\ref{sec:limitations}).
+The saving does not cost waiting time either (Figure~\ref{fig:latency}). Under confidence alone
+a message waits about 48~s for its answer at every number of households, mostly because many
+queries are answered by the ONU or pass through it, and the ONU takes about 44~s to produce an
+answer, since it generates only 6.34 tokens per second and its answers average 276 tokens
+(Section~\ref{sec:user-onu-energy}). Without the ONU, the same rule waits only 12.5~s.
+WattLadder waits as long as confidence alone while the OLT is idle, but it skips the ONU more
+often as the OLT gets busier, and at 10,000 households a message waits 12.7~s with the timetable
+and 18.5~s with the broadcast, against 8.8~s when the OLT answers every query. The ONU's slowness
+remains a limitation for the queries it does answer (Section~\ref{sec:limitations}).
+
+\begin{figure}[htb]
+  \centering
+  \caption{Mean wait for an answer against number of households}
+  \label{fig:latency}
+  \includegraphics[width=\textwidth]{figures/latency.pdf}
+  \legend{Source: The author}
+\end{figure}
 
 \section{The Margin \texorpdfstring{$\delta$}{delta}}
 \label{sec:results-delta}
