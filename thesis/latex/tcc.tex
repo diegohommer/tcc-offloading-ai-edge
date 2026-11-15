@@ -1396,8 +1396,9 @@ reading every policy at the same accuracy accounts for that change.
 WattLadder is evaluated with both strategies of Section~\ref{sec:policy} for estimating the
 OLT's cost, the timetable and the broadcast, against three baselines. The first is
 escalation by confidence alone, the rule of \citeonline{wu2025recserve}, in which each tier
-answers or passes a query up by the quantile test only. The second is the same rule without
-the ONU, so that a query goes from the phone straight to the OLT, which shows how much of a
+answers or passes a query up by the quantile test only. The second is escalation by confidence
+alone without the ONU, so that a query that fails the test at the phone goes straight to the
+OLT, which shows how much of a
 saving comes from skipping the ONU rather than from weighing energy. The third is each tier
 answering every query alone, which gives the energy and accuracy of the phone, the ONU and
 the OLT on their own. A further policy, the piggyback, removes the broadcast, so each
