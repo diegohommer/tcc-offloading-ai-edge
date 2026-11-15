@@ -1383,9 +1383,11 @@ with how accurate it is. We therefore compare them at the same accuracy, with a 
 80\% in the main results. Every policy runs at
 nine values of $\beta$, from 0.1 to 0.9, each giving one pair of accuracy and energy per
 query, and we drop any pair that another value of $\beta$ beats on both, with higher
-accuracy for less energy. The energy a policy needs to reach a target accuracy is then
-interpolated linearly between the two remaining pairs whose accuracies lie on either side of
-the target. A policy whose most accurate pair is below the target is reported as not
+accuracy for less energy. Since $\beta$ takes only these nine values, a policy rarely lands
+exactly on the target accuracy, so the energy it needs to reach the target is interpolated
+linearly between the two remaining pairs whose accuracies lie on either side of it. A policy
+that reaches 78\% with 150~J per query and 83\% with 180~J, for instance, is read at 80\% as
+$150 + \frac{2}{5} \times 30 = 162$~J. A policy whose most accurate pair is below the target is reported as not
 reaching it, and one whose least accurate pair is already above the target is read at that
 pair. WattLadder weighs energy alone and leaves judging the
 answers to the quantile test, so it changes accuracy only through which models answer, and
