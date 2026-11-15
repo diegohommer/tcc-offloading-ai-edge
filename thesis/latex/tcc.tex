@@ -1402,9 +1402,11 @@ OLT, which shows how much of a
 saving comes from skipping the ONU rather than from weighing energy. The third is each tier
 answering every query alone, which gives the energy and accuracy of the phone, the ONU and
 the OLT on their own. A further policy, the piggyback, removes the broadcast, so each
-household learns the OLT's cost only from the OLT's answers to its own queries and blends
-each figure it hears into its estimate with a weight of 0.3, and until it hears the first
-one, it escalates by confidence alone. It shows how much the broadcast
+household learns the OLT's energy rates only from those carried on the OLT's answers to its own
+queries. These arrive only a few times a day, so the household keeps an average that follows
+them quickly, moving its estimate 30\% of the way toward each rate it hears,
+$\hat{r} \leftarrow 0.7\,\hat{r} + 0.3\,r_J$, which gives the last three rates about two thirds
+of the weight. Until it hears the first one, it escalates by confidence alone. It shows how much the broadcast
 adds over what a household learns by itself.
 
 Each run reports four measures over its test month, each the mean over the three seeds:
