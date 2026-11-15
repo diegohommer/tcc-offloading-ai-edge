@@ -866,7 +866,12 @@ brought to it with Google's shares of a prompt's energy and the industry's avera
 which add an estimate of the rest of its server, the spare machines kept ready for peaks
 and the building that houses them. The energy of carrying queries and answers over the PON
 and the home network is left out, as are relaying the OLT's broadcast inside the home and
-manufacturing the hardware.
+manufacturing the hardware. Queries and answers are short texts of about 11~kB per query, even
+counting each byte at both ends of every hop it crosses (Section~\ref{sec:results-traffic}), and
+at the 0.03~$\mu$J per bit reported for a PON~\cite{lorincz2025comprehensive}, carrying them costs
+about 3~mJ, a hundred-thousandth of what a query spends on inference. Network equipment also
+draws nearly the same power whatever traffic it carries~\cite{krug2014understanding}, so the
+energy these few bytes add above idle is smaller still.
 
 The energy of a query also depends on how it is charged, and we consider two ways of
 charging it (Section~\ref{sec:measurements}): average accounting, which counts everything a
@@ -1612,7 +1617,14 @@ follows such changes as they happen.
 \section{Latency and Communication Burden}
 \label{sec:results-traffic}
 
-The energy WattLadder saves costs little traffic (Figure~\ref{fig:bandwidth}). At 10,000
+Energy is not the only cost of a tiered system. RecServe is designed and evaluated on the
+trade-off between accuracy and communication~\cite{wu2025recserve}, since each escalation sends
+the query and its answer over one more hop, which matters when the links between tiers are
+congested, and the time a user waits for an answer matters to any service. Neither is the focus
+of this work, which weighs energy alone, but WattLadder changes where queries are answered and
+often sends them straight to the OLT, so it could save energy at the cost of more traffic or a
+longer wait, and this section checks both, finding that its saving costs little traffic
+(Figure~\ref{fig:bandwidth}). At 10,000
 households, the communication burden at 80\% accuracy is 10.8~MB per 1,000 queries under
 confidence alone and 11.8~MB under WattLadder with either strategy, 9\% more, while sending
 every query to the OLT gives 17.4~MB, 60\% more. At 20,000 households the two strategies part,
