@@ -30,6 +30,8 @@
 % Lets a paragraph that cannot otherwise be set without a line running into the
 % margin use slightly looser spacing instead; well-set paragraphs are unaffected.
 \setlength{\emergencystretch}{1em}
+% Leave a short page short instead of stretching the space between paragraphs and floats.
+\raggedbottom
 
 %------------------------------------------------------------------------------
 % Document metadata
@@ -1617,10 +1619,12 @@ follows such changes as they happen.
 \section{Latency and Communication Burden}
 \label{sec:results-traffic}
 
-Energy is not the only cost of a tiered system. RecServe is designed and evaluated on the
-trade-off between accuracy and communication~\cite{wu2025recserve}, since each escalation sends
-the query and its answer over one more hop, which matters when the links between tiers are
-congested, and the time a user waits for an answer matters to any service. Neither is the focus
+Energy is not the only cost of a tiered system. Each escalation sends the query and its answer
+over one more hop, so a policy also sets how much traffic crosses the links between tiers, which
+matters when those links are congested and is the cost RecServe is designed and evaluated
+on~\cite{wu2025recserve}. A policy also sets how long a user waits for an answer, since every
+tier a query passes through adds the time it spends answering, and latency is the measure on
+which \citeonline{pakpahan2026continuum} evaluate their network-side work. Neither is the focus
 of this work, which weighs energy alone, but WattLadder changes where queries are answered and
 often sends them straight to the OLT, so it could save energy at the cost of more traffic or a
 longer wait, and this section checks both, finding that its saving costs little traffic
