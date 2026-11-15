@@ -1502,7 +1502,12 @@ confidence alone, a query that ends at the OLT has already been answered by the 
 ONU, and that work is wasted, so the ONU alone accounts for 74~J of the 322~J. With the
 broadcast and $\delta = 0$, the phone and the ONU spend 17~J and 20~J instead of 34~J and 74~J,
 and the OLT spends less as well, 188~J instead of 214~J, even though it answers more queries,
-because they batch.
+because they batch. With $\delta = 0.3$, a tier moves a query only when the move is expected to
+save more than 30\%, so fewer queries skip the phone and the ONU and more are run there and then
+escalated anyway. The phone and the ONU then spend 24~J and 29~J instead of 17~J and 20~J, the
+OLT 200~J instead of 188~J, and a query costs 252~J in total instead of 224~J. What this extra
+energy buys is less traffic, 4\% more than confidence alone against 9\% with $\delta = 0$
+(Section~\ref{sec:results-delta}).
 
 \begin{figure}[htb]
   \centering
