@@ -1712,13 +1712,13 @@ idle energy to every query's charge, raises it to 46.9\% and 34.0\%.
 \label{sec:limitations}
 
 The results above rest on a few simplifications, gathered here so that the method could be
-described without interruptions.
+described without interruptions. The energies of the phone and the ONU come from recent
+preprints, the only measurements we found of these devices running these models, and each has
+limitations for our use.
 
 \subsection{The Phone's Energy}
 
-The energies of the phone and the ONU come from recent preprints, the only measurements we
-found of these devices running these models, and both have limitations for our use. The
-telemetry of \citeonline{cai2026npu} covers the phone's chip but not its memory, so the
+The telemetry of \citeonline{cai2026npu} covers the phone's chip but not its memory, so the
 phone's real consumption is higher than the 15.7~J per query we charge. It also gives no idle
 power, so under marginal accounting the phone is charged its full figure, including whatever
 the chip draws at rest, while the ONU and the OLT are charged only their energy above idle.
