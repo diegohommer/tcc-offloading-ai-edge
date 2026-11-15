@@ -1426,12 +1426,13 @@ The latency and the communication burden are read at the same point as the energ
 policy is described at the setting it would use to reach the target accuracy.
 
 The policies run under the three scenarios of Section~\ref{sec:drift}, with no, mild and
-strong drift, at 1,000, 2,000, 5,000, 10,000 and 20,000 households. Five more runs, without
-drift, each change one assumption. Three price the OLT differently from the $\times 2.44$ of
-Section~\ref{sec:accounting}: at $\times 1.0$ for the GPU card alone, $\times 1.72$ for
-Google's own accounting and $\times 3.35$ for a host that draws as much as its card. The
-other two change one thing each: one makes the ONU twice as efficient, and the other charges
-the same routing under average accounting, which changes the totals but no decision. Finally, at 10,000 households and without drift, a sweep of the margin $\delta$ through 0, 0.05,
+strong drift, at 1,000, 2,000, 5,000, 10,000 and 20,000 households. To see how much the
+results depend on our assumptions, we also repeat the runs without drift five more times,
+changing one assumption each time. Three of them price the OLT with a different factor than
+the $\times 2.44$ of Section~\ref{sec:accounting}: $\times 1.0$ for the GPU card alone,
+$\times 1.72$ for Google's own accounting and $\times 3.35$ for a host that draws as much as its
+card. The fourth makes the ONU twice as efficient, and the fifth charges the same routing under
+average accounting, which changes the totals but no decision. Finally, at 10,000 households and without drift, a sweep of the margin $\delta$ through 0, 0.05,
 0.1, 0.2, 0.3, 0.5, 0.7 and 1 moves WattLadder with the broadcast step by step from weighing
 energy alone to escalation by confidence alone, which $\delta = 1$ reproduces exactly.
 
