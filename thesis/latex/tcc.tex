@@ -1784,6 +1784,24 @@ A follow-up's answer is also the one recorded for its question alone, even thoug
 carries the conversation. The results therefore show what the policy does when the main
 uncertainty it faces is the OLT's load.
 
+\subsection{One Task and One Set of Models}
+
+The study uses a single benchmark, GSM8K, and a single set of three models, so its numbers hold
+for math problems answered by these models and may differ for other tasks and models. A task
+with longer or shorter answers would change how much energy each tier spends on a query, and
+models whose accuracies lie closer together or further apart would change how often a query has
+to climb to the OLT, so both the size of the saving and the number of households at which it
+appears could change. The confidence we use, computed from the perplexity of the answer
+(Section~\ref{sec:llm-background}), is also only an approximation of whether the answer is
+right, since a model can be confidently wrong~\cite{guo2017calibration} and how well such scores
+track correctness varies with the model and the task~\cite{geng2023survey}. On open-ended tasks,
+where an answer has no single correct form, perplexity may track correctness worse than on
+GSM8K, whose answers end in a single number, and finding a better signal for the escalation test
+is a challenge of its own. WattLadder does not depend on this signal, though, since it needs
+only the probability that a tier escalates (Section~\ref{sec:policy}), so a better test, such as
+a separate scoring model~\cite{chen2024frugalgpt}, could replace the quantile test without
+changing the rest of the policy.
+
 
 %==============================================================================
 \chapter{Conclusion}
