@@ -1,0 +1,21 @@
+% Energy one query of the mean GSM8K lengths adds at each tier (thesis Table
+% "Energy of the three tiers", marginal column, and the OLT's 840 J vs 5 J)
+\begin{tikzpicture}[
+    font=\footnotesize,
+    bar/.style={minimum height=0.5cm, inner sep=0pt, anchor=west},
+    tierlabel/.style={anchor=east, align=right},
+    value/.style={anchor=west, font=\footnotesize\bfseries}
+  ]
+  \def\jscale{0.0048}  % cm per joule: 840 J fills about 4 cm
+  \foreach \row/\tiername/\joules/\barcolor in {
+      0/{Phone}/15.7/InfGray,
+      1/{ONU}/92/InfGray,
+      2/{OLT, idle}/840/InfRed,
+      3/{OLT, batching}/5/InfRed} {
+    \pgfmathsetmacro{\barlen}{max(\joules*\jscale, 0.06)}
+    \node[tierlabel] at (-0.15, -\row*0.85) {\tiername};
+    \node[bar, fill=\barcolor, minimum width=\barlen cm] at (0, -\row*0.85) {};
+    \node[value, text=\barcolor] at (\barlen+0.1, -\row*0.85) {\joules~J};
+  }
+  \draw[thick] (0,0.4) -- (0,-2.95);
+\end{tikzpicture}

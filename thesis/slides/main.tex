@@ -10,13 +10,34 @@
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
 \usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
 
 \usetheme{Inf}
 
 \graphicspath{{figures/}}
 
+% Frame colors of the PON diagram, the same as the thesis figure
+\definecolor{PktA}{RGB}{166,206,227}
+\definecolor{PktB}{RGB}{178,223,138}
+\definecolor{PktC}{RGB}{253,191,111}
+
+% The tier ladder drawn with confidence alone (false) or with WattLadder (true)
+\newif\ifLadderEnergy
+
 % Gray note marking what a slide will hold, removed as each slide is written
 \newcommand{\placeholder}[1]{{\color{InfGray}\itshape #1}}
+
+% The one sentence a slide should leave with the audience
+\newcommand{\takeaway}[1]{\par\vfill{\centering\large #1\par}}
+
+% Source line for a borrowed figure or claim
+\newcommand{\source}[1]{{\par\raggedleft\tiny\color{InfGray}#1\par}}
+
+\newcommand{\yes}{{\color{InfBlack}\checkmark}}
+\newcommand{\no}{{\color{InfLightGray}\ding{55}}}
 
 %------------------------------------------------------------------------------
 % Title page
@@ -48,31 +69,60 @@
 %------------------------------------------------------------------------------
 
 \begin{frame}
-  \frametitle{LLM Inference in the Access Network}
-  \placeholder{PON tree: OLT at the central office, ONUs in the homes,
-    downstream broadcast. LLM use growing at home and at work.
-    Figure: pon\_broadcast\_tdma}
+  \frametitle{The Access Network}
+  \centering
+  \input{figures/pon_tree}
+  \takeaway{Homes reach the operator over a Passive Optical Network, and every
+    frame the OLT sends downstream reaches every ONU.}
 \end{frame}
 
 \begin{frame}
-  \frametitle{Tiered Inference}
-  \placeholder{Model cascade: a small model answers what it can and passes
-    the rest up. RecServe: each tier decides from recent confidence scores.
-    Tiers on the PON: user device, ONU, OLT.
-    Figure: pakpahan2026\_fig1\_tiered\_continuum}
+  \frametitle{Tiered LLM Inference}
+  \centering
+  \includegraphics[height=0.62\textheight]{pakpahan2026_fig1_tiered_continuum}
+  \source{Pakpahan and Hwang, 2026}
+  \takeaway{Each tier runs a larger model than the one below, and a query
+    climbs until a tier is confident in its answer.}
 \end{frame}
 
 \begin{frame}
   \frametitle{The Gap}
-  \placeholder{Escalation decided by confidence alone; energy plays no part.
-    The OLT's cost per query falls as it batches, and the tiers below cannot
-    see it}
+  \LadderEnergyfalse
+  \begin{columns}[c]
+    \begin{column}{0.42\textwidth}
+      \centering
+      \input{figures/tier_ladder}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \centering
+      {\small Energy one query adds}\par\medskip
+      \input{figures/energy_per_query}
+    \end{column}
+  \end{columns}
+  \takeaway{Escalation looks only at confidence, while the cost of a query at
+    the OLT swings from 840~J to 5~J with its load.}
 \end{frame}
 
 \begin{frame}
   \frametitle{This Work}
-  \placeholder{WattLadder: each tier weighs confidence and the energy
-    expected at each tier. The four contributions, one line each}
+  \LadderEnergytrue
+  \begin{columns}[c]
+    \begin{column}{0.52\textwidth}
+      \centering
+      \input{figures/tier_ladder}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \begin{enumerate}
+        \setlength{\itemsep}{8pt}
+        \item \textbf{WattLadder}
+        \item \textbf{Energy model} of the tiers
+        \item OLT's cost: \textbf{timetable} or \textbf{broadcast}
+        \item \textbf{Simulation} at equal accuracy
+      \end{enumerate}
+    \end{column}
+  \end{columns}
+  \takeaway{Same accuracy as confidence alone, with about half the energy at
+    20,000 households.}
 \end{frame}
 
 %------------------------------------------------------------------------------
@@ -82,9 +132,23 @@
 
 \begin{frame}
   \frametitle{Positioning}
-  \placeholder{Table: RecServe, Pakpahan et al., GreenServ, PerLLM, CR$^2$
-    against recursive tiers, energy in the decision, load-dependent cost,
-    compared at equal accuracy}
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{lccc}
+    & \shortstack{Across\\network tiers} & \shortstack{Decides at\\every tier}
+      & \shortstack{Weighs\\energy} \\
+    \hline
+    RecServe {\tiny\color{InfGray}(Wu et al., 2025)}             & \yes & \yes & \no  \\
+    Tiered PON {\tiny\color{InfGray}(Pakpahan and Hwang, 2026)}   & \yes & \yes & \no  \\
+    PerLLM {\tiny\color{InfGray}(Yang et al., 2024)}              & \yes & \no  & \yes \\
+    CR$^2$ {\tiny\color{InfGray}(Xue et al., 2026)}               & \yes & \no  & \yes \\
+    GreenServ {\tiny\color{InfGray}(Ziller et al., 2026)}         & \no  & \no  & \yes \\
+    \hline
+    {\color{InfRed}\textbf{WattLadder}}                           & \yes & \yes & {\color{InfRed}\checkmark} \\
+  \end{tabular}
+  \takeaway{Tiered works decide at every tier but ignore energy; energy-aware
+    works decide once, before any model has answered.}
 \end{frame}
 
 %------------------------------------------------------------------------------

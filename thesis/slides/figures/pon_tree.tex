@@ -1,0 +1,34 @@
+% PON tree with the downstream broadcast, simplified from the thesis figure
+\begin{tikzpicture}[
+    font=\footnotesize,
+    box/.style={draw, thick, rounded corners=2pt, minimum width=1.3cm,
+                minimum height=0.7cm, fill=white},
+    home/.style={draw, rounded corners=2pt, minimum width=1.1cm,
+                 minimum height=0.55cm, fill=black!5, font=\scriptsize},
+    split/.style={draw, thick, circle, minimum size=0.45cm, inner sep=0pt,
+                  fill=white},
+    fiber/.style={thick},
+    pkt/.style={draw, rounded corners=1pt, minimum size=0.34cm, inner sep=0pt,
+                font=\tiny\bfseries},
+    p1/.style={pkt, fill=PktA}, p2/.style={pkt, fill=PktB}, p3/.style={pkt, fill=PktC},
+    note/.style={font=\scriptsize, text=InfGray}
+  ]
+  \node[box] (olt) at (0,0) {OLT};
+  \node[note, below=3pt of olt] {central office};
+  \node[split] (sp) at (3.4,0) {};
+  \node[note, below=3pt of sp] {splitter};
+  \draw[fiber] (olt) -- (sp);
+  \foreach \k/\x in {3/1.2, 2/1.7, 1/2.2} { \node[p\k] at (\x,0) {\k}; }
+  \foreach \i/\y in {1/1.4, 2/0, 3/-1.4} {
+    \node[box] (onu\i) at (7.4,\y) {ONU \i};
+    \node[home] (usr\i) at (9.9,\y) {home \i};
+    \draw[fiber] (sp) -- (onu\i.west);
+    \draw[fiber] (onu\i.east) -- (usr\i.west);
+    % every branch carries every frame, the ONU keeps only its own
+    \foreach \k/\t in {3/0.45, 2/0.6, 1/0.75} {
+      \node[p\k] at ($(sp)!\t!(onu\i.west)$) {\k};
+    }
+    \node[p\i] at ($(onu\i.east)!0.5!(usr\i.west)$) {\i};
+  }
+  \node[note] at (8.65,-2.1) {\ldots\ thousands of homes per OLT};
+\end{tikzpicture}
