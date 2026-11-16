@@ -36,6 +36,13 @@
 % Source line for a borrowed figure or claim
 \newcommand{\source}[1]{{\par\raggedleft\tiny\color{InfGray}#1\par}}
 
+% A large figure with a short caption and its source
+\newcommand{\stat}[3]{%
+  \centering
+  {\fontsize{34}{38}\selectfont\bfseries\color{InfRed}#1}\par\medskip
+  {\small #2}\par\smallskip
+  {\tiny\color{InfGray}#3}\par}
+
 \newcommand{\yes}{{\color{InfBlack}\checkmark}}
 \newcommand{\no}{{\color{InfLightGray}\ding{55}}}
 
@@ -65,24 +72,48 @@
 
 %------------------------------------------------------------------------------
 \section{Introduction}
-% About 4 minutes: the context, the gap and the proposal
+% About 5 minutes: why energy, the tiers, the PON, the gap and the proposal
 %------------------------------------------------------------------------------
+
+\begin{frame}
+  \frametitle{Why Energy}
+  \begin{columns}[t]
+    \begin{column}{0.45\textwidth}
+      \stat{$\approx$40\%}{of US adults aged 18--64 used generative AI in 2024}
+        {Bick, Blandin and Deming, 2026}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \stat{0.24 Wh}{per median Gemini text prompt, about 860~J, counted over
+        the whole data center}{Elsworth et al., 2025}
+    \end{column}
+  \end{columns}
+  \takeaway{Small for one prompt, but paid again on every query, so the energy
+    of inference grows with its use.}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Tiered LLM Inference}
+  \begin{columns}[c]
+    \begin{column}{0.66\textwidth}
+      \centering
+      \includegraphics[width=\textwidth,height=0.56\textheight,keepaspectratio]{pakpahan2026_fig1_tiered_continuum}
+      \source{Pakpahan and Hwang, 2026}
+    \end{column}
+    \begin{column}{0.30\textwidth}
+      \stat{98\%}{lower cost at GPT-4's quality with a model cascade}
+        {Chen, Zaharia and Zou, 2024}
+    \end{column}
+  \end{columns}
+  \takeaway{Each tier runs a larger model than the one below, and a query
+    climbs until a tier is confident in its answer.}
+\end{frame}
 
 \begin{frame}
   \frametitle{The Access Network}
   \centering
   \input{figures/pon_tree}
-  \takeaway{Homes reach the operator over a Passive Optical Network, and every
-    frame the OLT sends downstream reaches every ONU.}
-\end{frame}
-
-\begin{frame}
-  \frametitle{Tiered LLM Inference}
-  \centering
-  \includegraphics[height=0.62\textheight]{pakpahan2026_fig1_tiered_continuum}
-  \source{Pakpahan and Hwang, 2026}
-  \takeaway{Each tier runs a larger model than the one below, and a query
-    climbs until a tier is confident in its answer.}
+  \takeaway{One OLT serves thousands of homes, and every frame it sends
+    downstream reaches all of them.}
 \end{frame}
 
 \begin{frame}
