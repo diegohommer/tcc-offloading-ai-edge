@@ -1,5 +1,8 @@
 %==============================================================================
 % TCC defense slides, Inf beamer theme (Instituto de Informatica, UFRGS)
+%
+% 20 minutes, about one minute per content slide. Background and related work
+% stay minimal: the context needed to follow the work goes in the Introduction.
 %==============================================================================
 \documentclass[aspectratio=169]{beamer}
 
@@ -11,6 +14,9 @@
 \usetheme{Inf}
 
 \graphicspath{{figures/}}
+
+% Gray note marking what a slide will hold, removed as each slide is written
+\newcommand{\placeholder}[1]{{\color{InfGray}\itshape #1}}
 
 %------------------------------------------------------------------------------
 % Title page
@@ -38,57 +44,142 @@
 
 %------------------------------------------------------------------------------
 \section{Introduction}
+% About 4 minutes: the context, the gap and the proposal
 %------------------------------------------------------------------------------
 
 \begin{frame}
-  \frametitle{Motivation}
-  \begin{itemize}
-    \item
-  \end{itemize}
+  \frametitle{LLM Inference in the Access Network}
+  \placeholder{PON tree: OLT at the central office, ONUs in the homes,
+    downstream broadcast. LLM use growing at home and at work.
+    Figure: pon\_broadcast\_tdma}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Tiered Inference}
+  \placeholder{Model cascade: a small model answers what it can and passes
+    the rest up. RecServe: each tier decides from recent confidence scores.
+    Tiers on the PON: user device, ONU, OLT.
+    Figure: pakpahan2026\_fig1\_tiered\_continuum}
+\end{frame}
+
+\begin{frame}
+  \frametitle{The Gap}
+  \placeholder{Escalation decided by confidence alone; energy plays no part.
+    The OLT's cost per query falls as it batches, and the tiers below cannot
+    see it}
+\end{frame}
+
+\begin{frame}
+  \frametitle{This Work}
+  \placeholder{WattLadder: each tier weighs confidence and the energy
+    expected at each tier. The four contributions, one line each}
 \end{frame}
 
 %------------------------------------------------------------------------------
-\section{Background and Related Work}
+\section{Related Work}
+% About 1 minute: where this work stands, no paper-by-paper review
 %------------------------------------------------------------------------------
 
 \begin{frame}
-  \frametitle{Background}
-  \begin{itemize}
-    \item
-  \end{itemize}
+  \frametitle{Positioning}
+  \placeholder{Table: RecServe, Pakpahan et al., GreenServ, PerLLM, CR$^2$
+    against recursive tiers, energy in the decision, load-dependent cost,
+    compared at equal accuracy}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Methodology}
+% About 6 minutes: overview level, formulas by purpose, no derivations
 %------------------------------------------------------------------------------
 
 \begin{frame}
-  \frametitle{Methodology}
-  \begin{itemize}
-    \item
-  \end{itemize}
+  \frametitle{Case Study}
+  \placeholder{Three tiers: phone (Llama-3.2-1B, 47.2\%), ONU
+    (Qwen2.5-1.5B, 68.8\%), OLT (Qwen2.5-7B, 91.7\%). GSM8K, recorded
+    answers replayed}
+\end{frame}
+
+\begin{frame}
+  \frametitle{WattLadder}
+  \placeholder{The decision at each tier: run the query or send it up,
+    then answer or escalate. Confidence test plus expected energy.
+    Figure: beta\_knob}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Learning the OLT's Cost}
+  \placeholder{Timetable learned in advance vs. cost report broadcast on
+    the PON downstream}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Energy Model}
+  \placeholder{One measurement boundary for the three tiers; the OLT
+    measured on an NVIDIA L4 against batch size.
+    Figures: batch\_energy, prefill\_decode}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Simulation and Evaluation}
+  \placeholder{Recorded conversation traffic with and without drift,
+    1,000 to 20,000 households, policies compared at the same accuracy.
+    Figures: simulator\_modules, traffic\_week, equal\_accuracy}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Results}
+% About 7 minutes: the largest share of the talk
 %------------------------------------------------------------------------------
 
 \begin{frame}
-  \frametitle{Results}
-  \begin{itemize}
-    \item
-  \end{itemize}
+  \frametitle{Energy at the Same Accuracy}
+  \placeholder{Saving grows with the households: under 1\% up to 2,000,
+    about half at 20,000. Figure: saving\_over\_recserve}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Where the Saving Comes From}
+  \placeholder{Less phone and ONU energy on queries that end at the OLT,
+    and more queries reaching the OLT while it batches.
+    Figure: energy\_split}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Timetable vs. Broadcast}
+  \placeholder{The timetable saves more in most scenarios; the broadcast
+    follows drift and needs no training.
+    Figures: broadcast\_over\_timetable, drift}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Latency and Traffic}
+  \placeholder{Shorter wait, somewhat more traffic between the tiers; the
+    margin $\delta$ trades energy for traffic.
+    Figures: latency, bandwidth, delta}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Limitations}
+  \placeholder{The phone's and the ONU's energy from published
+    measurements, the OLT's conversion, the traffic, what the simulation
+    holds still, one task and one set of models}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Conclusion}
+% About 2 minutes
 %------------------------------------------------------------------------------
 
 \begin{frame}
   \frametitle{Conclusion}
-  \begin{itemize}
-    \item
-  \end{itemize}
+  \placeholder{Weighing energy matters where a tier batches. Same accuracy
+    with less energy, about half at 20,000 households, and a shorter wait}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Future Work}
+  \placeholder{Timetable and broadcast together, sudden drops in load, a
+    cloud tier, ONUs that batch, measuring a faster gateway}
 \end{frame}
 
 \section*{}
@@ -96,6 +187,28 @@
 \begin{frame}
   \frametitle{Thank you!}
   \InfContacts
+\end{frame}
+
+%------------------------------------------------------------------------------
+% Backup slides for the committee's questions, outside the outline
+%------------------------------------------------------------------------------
+\appendix
+\section{Backup Slides}
+
+\begin{frame}
+  \frametitle{Sensitivity}
+  \placeholder{OLT conversion factor. Figure: sensitivity}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Batching Validation}
+  \placeholder{Measured batch energy against continuous batching.
+    Figure: batching\_validation}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Traffic Profiles}
+  \placeholder{Figure: traffic\_profiles}
 \end{frame}
 
 \end{document}
