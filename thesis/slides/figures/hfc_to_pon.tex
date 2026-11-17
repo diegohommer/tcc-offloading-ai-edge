@@ -1,0 +1,18 @@
+% The access network moving from coaxial cable (HFC) to fiber (PON)
+\begin{tikzpicture}[
+    font=\footnotesize,
+    endpoint/.style={draw, thick, rounded corners=2pt, minimum width=1.3cm,
+                     minimum height=0.55cm, fill=white, font=\scriptsize}
+  ]
+  \node[endpoint] (operator) at (0,0.9) {operator};
+  \node[endpoint] (home) at (3.4,0.9) {home};
+  \draw[line width=3pt, InfLightGray] (operator) --
+    node[above=2pt, font=\scriptsize, text=InfGray] {coaxial (HFC)} (home);
+
+  \node[endpoint] (olt) at (0,-0.9) {OLT};
+  \node[endpoint] (onu) at (3.4,-0.9) {ONU};
+  \draw[line width=1.2pt, InfRed] (olt) --
+    node[below=2pt, font=\scriptsize, text=InfRed] {fiber (PON)} (onu);
+
+  \draw[-{Stealth[length=3mm]}, line width=1.2pt] (1.7,0.45) -- (1.7,-0.4);
+\end{tikzpicture}

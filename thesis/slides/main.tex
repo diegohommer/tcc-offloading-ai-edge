@@ -17,6 +17,10 @@
 
 \usetheme{Inf}
 
+% Speaker notes (\note) stay hidden; uncomment to rehearse with them beside
+% each slide
+% \setbeameroption{show notes on second screen=right}
+
 \graphicspath{{figures/}}
 
 % Frame colors of the PON diagram, the same as the thesis figure
@@ -72,48 +76,65 @@
 
 %------------------------------------------------------------------------------
 \section{Introduction}
-% About 5 minutes: why energy, the tiers, the PON, the gap and the proposal
+% About 5 minutes. The story: where (the access network is changing), what it
+% costs (energy, and how cascades cut it), how (cascades on the network's
+% tiers), what is missing (the gap) and our answer (this work).
 %------------------------------------------------------------------------------
 
 \begin{frame}
-  \frametitle{Why Energy}
-  \begin{columns}[t]
+  \frametitle{Two Changes in the Access Network}
+  \begin{columns}[c]
     \begin{column}{0.45\textwidth}
       \stat{$\approx$40\%}{of US adults aged 18--64 used generative AI in 2024}
         {Bick, Blandin and Deming, 2026}
     \end{column}
     \begin{column}{0.45\textwidth}
-      \stat{0.24 Wh}{per median Gemini text prompt, about 860~J, counted over
-        the whole data center}{Elsworth et al., 2025}
+      \centering
+      \input{figures/hfc_to_pon}\par\medskip
+      {\small for more capacity, lower latency and lower operating cost}\par\smallskip
+      {\tiny\color{InfGray}Prodnik et al., 2025}\par
     \end{column}
   \end{columns}
-  \takeaway{Small for one prompt, but paid again on every query, so the energy
-    of inference grows with its use.}
+  \takeaway{LLM demand and PON deployment meet in the access network, close
+    to the user.}
+  \note{LLM use is spreading at home and at work. At the same time, operators
+    are replacing coaxial cable with fiber PONs. Both changes meet in the
+    access network, right next to the user. Next: what answering all these
+    queries costs.}
 \end{frame}
 
 \begin{frame}
-  \frametitle{Tiered LLM Inference}
-  \begin{columns}[c]
-    \begin{column}{0.66\textwidth}
-      \centering
-      \includegraphics[width=\textwidth,height=0.56\textheight,keepaspectratio]{pakpahan2026_fig1_tiered_continuum}
-      \source{Pakpahan and Hwang, 2026}
+  \frametitle{Energy as a Cost}
+  \begin{columns}[t]
+    \begin{column}{0.45\textwidth}
+      \stat{0.24 Wh}{per median Gemini text prompt, about 860~J, counted over
+        the whole data center}{Elsworth et al., 2025}
     \end{column}
-    \begin{column}{0.30\textwidth}
+    \begin{column}{0.45\textwidth}
       \stat{98\%}{lower cost at GPT-4's quality with a model cascade}
         {Chen, Zaharia and Zou, 2024}
     \end{column}
   \end{columns}
-  \takeaway{Each tier runs a larger model than the one below, and a query
-    climbs until a tier is confident in its answer.}
+  \takeaway{Green AI weighs efficiency alongside accuracy, and a cascade saves
+    by answering with the smallest model that is good enough.\\[2pt]
+    {\tiny\color{InfGray}Green AI: Schwartz et al., 2020}}
+  \note{One prompt costs little energy, but it is paid again on every query.
+    Green AI asks that efficiency be reported next to accuracy. A model
+    cascade is one way to save: a small model answers what it can and passes
+    the rest to a larger one. Next: what if those models sit in the network.}
 \end{frame}
 
 \begin{frame}
-  \frametitle{The Access Network}
+  \frametitle{Tiered LLM Inference}
   \centering
-  \input{figures/pon_tree}
-  \takeaway{One OLT serves thousands of homes, and every frame it sends
-    downstream reaches all of them.}
+  \includegraphics[height=0.6\textheight]{pakpahan2026_fig1_tiered_continuum}
+  \source{Pakpahan and Hwang, 2026; decision rule of RecServe (Wu et al., 2025)}
+  \takeaway{Each tier runs a larger model than the one below, and a query
+    climbs until a tier is confident in its answer.}
+  \note{Tiered inference puts the cascade on the network: the user's device,
+    the ONU in the home, the OLT at the central office, the cloud. Each tier
+    answers if it is confident and passes the query up otherwise. Our study
+    stops at the OLT. Next: what that decision leaves out.}
 \end{frame}
 
 \begin{frame}
@@ -132,6 +153,10 @@
   \end{columns}
   \takeaway{Escalation looks only at confidence, while the cost of a query at
     the OLT swings from 840~J to 5~J with its load.}
+  \note{Each tier decides from confidence alone. The energy of a query differs
+    a lot between tiers, and at the OLT it depends on the moment: about 840~J
+    if the OLT is idle, about 5~J if the query joins a batch already running.
+    The rule cannot see this.}
 \end{frame}
 
 \begin{frame}
@@ -154,6 +179,10 @@
   \end{columns}
   \takeaway{Same accuracy as confidence alone, with about half the energy at
     20,000 households.}
+  \note{We bring energy into the decision with WattLadder. Each tier weighs
+    confidence and the energy it expects to spend, and a query can skip the
+    ONU when the OLT is cheap. These are the four contributions, and the
+    headline result.}
 \end{frame}
 
 %------------------------------------------------------------------------------
@@ -180,6 +209,9 @@
   \end{tabular}
   \takeaway{Tiered works decide at every tier but ignore energy; energy-aware
     works decide once, before any model has answered.}
+  \note{The tiered works decide at every tier but leave energy out. The
+    energy-aware ones decide once per query, before any model has answered.
+    WattLadder does both.}
 \end{frame}
 
 %------------------------------------------------------------------------------
@@ -204,7 +236,9 @@
 \begin{frame}
   \frametitle{Learning the OLT's Cost}
   \placeholder{Timetable learned in advance vs. cost report broadcast on
-    the PON downstream}
+    the PON downstream}\par\medskip
+  \centering
+  \resizebox{0.75\textwidth}{!}{\input{figures/pon_tree}}
 \end{frame}
 
 \begin{frame}
