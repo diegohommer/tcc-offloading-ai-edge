@@ -40,12 +40,18 @@
 % Source line for a borrowed figure or claim
 \newcommand{\source}[1]{{\par\raggedleft\tiny\color{InfGray}#1\par}}
 
-% A large figure with a short caption and its source
-\newcommand{\stat}[3]{%
+% A visual with its caption and source. The visual sits in a box of fixed
+% height and the caption in a fixed two-line slot, so panels side by side
+% line up: visuals, captions and sources each on the same level.
+\newcommand{\panel}[3]{%
   \centering
-  {\fontsize{34}{38}\selectfont\bfseries\color{InfRed}#1}\par\medskip
-  {\small #2}\par\smallskip
+  \parbox[c][3cm][c]{\linewidth}{\centering #1}\par\medskip
+  \parbox[t][2.4em][t]{\linewidth}{\centering\small #2}\par
   {\tiny\color{InfGray}#3}\par}
+
+% A panel whose visual is a large figure
+\newcommand{\stat}[3]{%
+  \panel{{\fontsize{40}{44}\selectfont\bfseries\color{InfRed}#1}}{#2}{#3}}
 
 \newcommand{\yes}{{\color{InfBlack}\checkmark}}
 \newcommand{\no}{{\color{InfLightGray}\ding{55}}}
@@ -83,16 +89,15 @@
 
 \begin{frame}
   \frametitle{Two Changes in the Access Network}
-  \begin{columns}[c]
-    \begin{column}{0.45\textwidth}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
       \stat{$\approx$40\%}{of US adults aged 18--64 used generative AI in 2024}
         {Bick, Blandin and Deming, 2026}
     \end{column}
-    \begin{column}{0.45\textwidth}
-      \centering
-      \input{figures/hfc_to_pon}\par\medskip
-      {\small for more capacity, lower latency and lower operating cost}\par\smallskip
-      {\tiny\color{InfGray}Prodnik et al., 2025}\par
+    \begin{column}{0.46\textwidth}
+      \panel{\input{figures/hfc_to_pon}}
+        {for more capacity, lower latency and lower operating cost}
+        {Prodnik et al., 2025}
     \end{column}
   \end{columns}
   \takeaway{LLM demand and PON deployment meet in the access network, close
@@ -105,14 +110,13 @@
 
 \begin{frame}
   \frametitle{Energy as a Cost}
-  \begin{columns}[c]
-    \begin{column}{0.5\textwidth}
-      \centering
-      \input{figures/datacenter_twh}\par\medskip
-      {\small data center electricity, AI driving the growth}\par\smallskip
-      {\tiny\color{InfGray}IEA, Energy and AI, 2025}\par
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      \panel{\input{figures/datacenter_twh}}
+        {data center electricity worldwide, with AI driving the growth}
+        {IEA, Energy and AI, 2025}
     \end{column}
-    \begin{column}{0.4\textwidth}
+    \begin{column}{0.46\textwidth}
       \stat{98\%}{lower cost at GPT-4's quality with a model cascade}
         {Chen, Zaharia and Zou, 2024}
     \end{column}

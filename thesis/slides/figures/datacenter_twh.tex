@@ -1,7 +1,7 @@
 % Data center electricity worldwide, 2024 and the 2030 projection, against
 % Japan's yearly consumption (IEA, Energy and AI, 2025)
 \begin{tikzpicture}[font=\footnotesize]
-  \def\tscale{0.0021}  % cm per TWh: 945 TWh is about 2 cm
+  \def\tscale{0.0016}  % cm per TWh: 945 TWh is about 1.5 cm, so the chart fits a 3 cm panel
   \fill[InfGray] (0,0) rectangle (1.0, 415*\tscale);
   \fill[InfRed] (1.5,0) rectangle (2.5, 945*\tscale);
   \node[above, font=\footnotesize\bfseries, text=InfGray] at (0.5, 415*\tscale) {415 TWh};
