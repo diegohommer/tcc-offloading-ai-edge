@@ -82,9 +82,10 @@
 
 %------------------------------------------------------------------------------
 \section{Introduction}
-% About 5 minutes. The story: where (the access network is changing), what it
-% costs (energy, and how cascades cut it), how (cascades on the network's
-% tiers), what is missing (the gap) and our answer (this work).
+% About 5 minutes. The story: where (the access network is changing), the
+% problem (energy), the idea (model cascades), where it runs (cascades on the
+% network's tiers), what is missing (the gap) and our answer (this work). The
+% first three are quick, about 30 s each; no more slides go in here.
 %------------------------------------------------------------------------------
 
 \begin{frame}
@@ -108,23 +109,37 @@
 
 \begin{frame}
   \frametitle{Energy as a Cost}
-  \begin{columns}[T]
-    \begin{column}{0.46\textwidth}
-      \panel{\input{figures/datacenter_twh}}
-        {data center electricity worldwide, with AI driving the growth}
-        {IEA, Energy and AI, 2025}
-    \end{column}
-    \begin{column}{0.46\textwidth}
-      \stat{98\%}{lower cost at GPT-4's quality with a model cascade}
-        {Chen, Zaharia and Zou, 2024}
-    \end{column}
-  \end{columns}
+  \centering
+  \scalebox{1.1}{\input{figures/datacenter_twh}}\par\medskip
+  {\small data center electricity worldwide, with AI driving the growth}\par\smallskip
+  {\tiny\color{InfGray}IEA, Energy and AI, 2025}\par
+  \takeaway{Data centers use 1.5\% of the world's electricity, and more
+    than twice that by 2030.}
   \note{Data centers used 415 TWh in 2024, about 1.5\% of the world's
     electricity, and the IEA expects more than twice that by 2030, about what
     Japan uses in a year today, with AI as the main driver. Green AI asks that
-    efficiency be reported next to accuracy. A model cascade is one way to
-    save: a small model answers what it can and passes the rest to a larger
-    one. Next: what if those models sit in the network.}
+    efficiency be reported next to accuracy. Next: one common way to spend
+    less on each query.}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Model Cascades}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      \panel{\input{figures/cascade}}
+        {the small model answers what it can, the large one the rest}
+        {}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \stat{98\%}{lower API cost at GPT-4's quality with a cascade}
+        {Chen, Zaharia and Zou, 2024}
+    \end{column}
+  \end{columns}
+  \note{A model cascade starts with a small, cheap model and passes a query
+    to a larger one only when the small model is not confident in its answer.
+    Most queries never reach the expensive model, which is how FrugalGPT
+    matches GPT-4 at a fraction of the price. Next: what if the models of the
+    cascade sit in the network.}
 \end{frame}
 
 \begin{frame}
@@ -132,12 +147,12 @@
   \centering
   \includegraphics[height=0.6\textheight]{pakpahan2026_fig1_tiered_continuum}
   \source{Pakpahan and Hwang, 2026; decision rule of RecServe (Wu et al., 2025)}
-  \takeaway{Each tier runs a larger model than the one below, and a query
-    climbs until a tier is confident in its answer.}
-  \note{Tiered inference puts the cascade on the network: the user's device,
-    the ONU in the home, the OLT at the central office, the cloud. Each tier
-    answers if it is confident and passes the query up otherwise. Our study
-    stops at the OLT. Next: what that decision leaves out.}
+  \takeaway{The cascade spread over the network: each tier runs a larger model,
+    and a query climbs until a tier is confident.}
+  \note{Tiered inference spreads the cascade over the network: the user's
+    device, the ONU in the home, the OLT at the central office, the cloud.
+    Each tier answers if it is confident and passes the query up otherwise.
+    Our study stops at the OLT. Next: what that decision leaves out.}
 \end{frame}
 
 \begin{frame}
