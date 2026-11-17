@@ -184,7 +184,11 @@ expensive~\cite{chen2026network}. One way of making it cheaper is the model casc
 in which a smaller model answers what it can and passes a query to a larger one only when
 its answer is not reliable enough~\cite{chen2024frugalgpt}. What counts as expensive
 depends on the setting, from the price of an API call to the energy spent answering
-each query, and energy is the cost this work is concerned with. Treating it as a cost
+each query, and energy is the cost this work is concerned with. This cost is large and
+growing, since data centers consumed about 415~TWh in 2024, around 1.5\% of the world's
+electricity. Their consumption is projected to more than double by 2030, to about
+945~TWh, slightly more than Japan consumes today, and AI is the main driver of this
+growth~\cite{iea2025energy}. Treating energy as a cost
 of its own is the idea behind Green AI, which argues that efficiency should be reported alongside
 accuracy~\cite{schwartz2020green}, and some serving systems already consider energy when
 deciding which model answers a query. GreenServ, for instance, picks a model from a heterogeneous
