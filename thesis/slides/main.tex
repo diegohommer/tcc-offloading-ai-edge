@@ -105,23 +105,27 @@
 
 \begin{frame}
   \frametitle{Energy as a Cost}
-  \begin{columns}[t]
-    \begin{column}{0.45\textwidth}
-      \stat{0.24 Wh}{per median Gemini text prompt, about 860~J, counted over
-        the whole data center}{Elsworth et al., 2025}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \input{figures/datacenter_twh}\par\medskip
+      {\small data center electricity, AI driving the growth}\par\smallskip
+      {\tiny\color{InfGray}IEA, Energy and AI, 2025}\par
     \end{column}
-    \begin{column}{0.45\textwidth}
+    \begin{column}{0.4\textwidth}
       \stat{98\%}{lower cost at GPT-4's quality with a model cascade}
         {Chen, Zaharia and Zou, 2024}
     \end{column}
   \end{columns}
-  \takeaway{Green AI weighs efficiency alongside accuracy, and a cascade saves
-    by answering with the smallest model that is good enough.\\[2pt]
+  \takeaway{Green AI weighs efficiency next to accuracy, and cascades save by
+    starting small.\\[2pt]
     {\tiny\color{InfGray}Green AI: Schwartz et al., 2020}}
-  \note{One prompt costs little energy, but it is paid again on every query.
-    Green AI asks that efficiency be reported next to accuracy. A model
-    cascade is one way to save: a small model answers what it can and passes
-    the rest to a larger one. Next: what if those models sit in the network.}
+  \note{Data centers used 415 TWh in 2024, about 1.5\% of the world's
+    electricity, and the IEA expects more than twice that by 2030, about what
+    Japan uses in a year today, with AI as the main driver. Green AI asks that
+    efficiency be reported next to accuracy. A model cascade is one way to
+    save: a small model answers what it can and passes the rest to a larger
+    one. Next: what if those models sit in the network.}
 \end{frame}
 
 \begin{frame}
