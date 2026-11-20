@@ -168,7 +168,8 @@ ociosa.
 %==============================================================================
 
 As the use of Large Language Models (LLMs) becomes widespread, both at work and at
-home~\cite{bick2026rapid}, the challenge of adapting the network architecture to serve
+home~\cite{bick2026rapid}, with more than half of U.S.\ adults aged 18 to 64 using
+generative AI by August 2025~\cite{bick2025state}, the challenge of adapting the network architecture to serve
 this rapidly evolving technology closer to the user remains an active research
 topic~\cite{chen2026network}. The part of the network closest to the user, the access
 network that connects homes to the operator's central office, has itself been undergoing
@@ -635,7 +636,7 @@ central office, which serves every household connected to its PON ports and shar
 among them. As in earlier tiered
 architectures~\cite{wu2025recserve,pakpahan2026continuum}, each tier runs a larger model
 than the one below it, in the size range that \citeonline{pakpahan2026continuum} assign
-to it, and Table~\ref{tab:tiers} lists the three. The user tier is a
+to it, and Figure~\ref{fig:case-study} presents the three. The user tier is a
 phone running a model of about one billion parameters, and the ONU is a single-board
 computer with a neural accelerator, the class of device that an AI-capable home gateway
 could carry. The energy of these two tiers comes from published
@@ -654,28 +655,21 @@ recursion. The OLT is therefore the top tier, and its accuracy of 91.7\% caps wh
 can deliver, except on the 2.0\% of problems (26 of 1,319) that a lower tier gets right and
 the OLT gets wrong.
 
-\begin{table}[htb]
+\begin{figure}[htb]
   \centering
-  \caption{The three tiers of the case study and their accuracy on GSM8K}
-  \label{tab:tiers}
-  \begin{tabular}{llll}
-    \hline
-    Tier & Hardware & Model & Accuracy \\
-    \hline
-    User & OnePlus 15 phone & Llama-3.2-1B, 4-bit & 47.2\% \\
-    ONU & Raspberry Pi 5 with Hailo-10H & Qwen2.5-1.5B, 4-bit & 68.8\% \\
-    OLT & Server with one NVIDIA L4 & Qwen2.5-7B, 8-bit & 91.7\% \\
-    \hline
-  \end{tabular}
+  \caption{The three tiers of the case study, in the order a query escalates}
+  \label{fig:case-study}
+  \vspace{6pt}
+  \input{figures/case_study_tiers}
   \legend{Source: The author}
-\end{table}
+\end{figure}
 
 The task is GSM8K, a set of grade-school math problems whose answer is a single
 number~\cite{cobbe2021training}, so each answer can be graded exactly by comparing its
 final number with the reference, without a judge model. The problems take between two
 and eight steps to solve, which spreads the accuracies of the three models far apart.
 Every tier answered each of the 1,319 test problems once, with its model in the quantization
-of Table~\ref{tab:tiers} run on an NVIDIA L4 GPU rented in the cloud, and the simulation
+of Figure~\ref{fig:case-study} run on an NVIDIA L4 GPU rented in the cloud, and the simulation
 replays these recorded answers, together with the confidence computed from the probabilities of
 their tokens (Section~\ref{sec:llm-background}), instead of running the models again.
 
@@ -728,7 +722,9 @@ a fixed threshold or a separate scoring model~\cite{chen2024frugalgpt}. A test w
 rate is not fixed in advance would need $p_j$ to be learned from the answers instead, which is
 why Equation~\eqref{eq:cost-to-completion} keeps $p_j$ apart from $\beta$.
 
-The policy uses $C_j$ for two decisions in Algorithm~\ref{alg:decision}, both made when a
+The policy uses $C_j$ for two decisions in Algorithm~\ref{alg:decision}, summarized in
+Figure~\ref{fig:decision}, where red marks what WattLadder adds to escalation by confidence
+alone, both made when a
 query arrives at a tier $i < J$. The first is whether to run the query at all (lines 2
 to 5). Running it costs $E_i$ and, if its answer escalates, the expected energy of the
 cheapest tier above, taken as $C_{k^*}$ even when the margin $\delta$ would keep the escalation
@@ -759,6 +755,15 @@ the test, which happens with probability $1-\beta$. A tier therefore runs a quer
 if the cheapest tier above it costs at least $E_i/(1-\beta)$. This threshold rises with
 $\beta$, because the more often a tier escalates, the more often the energy it spends
 running a query is wasted.
+
+\begin{figure}[htb]
+  \centering
+  \caption{WattLadder's decision at tier $i$}
+  \label{fig:decision}
+  \vspace{6pt}
+  \input{figures/wattladder_flowchart}
+  \legend{Source: The author}
+\end{figure}
 
 \begin{algorithm}[htb]
   \caption{The decision of tier $i < J$ on a query $q$}
@@ -875,7 +880,7 @@ and the home network is left out, as are relaying the OLT's broadcast inside the
 manufacturing the hardware. Queries and answers are short texts of about 11~kB per query, even
 counting each byte at both ends of every hop it crosses (Section~\ref{sec:results-traffic}), and
 at the 0.03~$\mu$J per bit reported for a PON~\cite{lorincz2025comprehensive}, carrying them costs
-about 3~mJ, a hundred-thousandth of what a query spends on inference. Network equipment also
+about 3~mJ, a hundred-thousandth of what a query spends on inference. Most network equipment also
 draws nearly the same power whatever traffic it carries~\cite{krug2014understanding}, so the
 energy these few bytes add above idle is smaller still.
 
