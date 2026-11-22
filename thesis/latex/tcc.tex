@@ -20,6 +20,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage{amsmath}
+\usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,decorations.pathreplacing,calc}
@@ -573,25 +574,28 @@ per query, over two tiers at most, before any model has answered
   \footnotesize
   \setlength{\tabcolsep}{5pt}
   \begin{tabular}{lcccc}
-    \hline
+    \toprule
     & \begin{tabular}[c]{@{}c@{}}Across\\network\\tiers\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Escalates\\after an\\answer\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Weighs\\energy\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Load-\\dependent\\energy\end{tabular} \\
-    \hline
-    Tabi~\cite{wang2023tabi} & $\times$ & \checkmark & $\times$ & $\times$ \\
-    EdgeShard~\cite{zhang2024edgeshard} & \checkmark & $\times$ & $\times$ & $\times$ \\
-    Draft--verify~\cite{hao2024hybrid} & \checkmark & $\times$ & $\times$ & $\times$ \\
-    RecServe~\cite{wu2025recserve} & \checkmark & \checkmark & $\times$ & $\times$ \\
-    Tiered PON~\cite{pakpahan2026continuum} & \checkmark & \checkmark & $\times$ & $\times$ \\
-    GreenServ~\cite{ziller2026greenserv} & $\times$ & $\times$ & \checkmark & $\times$ \\
-    EcoThink~\cite{li2026ecothink} & $\times$ & $\times$ & \checkmark & $\times$ \\
-    Offline serving~\cite{wilkins2024offline} & $\times$ & $\times$ & \checkmark & $\times$ \\
-    PerLLM~\cite{yang2024perllm} & \checkmark & $\times$ & \checkmark & $\times$ \\
-    CR$^2$~\cite{xue2026cr2} & \checkmark & $\times$ & \checkmark & $\times$ \\
-    \hline
+    \midrule
+    Tabi {\scriptsize\color{darkgray}\cite{wang2023tabi}} & {\color{gray}$\times$} & \checkmark & {\color{gray}$\times$} & {\color{gray}$\times$} \\
+    EdgeShard {\scriptsize\color{darkgray}\cite{zhang2024edgeshard}} & \checkmark & {\color{gray}$\times$} & {\color{gray}$\times$} & {\color{gray}$\times$} \\
+    Draft--verify {\scriptsize\color{darkgray}\cite{hao2024hybrid}} & \checkmark & {\color{gray}$\times$} & {\color{gray}$\times$} & {\color{gray}$\times$} \\
+    \addlinespace[3pt]
+    RecServe {\scriptsize\color{darkgray}\cite{wu2025recserve}} & \checkmark & \checkmark & {\color{gray}$\times$} & {\color{gray}$\times$} \\
+    Tiered PON {\scriptsize\color{darkgray}\cite{pakpahan2026continuum}} & \checkmark & \checkmark & {\color{gray}$\times$} & {\color{gray}$\times$} \\
+    \addlinespace[3pt]
+    GreenServ {\scriptsize\color{darkgray}\cite{ziller2026greenserv}} & {\color{gray}$\times$} & {\color{gray}$\times$} & \checkmark & {\color{gray}$\times$} \\
+    EcoThink {\scriptsize\color{darkgray}\cite{li2026ecothink}} & {\color{gray}$\times$} & {\color{gray}$\times$} & \checkmark & {\color{gray}$\times$} \\
+    Offline serving {\scriptsize\color{darkgray}\cite{wilkins2024offline}} & {\color{gray}$\times$} & {\color{gray}$\times$} & \checkmark & {\color{gray}$\times$} \\
+    \addlinespace[3pt]
+    PerLLM {\scriptsize\color{darkgray}\cite{yang2024perllm}} & \checkmark & {\color{gray}$\times$} & \checkmark & {\color{gray}$\times$} \\
+    CR$^2$ {\scriptsize\color{darkgray}\cite{xue2026cr2}} & \checkmark & {\color{gray}$\times$} & \checkmark & {\color{gray}$\times$} \\
+    \midrule
     \textbf{WattLadder} (this work) & \checkmark & \checkmark & \checkmark & \checkmark \\
-    \hline
+    \bottomrule
   \end{tabular}
   \legend{Source: The author}
 \end{table}
@@ -838,13 +842,13 @@ idle, which is why the tiers need a current estimate of the OLT's cost.
   $\beta = 0.5$}
   \label{tab:example}
   \begin{tabular}{lll}
-    \hline
+    \toprule
     & OLT busy (5~J) & OLT idle (800~J) \\
-    \hline
+    \midrule
     ONU & $90 + 0.5 \times 5 = 92.5 > 5$, forwards & $90 + 0.5 \times 800 = 490 < 800$, runs \\
     User device & $16 + 0.5 \times 5 = 18.5 > 5$, forwards & $16 + 0.5 \times 490 = 261 < 490$, runs \\
     Route & straight to the OLT & user device, ONU, OLT \\
-    \hline
+    \bottomrule
   \end{tabular}
   \legend{Source: The author}
 \end{table}
@@ -939,14 +943,14 @@ range, which Sections~\ref{sec:olt-energy} and~\ref{sec:accounting} explain.
   \caption{Energy of the three tiers at the system boundary}
   \label{tab:energy}
   \begin{tabular}{lllrr}
-    \hline
+    \toprule
     & & & \multicolumn{2}{c}{Joules per query} \\
     Tier & Source measures & Conversion & Average & Marginal \\
-    \hline
+    \midrule
     User & the chip & none & 15.7 & 15.7 \\
     ONU & the board at the plug & none & 246 & 92 \\
     OLT & the GPU card & $\times 2.44$ & 33--1,520 & 18--840 \\
-    \hline
+    \bottomrule
   \end{tabular}
   \legend{Source: The author}
 \end{table}
@@ -986,9 +990,9 @@ whose models are both Qwen, is 122 tokens, shorter than the phone's 126.
   \caption{Values behind the energy of the user device and the ONU}
   \label{tab:user-onu}
   \begin{tabular}{lrr}
-    \hline
+    \toprule
     & User device & ONU \\
-    \hline
+    \midrule
     Energy per prompt token (J) & 0.016 & 0.028 \\
     Energy per generated token (J) & 0.074 & 0.88 \\
     Energy per prompt token above idle (J) & \ldots & 0.010 \\
@@ -998,7 +1002,7 @@ whose models are both Qwen, is 122 tokens, shorter than the phone's 126.
     Idle power (W) & \ldots & 3.5 \\
     Mean prompt tokens on GSM8K & 125.7 & 122.0 \\
     Mean generated tokens on GSM8K & 184.9 & 276.0 \\
-    \hline
+    \bottomrule
   \end{tabular}
   \legend{Source: The author, with data from \citeonline{cai2026npu}, \citeonline{renney2026cloud}
   and \citeonline{tummalapalli2026edge}}
@@ -1049,10 +1053,10 @@ to about 0.015~J by a batch of 16 and staying there.
   \caption{Energy of the OLT's GPU in static batches}
   \label{tab:olt-sweep}
   \begin{tabular}{rrrrrrr}
-    \hline
+    \toprule
     & & Generated & \multicolumn{2}{c}{Joules per token} & \multicolumn{2}{c}{Above idle} \\
     Batch & Power (W) & tokens/s & Prompt & Generated & Prompt & Generated \\
-    \hline
+    \midrule
     1 & 71.9 & 29.1 & 0.033 & 2.464 & 0.018 & 1.365 \\
     2 & 71.6 & 58.0 & 0.039 & 1.228 & 0.022 & 0.677 \\
     3 & 71.9 & 86.6 & 0.029 & 0.825 & 0.016 & 0.457 \\
@@ -1065,7 +1069,7 @@ to about 0.015~J by a batch of 16 and staying there.
     32 & 71.8 & 811.4 & 0.015 & 0.084 & 0.008 & 0.046 \\
     48 & 71.8 & 1{,}123.4 & 0.014 & 0.060 & 0.008 & 0.033 \\
     64 & 72.0 & 1{,}394.2 & 0.014 & 0.047 & 0.008 & 0.026 \\
-    \hline
+    \bottomrule
   \end{tabular}
   \legend{Source: The author}
 \end{table}
