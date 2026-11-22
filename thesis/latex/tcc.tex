@@ -1790,8 +1790,13 @@ would differ in their models and in what they ask. WattLadder uses one mean answ
 model, although in our runs on GSM8K the standard deviation of a single answer's length is 30
 to 40\% of that mean, and the length could be predicted from the query itself~\cite{zheng2023response}.
 A follow-up's answer is also the one recorded for its question alone, even though its prompt
-carries the conversation. The results therefore show what the policy does when the main
-uncertainty it faces is the OLT's load.
+carries the conversation. The broadcast, in turn, reaches every device of every household at
+once and at no cost. A PON already delivers services such as IPTV to many subscribers at
+once~\cite{effenberger2007introduction}, and the same kind of channel could carry the OLT's
+report to every ONU, but relaying it from the ONU to the devices in the home would need gateway
+and device software that does not exist yet, and a phone away from its home network would not
+hear it at all and would fall back to escalation by confidence alone. The results therefore show
+what the policy does when the main uncertainty it faces is the OLT's load.
 
 \subsection{One Task and One Set of Models}
 
