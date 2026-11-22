@@ -570,23 +570,24 @@ per query, over two tiers at most, before any model has answered
   \centering
   \caption{Related works compared with WattLadder}
   \label{tab:related}
-  \begin{tabular}{lccc}
+  \begin{tabular}{lcccc}
     \hline
     & \begin{tabular}[c]{@{}c@{}}Across\\network tiers\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Escalates after\\an answer\end{tabular}
-    & \begin{tabular}[c]{@{}c@{}}Weighs\\energy\end{tabular} \\
+    & \begin{tabular}[c]{@{}c@{}}Weighs\\energy\end{tabular}
+    & \begin{tabular}[c]{@{}c@{}}Energy depends\\on load\end{tabular} \\
     \hline
-    RecServe & \checkmark & \checkmark & $\times$ \\
-    Pakpahan and Hwang & \checkmark & \checkmark & $\times$ \\
-    Tabi & $\times$ & \checkmark & $\times$ \\
-    EdgeShard & \checkmark & $\times$ & $\times$ \\
-    Hao et al. & \checkmark & $\times$ & $\times$ \\
-    PerLLM & \checkmark & $\times$ & \checkmark \\
-    CR$^2$ & \checkmark & $\times$ & \checkmark \\
-    GreenServ & $\times$ & $\times$ & \checkmark \\
-    EcoThink & $\times$ & $\times$ & \checkmark \\
-    Wilkins et al. & $\times$ & $\times$ & \checkmark \\
-    \textbf{WattLadder} & \checkmark & \checkmark & \checkmark \\
+    Tabi & $\times$ & \checkmark & $\times$ & $\times$ \\
+    EdgeShard & \checkmark & $\times$ & $\times$ & $\times$ \\
+    Hao et al. & \checkmark & $\times$ & $\times$ & $\times$ \\
+    RecServe & \checkmark & \checkmark & $\times$ & $\times$ \\
+    Pakpahan and Hwang & \checkmark & \checkmark & $\times$ & $\times$ \\
+    GreenServ & $\times$ & $\times$ & \checkmark & $\times$ \\
+    EcoThink & $\times$ & $\times$ & \checkmark & $\times$ \\
+    Wilkins et al. & $\times$ & $\times$ & \checkmark & $\times$ \\
+    PerLLM & \checkmark & $\times$ & \checkmark & $\times$ \\
+    CR$^2$ & \checkmark & $\times$ & \checkmark & $\times$ \\
+    \textbf{WattLadder} & \checkmark & \checkmark & \checkmark & \checkmark \\
     \hline
   \end{tabular}
   \legend{Source: The author}
