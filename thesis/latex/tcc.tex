@@ -535,7 +535,9 @@ to one server so as to minimize transmission, inference and idle energy while me
 its deadline, reducing energy cost by more than 50\% compared with a cloud-only, an
 edge-only and another edge--cloud scheduler. The quality of the answers plays no part in
 the decision, as the authors acknowledge, and each request is placed once, with no
-second chance at a larger model.
+second chance at a larger model. The scheduler learns from the transmission, inference
+and idle energy it observes in each time slot, but it does not model how the energy of a
+request changes with the other requests its server is batching.
 
 CR$^2$~\cite{xue2026cr2} routes queries between a small model on the user's device and
 a pool of larger models on an edge server. The device decides from the query alone
@@ -549,23 +551,30 @@ edge is.
 Energy-aware routing has also been applied within a single system, where GreenServ
 learns online which of 16 LLMs gives the best trade-off between accuracy and measured GPU
 energy for each kind of query, and uses 31\% less energy than routing at
-random~\cite{ziller2026greenserv}. EcoThink sends simple queries to a small model that
-answers directly and complex ones to a larger model that reasons step by step, using
-40.4\% less energy than reasoning on every query~\cite{li2026ecothink}.
+random~\cite{ziller2026greenserv}. EcoThink trains a router to minimize the expected
+energy of each query while keeping the quality of its answers above a tolerance, so
+simple queries go to a small model that answers directly and complex ones to a larger
+model that reasons step by step, using 40.4\% less energy than reasoning on every
+query~\cite{li2026ecothink}.
 \citeonline{wilkins2024offline} model the energy and runtime of each LLM from the lengths
 of its prompts and answers, and assign a workload's queries offline among Llama-2 models
 of 7, 13 and 70 billion parameters, with a parameter that trades energy for accuracy.
 All three choose among models on a single system rather than across network tiers, and
-in two of them the energy of a query does not depend on the others being served, since
-GreenServ serves one query at a time and the energy models of
+in none of them does the energy of a query depend on the others being served, since
+GreenServ serves one query at a time, EcoThink estimates the energy of each path from its
+tokens at a fixed throughput, and the energy models of
 \citeauthoronline{wilkins2024offline} are measured at a fixed batch size. The latter also score each
 model by a single accuracy figure, so the answer to a particular query plays no part in
 their decision.
 
 In the tiered works, the decision is made at every tier from the confidence of an
 answer but leaves energy out, while the energy-aware works use energy but decide once
-per query, over two tiers at most, before any model has answered
-(Table~\ref{tab:related}).
+per query, on a single system or over two tiers at most, before any model has answered,
+and none of them lets the energy of a query depend on how busy the tier serving it is.
+Table~\ref{tab:related} marks, for each work, whether it spans network tiers, whether a
+query can still move up after a model has answered it, whether energy enters the
+decision and whether that energy changes with the load, and the gaps that WattLadder,
+in the last row, is designed to close are taken up in Section~\ref{sec:challenges}.
 
 \begin{table}[htb]
   \centering
