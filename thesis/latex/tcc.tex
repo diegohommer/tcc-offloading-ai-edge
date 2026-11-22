@@ -575,7 +575,7 @@ per query, over two tiers at most, before any model has answered
     & \begin{tabular}[c]{@{}c@{}}Across\\network tiers\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Escalates after\\an answer\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Weighs\\energy\end{tabular}
-    & \begin{tabular}[c]{@{}c@{}}Energy depends\\on load\end{tabular} \\
+    & \begin{tabular}[c]{@{}c@{}}Load-dependent\\energy\end{tabular} \\
     \hline
     Tabi & $\times$ & \checkmark & $\times$ & $\times$ \\
     EdgeShard & \checkmark & $\times$ & $\times$ & $\times$ \\
@@ -612,8 +612,9 @@ since the figures available for a phone, an edge board and a GPU server each cou
 different part of the system, and estimates for similar tasks can be an order of
 magnitude apart~\cite{elsworth2025measuring}. The energy of a server also depends on the
 queries it batches together, a dependence that CR$^2$ leaves out by modeling energy as power times
-latency, and neither GreenServ nor the models of \citeonline{wilkins2024offline} let it
-vary with the load (Section~\ref{sec:energy-routing}). We build an energy model of the
+latency, and that PerLLM, GreenServ, EcoThink and the models of
+\citeonline{wilkins2024offline} do not let vary with the load either
+(Section~\ref{sec:energy-routing}). We build an energy model of the
 user device, the ONU and the OLT under a single boundary, in which the OLT's energy is
 measured by us on a GPU as a function of batch size and checked against the same GPU
 serving with continuous batching.
