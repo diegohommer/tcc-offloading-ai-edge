@@ -570,30 +570,26 @@ per query, over two tiers at most, before any model has answered
   \centering
   \caption{Related works compared with WattLadder}
   \label{tab:related}
-  \footnotesize
   \begin{tabular}{lccc}
     \hline
     & \begin{tabular}[c]{@{}c@{}}Across\\network tiers\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Escalates after\\an answer\end{tabular}
     & \begin{tabular}[c]{@{}c@{}}Weighs\\energy\end{tabular} \\
     \hline
-    \multicolumn{4}{l}{\textit{Recursive tiered inference}} \\
-    RecServe~\cite{wu2025recserve} & \checkmark & \checkmark & $\times$ \\
-    Tiered PON~\cite{pakpahan2026continuum} & \checkmark & \checkmark & $\times$ \\
+    RecServe & \checkmark & \checkmark &  \\
+    Pakpahan and Hwang & \checkmark & \checkmark &  \\
     \hline
-    \multicolumn{4}{l}{\textit{Other edge--cloud and cascade methods}} \\
-    Tabi~\cite{wang2023tabi} & $\times$ & \checkmark & $\times$ \\
-    EdgeShard~\cite{zhang2024edgeshard} & \checkmark & $\times$ & $\times$ \\
-    Draft--verify~\cite{hao2024hybrid} & \checkmark & $\times$ & $\times$ \\
+    Tabi &  & \checkmark &  \\
+    EdgeShard & \checkmark &  &  \\
+    Hao et al. & \checkmark &  &  \\
     \hline
-    \multicolumn{4}{l}{\textit{Energy-aware serving and routing}} \\
-    PerLLM~\cite{yang2024perllm} & \checkmark & $\times$ & \checkmark \\
-    CR$^2$~\cite{xue2026cr2} & \checkmark & $\times$ & \checkmark \\
-    GreenServ~\cite{ziller2026greenserv} & $\times$ & $\times$ & \checkmark \\
-    EcoThink~\cite{li2026ecothink} & $\times$ & $\times$ & \checkmark \\
-    Offline serving~\cite{wilkins2024offline} & $\times$ & $\times$ & \checkmark \\
+    PerLLM & \checkmark &  & \checkmark \\
+    CR$^2$ & \checkmark &  & \checkmark \\
+    GreenServ &  &  & \checkmark \\
+    EcoThink &  &  & \checkmark \\
+    Wilkins et al. &  &  & \checkmark \\
     \hline
-    \textbf{WattLadder} (this work) & \checkmark & \checkmark & \checkmark \\
+    \textbf{WattLadder} & \checkmark & \checkmark & \checkmark \\
     \hline
   \end{tabular}
   \legend{Source: The author}
