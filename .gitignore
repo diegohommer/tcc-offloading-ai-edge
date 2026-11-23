@@ -226,22 +226,23 @@ implementation/results/adhoc/
 # (overrides the global *.log rule above)
 !implementation/results/measurements/*.log
 
-# LaTeX build artifacts (regenerate with latexmk -pdf tcc.tex)
-thesis/latex/*.aux
-thesis/latex/*.log
-thesis/latex/*.toc
-thesis/latex/*.lof
-thesis/latex/*.lot
-thesis/latex/*.out
-thesis/latex/*.bbl
-thesis/latex/*.blg
-thesis/latex/*.fdb_latexmk
-thesis/latex/*.fls
-thesis/latex/*.synctex.gz
-thesis/latex/*.nav
-thesis/latex/*.snm
-thesis/latex/*.vrb
+# LaTeX build artifacts, thesis and slides (rebuilt by latexmk)
+thesis/*/*.aux
+thesis/*/*.log
+thesis/*/*.toc
+thesis/*/*.lof
+thesis/*/*.lot
+thesis/*/*.out
+thesis/*/*.bbl
+thesis/*/*.blg
+thesis/*/*.fdb_latexmk
+thesis/*/*.fls
+thesis/*/*.synctex.gz
+thesis/*/*.nav
+thesis/*/*.snm
+thesis/*/*.vrb
 thesis/latex/tcc.pdf
+thesis/slides/main.pdf
 
 # Reference papers: local only, never committed --
 # licensing varies by source. Layout: reviewed/ (cited in tcc.bib),
