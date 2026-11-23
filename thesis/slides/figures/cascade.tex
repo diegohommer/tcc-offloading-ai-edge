@@ -1,21 +1,22 @@
 % A two-model cascade, drawn upright like the tier ladder: the small model
-% answers when it is confident and passes the query up otherwise.
+% answers when it is confident and passes the query up otherwise. Outer labels
+% have no inner sep, so the picture's box ends at its ink and panels space evenly.
 \begin{tikzpicture}[
     font=\footnotesize,
     model/.style={draw, thick, rounded corners=3pt, minimum width=3.0cm,
                   minimum height=0.8cm, fill=white, align=center},
     escalate/.style={-{Stealth[length=2mm]}, thick},
     answerline/.style={-{Stealth[length=2mm]}, thick, InfGray},
-    lbl/.style={font=\scriptsize, align=right}
+    lbl/.style={font=\scriptsize, align=right, xshift=-2pt}
   ]
   \node[model] (large) at (0,1.7)
     {\textbf{Large model}\\[-2pt]{\scriptsize costly, more accurate}};
   \node[model] (small) at (0,0)
     {\textbf{Small model}\\[-2pt]{\scriptsize cheap, less accurate}};
-  \draw[escalate] (0,-1.0) node[below, font=\scriptsize] {query} -- (small);
-  \draw[escalate] (small) -- node[lbl, left] {not\\confident} (large);
+  \draw[escalate] (0,-0.85) node[below=3.33pt, inner sep=0pt, font=\scriptsize] {query} -- (small);
+  \draw[escalate] (small) -- node[lbl, left] {not confident} (large);
   \draw[answerline] (small.east) -- ++(0.6,0)
-    node[right, font=\scriptsize, text=InfGray] {confident: answer};
+    node[right=3.33pt, inner sep=0pt, font=\scriptsize, text=InfGray] {confident: answer};
   \draw[answerline] (large.east) -- ++(0.6,0)
-    node[right, font=\scriptsize, text=InfGray] {answer};
+    node[right=3.33pt, inner sep=0pt, font=\scriptsize, text=InfGray] {answer};
 \end{tikzpicture}

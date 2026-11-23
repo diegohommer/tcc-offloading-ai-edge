@@ -141,8 +141,10 @@
 \newlength{\InfOutterFrameLeftMargin}
 \setlength{\InfOutterFrameLeftMargin}{0pt}
 
-\newcommand{\InfSectionFontSize}{
-    \SetTracking[spacing={-50*,30*,50*}]{encoding=OT1}{-80}%
+% The theme set an OT1 tracking list here on every frame, one microtype
+% warning each. The slides use T1 fonts, so it never reached the digit: the
+% pages render the same without it.
+\newcommand{\InfSectionFontSize}{%
     \fontfamily{phv}%
     \fontsize{80}{85}%
     \selectfont
@@ -182,8 +184,11 @@
             \pgfrect[fill]
                 {\pgfpoint{0.0\paperwidth-\beamer@leftmargin}{1.25pt}}
                 {\pgfpoint{1.0\paperwidth}{41pt}}
+            % The digit's right edge sits at a fixed 53pt, where 0.15\paperwidth
+            % falls on 4:3 slides. On 16:9 slides 0.15\paperwidth pushed digits
+            % wider than 1 over the first letters of the frame title.
             \pgfputat
-                {\pgfpoint{0.15\paperwidth-\beamer@leftmargin}{-2pt}}
+                {\pgfpoint{53pt-\beamer@leftmargin}{-2pt}}
                 {\pgfbox[right,bottom]{\color{InfGray}\InfSectionFontSize\bfseries\scalebox{1.0}[0.8]{\textls{\InfSectionNumber}}}}
             \color{InfWhite}
             \pgfrect[fill]
@@ -211,6 +216,18 @@
 
 \setbeamertemplate{sidebar canvas right}{}
 
+% Centered frames (beamer's default) center their content in the white body
+% between the header and the red line. Beamer puts 1 share of the free space
+% above the content and 1.5 below, which left it about 11pt high; with equal
+% shares the text area still sits 2.4pt above the white body, so 4.8pt more
+% goes on top (half of it moves the content).
+\define@key{beamerframe}{c}[true]{%
+  \beamer@frametopskip=4.8pt plus 1fill\relax%
+  \beamer@framebottomskip=0pt plus 1fill\relax%
+  \beamer@frametopskipautobreak=0pt plus .5\paperheight\relax%
+  \beamer@framebottomskipautobreak=0pt plus .5\paperheight\relax%
+}
+
 \setbeamertemplate{frametitle}{%
     \footnotesize%
     \def\InfTop{}
@@ -233,7 +250,9 @@
         }
     }
     \parbox{\InfOutterFrametitleWidth}{
-        \begin{pgfpicture}{-25pt}{0pt}{\textwidth}{39.75pt}
+        % The canvas spans the title's own box, not the whole text width,
+        % which overfilled that box by 164pt on every frame
+        \begin{pgfpicture}{-25pt}{0pt}{\InfOutterFrametitleWidth-25pt}{39.75pt}
             \pgfputat
                 {\pgfpoint{0pt}{\InfOutterTitleBottomMargin}}
                 {\pgfbox[left,base]{%
@@ -245,27 +264,33 @@
     }
 }
 
+% The page number sat 9pt up on a line of its own above the red line; with the
+% line now drawn as an overlay, 15.974pt puts it back at the same height
 \newcommand{\InfFootline}{%
-    \raisebox{9pt}{%
+    \raisebox{15.974pt}{%
         \makebox[\paperwidth]{%
             \scriptsize\hfill\insertframenumber\hspace{6pt}
-        }
-    }
+        }% no space here: the box is already as wide as the page
+    }%
 }
 
 \setbeamertemplate{footline}{%
-    \usebeamerfont{structure}
+    \usebeamerfont{structure}%
     \begin{beamercolorbox}[wd=\paperwidth,ht=2.25ex,dp=0pt]{title in head/foot}%
-        \InfFootline
-        \raisebox{0pt}[0pt][0pt]{%
+        % The red line along the bottom edge, drawn first as a zero-width
+        % overlay at the left edge. The theme drew it after the page-wide page
+        % number box, where it only reached the left edge by wrapping onto a
+        % second line, which also cost an overfull-box warning per frame.
+        \rlap{\raisebox{0pt}[0pt][0pt]{%
             \begin{pgfpicture}{0pt}{0pt}{0pt}{0pt}
                 \pgfsetlinewidth{1.5pt}
                 \color{InfRed}
                 \pgfline
                     {\pgfpoint{0.0\paperwidth}{0.75pt}}
                     {\pgfpoint{1.0\paperwidth}{0.75pt}}
-            \end{pgfpicture}
-        }
+            \end{pgfpicture}%
+        }}%
+        \InfFootline
     \end{beamercolorbox}
 }
 
@@ -315,11 +340,12 @@
                                 }%
                             }%
                             \insertdate%
+                            \par% close the paragraph here, so its lines take the small size's spacing
                         }
                     \end{minipage}
                  }}
-        \end{pgfpicture}
-    }
+        \end{pgfpicture}% no space: the picture already fills the page
+    }%
     \end{beamercolorbox}
 }
 
@@ -364,8 +390,10 @@
 %%%%%%                Others                 %%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Bottom-aligned: the title page fills the page exactly, and the centered
+% frames' fixed top skip would push it 4.8pt too far
 \newcommand{\InfTitlePage}[0]{
-    \begin{frame}[plain]
+    \begin{frame}[plain,b]
         \titlepage
     \end{frame}
 }

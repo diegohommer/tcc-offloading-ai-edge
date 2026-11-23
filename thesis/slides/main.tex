@@ -12,6 +12,8 @@
 \usepackage{graphicx}
 \usepackage{amssymb}
 \usepackage{pifont}
+\usepackage{environ}
+\usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc}
 
@@ -28,30 +30,115 @@
 \definecolor{PktB}{RGB}{178,223,138}
 \definecolor{PktC}{RGB}{253,191,111}
 
-% The tier ladder drawn with confidence alone (false) or with WattLadder (true)
+% The tier ladder drawn with confidence alone (false) or with WattLadder (true),
+% and with or without the gray answer arrows (on unless a slide turns them off)
+% and the case study's models and accuracies (off: plain tiers in the intro)
 \newif\ifLadderEnergy
+\newif\ifLadderAnswers
+\LadderAnswerstrue
+\newif\ifLadderModels
+% the case study's hardware beside each tier, and labels on the escalation
+% arrows (on unless a slide turns them off)
+\newif\ifLadderHardware
+\newif\ifLadderLabels
+\LadderLabelstrue
 
 % Gray note marking what a slide will hold, removed as each slide is written
 \newcommand{\placeholder}[1]{{\color{InfGray}\itshape #1}}
 
-% The one sentence a slide should leave with the audience
-\newcommand{\takeaway}[1]{\par\vfill{\centering\large #1\par}}
+% The one sentence a slide should leave with the audience, under a short red
+% rule, its bottom at the same height on every slide. The slide reserves the
+% takeaway's own height plus \takeawaygap, so the visual above centers between
+% the header and the rule whether the takeaway takes one line or two.
+\newsavebox{\takeawaybox}
+\newlength{\takeawaygap}
+\setlength{\takeawaygap}{1.2pt}% measured on slides 8 and 9: centers the visual on the rule
+\newcommand{\takeaway}[1]{%
+  \sbox{\takeawaybox}{\parbox{0.88\paperwidth}{\centering\large
+    {\color{InfRed}\rule[0.4ex]{1.2cm}{1.2pt}}\\[5pt]#1}}%
+  % \nointerlineskip: no line skip before the spacer, which a slide ending in
+  % a text line got and one ending in columns did not
+  \par\vspace{\dimexpr\ht\takeawaybox+\dp\takeawaybox+\takeawaygap\relax}%
+  \nointerlineskip\null
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=south, inner sep=0pt] at ($(current page.south)+(0,0.6cm)$)
+      {\usebox{\takeawaybox}};
+  \end{tikzpicture}}
 
-% Source line for a borrowed figure or claim
-\newcommand{\source}[1]{{\par\raggedleft\tiny\color{InfGray}#1\par}}
+% Source line for a borrowed figure or claim, centered under it like a panel's
+\newcommand{\source}[1]{{\par\smallskip\centering\tiny\color{InfGray}#1\par}}
 
-% A visual with its caption and source. The visual sits at the bottom of a
-% box of fixed height, right above a caption in a fixed two-line slot, so
-% panels side by side line up: visuals, captions and sources on one level.
-\newcommand{\panel}[3]{%
-  \centering
-  \parbox[c][3.6cm][b]{\linewidth}{\centering #1}\par\medskip
-  \parbox[t][2.4em][t]{\linewidth}{\centering\small #2}\par
-  {\tiny\color{InfGray}#3}\par}
+% Panels side by side, laid out like a flex row with space-evenly: each panel
+% takes its natural width and the page's spare width goes into equal gaps
+% before, between and after them. A first pass measures the tallest visual;
+% every visual then sits at the bottom of a box that tall, so the captions
+% and sources line up on one level. The frame centers the row vertically.
+%
+%   \begin{panelrow}
+%     \panel{visual}{caption, \\ breaks by hand}{source}
+%     \stat{98\%}{caption}{source}
+%     \panel[c]{list}{}{}   % [c]: centered on the tallest visual, not on
+%                           % its bottom; an empty caption or source leaves
+%                           % no row
+%   \end{panelrow}
+\newsavebox{\panelvisual}
+\newlength{\panelrowheight}
+\newif\ifpanelmeasuring
+%
+% The optional argument corrects each gap, left to right, so the gaps you see
+% come out equal: TeX spaces boxes, and the ink of a large number or a thick
+% line sits up to a few points inside its box. The values are measured on the
+% rendered slide (average gap minus each gap, so they sum to zero) and need
+% measuring again when a panel's content changes.
+%
+%   \begin{panelrow}[-0.48pt,-1.56pt,2.04pt] ... \end{panelrow}
+\newcommand{\panelkerns}{}
+\newcommand{\panelpopkern}{% the next gap's correction, if any is left
+  \ifx\panelkerns\empty\else\expandafter\panelpopkernfrom\panelkerns,\relax\fi}
+\def\panelpopkernfrom#1,#2\relax{\hskip#1\relax\def\panelkerns{#2}}
+\NewEnviron{panelrow}[1][]{%
+  \global\panelrowheight=0pt
+  \panelmeasuringtrue
+  \setbox0=\hbox{\BODY}%
+  \panelmeasuringfalse
+  \def\panelkerns{#1}%
+  % The gaps spread over the whole page width, not just the text area, so
+  % the margins count as part of the outer gaps and all gaps match
+  \par\noindent\makebox[\linewidth]{\hbox to \paperwidth{%
+    \ignorespaces\BODY\unskip\panelpopkern\hfill}}\par}
+
+% A visual with its caption and source, for use inside panelrow. The optional
+% argument places the visual in the row's height: b (bottom, default), c or t.
+\newcommand{\panel}[4][b]{%
+  % Raised by its depth, so the visual's bottom edge is its baseline; \unskip
+  % drops the space an \input file's last line break leaves after the picture
+  \sbox{\panelvisual}{\raisebox{\depth}{#2\unskip}}%
+  \ifpanelmeasuring
+    \ifdim\ht\panelvisual>\panelrowheight
+      \global\panelrowheight=\ht\panelvisual
+    \fi
+  \else
+    % Spaces from line breaks between panels would widen some gaps
+    \unskip\hfill\panelpopkern
+    % A centered stack without struts, so the panel's box ends at the source
+    % line's ink and the frame centers what you see
+    \vtop{\offinterlineskip\halign{\hfil##\hfil\cr
+      \vbox to \panelrowheight{\if t#1\else\vfill\fi\hbox{\usebox{\panelvisual}}%
+        \if b#1\else\vfill\fi}\cr
+      % No caption or source, no row for it: an empty one would add space
+      \if\relax\detokenize{#3}\relax\else
+        \noalign{\vskip 10pt}
+        {\small\begin{tabular}[t]{@{}c@{}}#3\end{tabular}}\cr
+      \fi
+      \if\relax\detokenize{#4}\relax\else
+        \noalign{\vskip 6pt}
+        {\tiny\color{InfGray}#4}\cr
+      \fi}}%
+  \fi\ignorespaces}
 
 % A panel whose visual is a large figure
 \newcommand{\stat}[3]{%
-  \panel{{\fontsize{48}{52}\selectfont\bfseries\color{InfRed}#1}\\[6pt]}{#2}{#3}}
+  \panel{{\fontsize{48}{52}\selectfont\bfseries\color{InfRed}#1}}{#2}{#3}}
 
 \newcommand{\yes}{{\color{InfBlack}\checkmark}}
 \newcommand{\no}{{\color{InfLightGray}\ding{55}}}
@@ -66,7 +153,9 @@
 \subtitle{Advisor: Prof.~Dr.~Gabriel Luca Nazar\\
           Co-advisor: Prof.~Dr.~Dennis Giovani Balreira}
 
-\date{2026}
+% The date goes on its own line under the advisors, not after a dash
+\renewcommand{\InfSubtitleSep}{\\[3pt]}
+\date{Porto Alegre, 2026}
 
 \author{Diego Hommerding Amorim}
 \institute{Instituto de Informática --- UFRGS}
@@ -74,133 +163,196 @@
 \begin{document}
 
 \InfTitlePage
+% The talk is in Portuguese: each "Fala" note is what to say on that slide,
+% kept in step with thesis/helper_material/roteiro_apresentacao.md. A \note
+% right after a frame attaches to it, so this one belongs to the title page.
+\note{Fala: Boa tarde, meu nome é Diego Amorim, e hoje vou apresentar meu
+  trabalho de conclusão de curso: WattLadder [pausa], offloading recursivo
+  ciente de energia para inferência de LLMs em redes ópticas passivas. Esse
+  trabalho foi orientado pelo professor Gabriel Nazar e coorientado pelo
+  professor Dennis Balreira.}
 
 \begin{frame}
   \frametitle{Outline}
   \tableofcontents
+  \note{Fala: Primeiro vou mostrar o contexto e o problema; depois, como o
+    WattLadder resolve esse problema e como avaliamos; e por fim, o que os
+    resultados mostram.}
 \end{frame}
 
 %------------------------------------------------------------------------------
 \section{Introduction}
 % About 5 minutes. The story: where (the access network is changing), the
-% problem (energy), the idea (model cascades), where it runs (cascades on the
-% network's tiers), what is missing (the gap) and our answer (this work). The
-% first three are quick, about 30 s each; no more slides go in here.
+% idea (model cascades), where it runs (cascades on the network's tiers), what
+% it costs (energy), what is missing (the gap) and our answer (this work).
+% Energy comes right before the gap, which rests on it. Two Changes, Model
+% Cascades and Energy as a Cost are quick, about 30 s each; no more slides go
+% in here.
 %------------------------------------------------------------------------------
 
 \begin{frame}
   \frametitle{Two Changes in the Access Network}
-  \begin{columns}[T]
-    \begin{column}{0.46\textwidth}
-      \stat{$\approx$40\%}{of US adults aged 18--64 used generative AI in 2024}
-        {Bick, Blandin and Deming, 2026}
-    \end{column}
-    \begin{column}{0.46\textwidth}
-      \panel{\input{figures/hfc_to_pon}}
-        {for more capacity, lower latency and lower operating cost}
-        {Prodnik et al., 2025}
-    \end{column}
-  \end{columns}
+  \begin{panelrow}[-0.48pt,-1.56pt,2.04pt]
+    \stat{$\approx$55\%}{of US adults aged 18--64\\ used generative AI in 2025}
+      {Bick, Blandin and Deming, 2025}
+    \panel{\input{figures/hfc_to_pon}}
+      {for more capacity,\\ lower latency and lower operating cost}
+      {Prodnik et al., 2025}
+  \end{panelrow}
   \note{LLM use is spreading at home and at work. At the same time, operators
     are replacing coaxial cable with fiber PONs. Both changes meet in the
-    access network, right next to the user. Next: what answering all these
-    queries costs.}
-\end{frame}
-
-\begin{frame}
-  \frametitle{Energy as a Cost}
-  \centering
-  \scalebox{1.1}{\input{figures/datacenter_twh}}\par\medskip
-  {\small data center electricity worldwide, with AI driving the growth}\par\smallskip
-  {\tiny\color{InfGray}IEA, Energy and AI, 2025}\par
-  \takeaway{Data centers use 1.5\% of the world's electricity, and more
-    than twice that by 2030.}
-  \note{Data centers used 415 TWh in 2024, about 1.5\% of the world's
-    electricity, and the IEA expects more than twice that by 2030, about what
-    Japan uses in a year today, with AI as the main driver. Green AI asks that
-    efficiency be reported next to accuracy. Next: one common way to spend
-    less on each query.}
-\end{frame}
+    access network, right next to the user. Keep the ONU and the OLT in mind,
+    they come back in a moment. Next: a common way to answer all these queries
+    for less.}
+  \note{Fala: Nos últimos anos, o uso de IA generativa cresceu muito: segundo
+    uma pesquisa nacional dos Estados Unidos, em 2025 mais da metade dos
+    adultos de 18 a 64 anos já usava essas ferramentas, no trabalho ou no dia
+    a dia. Em paralelo, as operadoras de internet estão migrando suas redes de
+    acesso do cabo coaxial para a fibra óptica, buscando mais capacidade, menor
+    latência e menores custos operacionais. Ou seja, a parte da rede mais próxima do
+    usuário está mudando justamente quando a demanda por IA mais cresce, e
+    podemos aproveitar essa nova infraestrutura para atender essa demanda.}
+ \end{frame}
 
 \begin{frame}
   \frametitle{Model Cascades}
-  \begin{columns}[T]
-    \begin{column}{0.46\textwidth}
-      \panel{\input{figures/cascade}}
-        {the small model answers what it can, the large one the rest}
-        {}
-    \end{column}
-    \begin{column}{0.46\textwidth}
-      \stat{98\%}{lower API cost at GPT-4's quality with a cascade}
-        {Chen, Zaharia and Zou, 2024}
-    \end{column}
-  \end{columns}
-  \note{A model cascade starts with a small, cheap model and passes a query
-    to a larger one only when the small model is not confident in its answer.
+  \begin{panelrow}[-1.16pt,1.12pt,0.04pt]
+    \panel{\input{figures/cascade}}
+      {the small model answers what it can,\\ the large one the rest}
+      {}
+    \stat{50--98\%}{lower API cost\\ at GPT-4's quality}
+      {Chen, Zaharia and Zou, 2024}
+  \end{panelrow}
+  \note{Every query needs a model to answer it, and the bigger the model, the
+    more each answer costs. A model cascade starts with a small, cheap model
+    and passes a query to a larger one only when the small model is not
+    confident in its answer.
     Most queries never reach the expensive model, which is how FrugalGPT
     matches GPT-4 at a fraction of the price. Next: what if the models of the
     cascade sit in the network.}
+  \note{Fala: Uma das soluções modernas propostas para otimizar os serviços de
+    IA é a cascata de modelos, onde colocamos um modelo menor, mais barato e
+    menos preciso para tentar responder a pergunta, e somente se ele não
+    estiver confiante na sua própria resposta passamos essa pergunta para um
+    modelo maior, mais caro e mais preciso. Usando como exemplo o FrugalGPT, os autores conseguiram a
+    mesma performance do GPT-4 com um custo entre 50\% e 98\% menor, em
+    dólares, dependendo do conjunto de dados.}
 \end{frame}
 
 \begin{frame}
   \frametitle{Tiered LLM Inference}
+  % The figure alone, as large as fits: its own labels name the tiers, and the
+  % title and the talk say the rest
   \centering
-  \includegraphics[height=0.6\textheight]{pakpahan2026_fig1_tiered_continuum}
+  \includegraphics[height=0.7\textheight]{pakpahan2026_fig1_tiered_continuum}
   \source{Pakpahan and Hwang, 2026; decision rule of RecServe (Wu et al., 2025)}
-  \takeaway{The cascade spread over the network: each tier runs a larger model,
-    and a query climbs until a tier is confident.}
   \note{Tiered inference spreads the cascade over the network: the user's
     device, the ONU in the home, the OLT at the central office, the cloud.
     Each tier answers if it is confident and passes the query up otherwise.
-    Our study stops at the OLT. Next: what that decision leaves out.}
+    Next: what running all these models costs.}
+  \note{Fala: Pegando essa cascata de modelos e colocando na infraestrutura da
+    rede, onde cada camada roda um modelo de IA, obtemos o que chamamos de
+    inferência em camadas. Essa figura mostra um trabalho que fez isso numa rede
+    óptica passiva, a PON: temos o dispositivo do usuário, a ONU na casa dele,
+    que é a unidade de rede óptica, a OLT na central da operadora, que é o
+    terminal de linha óptica, e por fim a nuvem. Quanto mais alto na rede, maior
+    o modelo, e a pergunta só sobe quando a camada de baixo não está confiante.
+    Esse processo que acabei de descrever a gente chama de offloading recursivo:
+    recursivo porque cada camada toma, por si só, a decisão de responder ou não
+    a pergunta, e a recursão para quando alguma camada responde, ou, no pior
+    caso, quando a pergunta chega no topo da rede, que sempre responde. Só que
+    cada uma dessas camadas roda um modelo, e rodar modelos custa energia.}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Energy as a Cost}
+  % One panel, no takeaway: the caption carries the claim, as on the
+  % two-panel slides
+  \begin{panelrow}
+    \panel{\input{figures/datacenter_twh}}
+      {data centers use 1.5\% of the world's electricity,\\
+       and AI drives that to more than double by 2030}
+      {IEA, Energy and AI, 2025}
+  \end{panelrow}
+  \note{Every tier runs a model, and running models is where the energy of
+    AI goes. Data centers used 415 TWh in 2024, about 1.5\% of the world's
+    electricity, and the IEA expects more than twice that by 2030, about what
+    Japan uses in a year today, with AI as the main driver. Green AI asks that
+    efficiency be reported next to accuracy. Next: what the tiers' decision
+    leaves out.}
+  \note{Fala: Atualmente, os data centers gastam cerca de 1,5\% da eletricidade
+    do mundo todo, e é projetado que esse número mais do que dobre até 2030,
+    chegando a cerca de 945 terawatts-hora, perto do consumo anual de um dos
+    países que mais consomem eletricidade, o Japão. E a IA é o principal motor
+    desse crescimento. Então, a pergunta é: nos trabalhos de inferência
+    recursiva, em que cada camada decide se sobe ou não a pergunta, essa decisão
+    leva energia em conta? [clique]}
 \end{frame}
 
 \begin{frame}
   \frametitle{The Gap}
   \LadderEnergyfalse
-  \begin{columns}[c]
-    \begin{column}{0.42\textwidth}
-      \centering
-      \input{figures/tier_ladder}
-    \end{column}
-    \begin{column}{0.54\textwidth}
-      \centering
-      {\small Energy one query adds}\par\medskip
-      \input{figures/energy_per_query}
-    \end{column}
-  \end{columns}
-  \takeaway{Escalation looks only at confidence, while the cost of a query at
-    the OLT swings from 840~J to 5~J with its load.}
-  \note{Each tier decides from confidence alone. The energy of a query differs
-    a lot between tiers, and at the OLT it depends on the moment: about 840~J
+  % Captions instead of a takeaway, as on the slides before it
+  \begin{panelrow}[0.16pt,0.16pt,-0.32pt]
+    \panel{\input{figures/tier_ladder}}
+      {each tier escalates\\ on confidence alone}
+      {}
+    \panel{\input{figures/energy_per_query}}
+      {energy one query adds:\\ at the OLT it swings with load}
+      {}
+  \end{panelrow}
+  \note{Each tier decides from confidence alone. The energies on the right
+    come from our energy model, with the OLT measured on an NVIDIA L4, and
+    the models behind each tier come with the case study. The energy of a
+    query differs a lot between tiers, and at the OLT it depends on the
+    moment: about 840~J
     if the OLT is idle, about 5~J if the query joins a batch already running.
     The rule cannot see this.}
+  \note{Fala: E a resposta é não. Os trabalhos que existem hoje decidem só pela
+    confiança, buscando reduzir latência e tráfego na rede, mas ignorando o
+    aspecto energético. E aqui tem um detalhe importante: a gente espera que a
+    energia cresça conforme os modelos ficam maiores, mas na OLT existe o
+    batching, que é rodar várias perguntas em paralelo, num único lote; como a
+    OLT atende milhares de casas, isso acontece com frequência. E o batching
+    amortiza o custo: uma pergunta que entra num lote que já está rodando custa
+    só uns 5 joules, menos até do que no celular, enquanto numa OLT ociosa ela
+    custaria cerca de 840 joules.}
 \end{frame}
 
 \begin{frame}
   \frametitle{This Work}
   \LadderEnergytrue
-  \begin{columns}[c]
-    \begin{column}{0.52\textwidth}
-      \centering
-      \input{figures/tier_ladder}
-    \end{column}
-    \begin{column}{0.44\textwidth}
-      \begin{enumerate}
-        \setlength{\itemsep}{8pt}
-        \item \textbf{WattLadder}
-        \item \textbf{Energy model} of the tiers
-        \item OLT's cost: \textbf{timetable} or \textbf{broadcast}
-        \item \textbf{Simulation} at equal accuracy
-      \end{enumerate}
-    \end{column}
-  \end{columns}
-  \takeaway{Same accuracy as confidence alone, with about half the energy at
+  % The answer arrows were on the slide before; without them the red
+  % escalation stands out and the slide has more room
+  \LadderAnswersfalse
+  % The contributions as a table in the theme's list style: it takes its
+  % natural width, so each item stays on one line. The heading names the list.
+  \begin{panelrow}[0.16pt,0.04pt,-0.20pt]
+    \panel{\input{figures/tier_ladder}}{}{}
+    \panel[c]{{\small\begin{tabular}{@{}r@{\hspace{6pt}}l@{}}
+        \multicolumn{2}{@{}l@{}}{\color{InfGray}\bfseries Contributions} \\[6pt]
+        {\color{InfRed}1.} & \textbf{WattLadder} \\[6pt]
+        {\color{InfRed}2.} & \textbf{Energy model} of the tiers \\[6pt]
+        {\color{InfRed}3.} & OLT's cost: \textbf{timetable} or \textbf{broadcast} \\[6pt]
+        {\color{InfRed}4.} & \textbf{Simulation} at equal accuracy
+      \end{tabular}}}{}{}
+  \end{panelrow}
+  \takeaway{Same accuracy as confidence alone,\\ with about half the energy at
     20,000 households.}
   \note{We bring energy into the decision with WattLadder. Each tier weighs
     confidence and the energy it expects to spend, and a query can skip the
     ONU when the OLT is cheap. These are the four contributions, and the
     headline result.}
+  \note{Fala: A proposta do nosso trabalho é pegar esse offloading recursivo e
+    levar em conta a energia na decisão de offloading, podendo até mesmo pular
+    camadas quando elas não valem a pena energeticamente. As nossas
+    contribuições são: a política de decisão, que chamamos de WattLadder; o
+    modelo de energia de cada camada do nosso estudo de caso; duas maneiras de
+    estimar o custo dinâmico da OLT, por meio de um timetable ou de um
+    broadcast; e, por fim, uma simulação que compara as políticas numa mesma
+    acurácia-alvo; cada uma delas eu detalho nos próximos slides. E o resultado
+    principal: com a mesma acurácia da decisão só por confiança, o WattLadder
+    gasta cerca de metade da energia, num cenário com 20 mil casas.}
 \end{frame}
 
 %------------------------------------------------------------------------------
@@ -210,26 +362,43 @@
 
 \begin{frame}
   \frametitle{Positioning}
+  % Booktabs rules, and a gap between the two families the takeaway names:
+  % tiered works first, energy-aware works after
   \centering
+  \renewcommand{\arraystretch}{1.05}
+  \setlength{\tabcolsep}{4pt}
   \small
-  \renewcommand{\arraystretch}{1.3}
-  \begin{tabular}{lccc}
+  \begin{tabular}{lcccc}
+    \toprule
     & \shortstack{Across\\network tiers} & \shortstack{Decides at\\every tier}
-      & \shortstack{Weighs\\energy} \\
-    \hline
-    RecServe {\tiny\color{InfGray}(Wu et al., 2025)}             & \yes & \yes & \no  \\
-    Tiered PON {\tiny\color{InfGray}(Pakpahan and Hwang, 2026)}   & \yes & \yes & \no  \\
-    PerLLM {\tiny\color{InfGray}(Yang et al., 2024)}              & \yes & \no  & \yes \\
-    CR$^2$ {\tiny\color{InfGray}(Xue et al., 2026)}               & \yes & \no  & \yes \\
-    GreenServ {\tiny\color{InfGray}(Ziller et al., 2026)}         & \no  & \no  & \yes \\
-    \hline
-    {\color{InfRed}\textbf{WattLadder}}                           & \yes & \yes & {\color{InfRed}\checkmark} \\
+      & \shortstack{Weighs\\energy} & \shortstack{Load-dependent\\energy} \\
+    \midrule
+    RecServe {\scriptsize\color{InfGray}(Wu et al., 2025)}             & \yes & \yes & \no  & \no  \\
+    Tiered PON {\scriptsize\color{InfGray}(Pakpahan and Hwang, 2026)}   & \yes & \yes & \no  & \no  \\
+    \addlinespace[5pt]
+    PerLLM {\scriptsize\color{InfGray}(Yang et al., 2024)}              & \yes & \no  & \yes & \no  \\
+    CR$^2$ {\scriptsize\color{InfGray}(Xue et al., 2026)}               & \yes & \no  & \yes & \no  \\
+    GreenServ {\scriptsize\color{InfGray}(Ziller et al., 2026)}         & \no  & \no  & \yes & \no  \\
+    \midrule
+    {\color{InfRed}\textbf{WattLadder}}                                 & \yes & \yes & {\color{InfRed}\checkmark} & {\color{InfRed}\checkmark} \\
+    \bottomrule
   \end{tabular}
-  \takeaway{Tiered works decide at every tier but ignore energy; energy-aware
-    works decide once, before any model has answered.}
+  \takeaway{Tiered works ignore energy, energy-aware works decide once,\\ and none lets
+    the server's energy depend on its load.}
   \note{The tiered works decide at every tier but leave energy out. The
-    energy-aware ones decide once per query, before any model has answered.
-    WattLadder does both.}
+    energy-aware ones decide once per query, before any model has answered, and
+    none of them lets a server's energy depend on how many queries it batches.
+    WattLadder does all of it.}
+  \note{Fala: Aqui eu posiciono o nosso trabalho em relação à literatura. Nas
+    colunas estão quatro critérios: se o trabalho distribui a inferência entre as
+    camadas da rede, se decide a cada camada, ou seja, de forma recursiva, se
+    leva a energia em conta e se essa energia depende da carga do servidor. Os trabalhos se dividem em dois grupos. Os de
+    offloading recursivo, como o RecServe e o trabalho na PON que mostrei antes,
+    decidem a cada camada, mas ignoram a energia. Já os que consideram energia,
+    como o PerLLM e o CR², decidem uma vez só, antes de qualquer modelo
+    responder. E nenhum deles considera que a energia de um servidor depende de
+    quantas consultas ele está processando juntas, o que é justamente o caso da
+    OLT. O WattLadder é o único que reúne os quatro critérios.}
 \end{frame}
 
 %------------------------------------------------------------------------------
@@ -239,16 +408,134 @@
 
 \begin{frame}
   \frametitle{Case Study}
-  \placeholder{Three tiers: phone (Llama-3.2-1B, 47.2\%), ONU
-    (Qwen2.5-1.5B, 68.8\%), OLT (Qwen2.5-7B, 91.7\%). GSM8K, recorded
-    answers replayed}
+  % One card per tier, the accuracy as the headline number, and the task in a
+  % band below
+  \centering
+  \input{figures/case_study_cards}\unskip
+  \note{The case study has three tiers: the phone, the ONU in the home and
+    the OLT at the central office, each running a larger model than the one
+    below it. The phone's and the ONU's energy come from published
+    measurements, and the OLT's we measured ourselves on an NVIDIA L4. We
+    stop at the OLT, since this work is about the access network and a cloud
+    model above 70 billion parameters was beyond our resources. The task is
+    GSM8K, grade-school math with a single-number answer, so every answer is
+    graded exactly. Each tier answered all 1,319 problems once, and the
+    simulation replays those answers with their confidence. The OLT's 91.7\%
+    caps what any policy can reach.}
+  \note{Fala: Aqui temos o nosso estudo de caso, com três camadas. O celular, um
+    OnePlus 15, rodando o Llama 3.2 com 1 bilhão de parâmetros; a ONU,
+    representada por uma Raspberry Pi 5 com um acelerador de IA Hailo-10H,
+    rodando o Qwen2.5 com 1,5 bilhão de parâmetros; e por fim a OLT,
+    representada por um servidor com uma GPU NVIDIA L4, rodando o Qwen2.5 com 7
+    bilhões de parâmetros. Para o celular e a ONU, usamos valores de energia
+    publicados; os da OLT, medimos nós mesmos. Cada modelo respondeu a todos os
+    1.319 problemas de matemática do ensino fundamental do GSM8K, e essas
+    respostas, junto com a confiança de cada uma, foram salvas para o simulador
+    usar. Repare nas acurácias: 47\%, 69\% e 92\%; quanto maior o modelo, mais
+    ele acerta. Deixamos a nuvem de fora por dois motivos: o foco do trabalho é
+    a rede de acesso, que termina na OLT, e medir um modelo de nuvem, com mais de
+    70 bilhões de parâmetros, exigiria um cluster de GPUs. Mas a política não
+    depende do número de camadas, então a nuvem seria só mais um nível.}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Expected Energy}
+  % The two quantities WattLadder's decision rests on, by their purpose (no
+  % derivation): first the energy expected from a tier up, a recursion that stops
+  % at the top tier, then the energy of one query at a tier, the piece inside it.
+  % Shown with the margin delta at 0, as in the main results (so n = k*).
+  \begin{panelrow}[0.52pt,-0.80pt,0.28pt]
+    \panel[t]{\begin{tabular}{@{}c@{}}
+        {\color{InfRed}\bfseries expected energy from tier $j$ up} \\[14pt]
+        {\Large $C_j = \begin{cases}
+          C_{k^*}           & \text{sends it up} \\[2pt]
+          E_j + p_j\, C_{k^*} & \text{runs it} \\[2pt]
+          E_J               & \text{top tier}
+        \end{cases}$} \\[12pt]
+        {\footnotesize\color{InfGray}$p_j = \beta$: share escalated by the quantile test} \\
+        {\footnotesize\color{InfGray}$k^*$: the tier above with the lowest $C$}
+      \end{tabular}}{}{}
+    \panel[t]{\begin{tabular}{@{}c@{}}
+        {\color{InfRed}\bfseries energy of one query at tier $j$} \\[14pt]
+        {\Large $E_j = r^{\mathrm{p}}_j\, P + r^{\mathrm{g}}_j\, \bar{L}_j$} \\[12pt]
+        {\footnotesize\color{InfGray}$P$: prompt tokens, known on arrival} \\
+        {\footnotesize\color{InfGray}$\bar{L}_j$: mean length of the tier's recent answers} \\
+        {\footnotesize\color{InfGray}$r^{\mathrm{p}}_j$, $r^{\mathrm{g}}_j$: energy per token, from the energy model}
+      \end{tabular}}{}{}
+\end{panelrow}
+  \note{Before deciding, a tier needs two numbers. E is what one query costs at
+    a tier: the tokens in the prompt and the tokens it will generate, each times
+    that tier's energy per token. The answer's length is only known after
+    running, so the tier uses the average length of its recent answers. C is
+    the energy expected from a tier up until someone answers: sending the query
+    up costs what the cheapest tier above costs; running it costs this tier's
+    energy plus, with the chance its answer escalates, the cost of going on;
+    and the top tier always answers, so its cost is just its own energy. That
+    last case is where the recursion stops, and the costs are computed from the
+    top down. The energy rates come from the energy model, on the next slides.
+    Next: how a tier uses these numbers to decide.}
+  \note{Fala: Para definir a nossa política de decisão, primeiro precisamos
+    definir o custo energético de uma camada. A grandeza principal é a energia
+    esperada a partir de uma camada até alguém responder, que chamamos de C, e
+    ela tem três casos: se a camada manda a pergunta pra cima, o custo é o da
+    camada mais barata acima; se ela roda a pergunta, paga a própria energia, E,
+    mais, com probabilidade p, o custo de continuar subindo; e no topo, que
+    sempre responde, o custo é só a própria energia. Esse último caso é
+    justamente o critério de parada da recursão que eu comentei antes, e por
+    isso os custos são calculados de cima para baixo. Esse p é a chance de a
+    resposta subir, e no nosso caso ele é igual a beta, por causa do teste de
+    confiança do RecServe: cada camada guarda a confiança das suas últimas
+    respostas, e uma resposta nova só volta para o usuário se estiver acima do
+    quantil beta dessas confianças; então, por construção, uma fração beta das
+    respostas sobe. Já o E, à direita, é a energia de uma pergunta numa camada:
+    o número de tokens do prompt, que a camada conhece assim que a pergunta
+    chega, vezes a energia por token de entrada, mais o tamanho da resposta
+    vezes a energia por token gerado. Como o tamanho da resposta só é conhecido
+    depois de rodar, usamos a média das respostas recentes; e essas energias por
+    token vêm do modelo de energia, que eu mostro daqui a pouco.}
 \end{frame}
 
 \begin{frame}
   \frametitle{WattLadder}
-  \placeholder{The decision at each tier: run the query or send it up,
-    then answer or escalate. Confidence test plus expected energy.
-    Figure: beta\_knob}
+  % The decision alone, large: the flowchart carries the comparisons each test
+  % makes, so no pseudocode is needed
+  \centering
+  \scalebox{1.2}{\input{figures/wattladder_decision}\unskip}\par\smallskip
+  % The comparisons are those of the thesis with the margin at 0; the margin
+  % itself comes with the results that use it
+  {\scriptsize\color{InfGray}main results: margin $\delta = 0$}
+  \note{At every tier, WattLadder asks two questions. When a query arrives, is
+    it cheaper to send it straight up? The tier compares the cost of the
+    cheapest tier above with what running here costs: its own energy plus,
+    with probability beta, the cost of going on. If sending it up is cheaper,
+    the query goes to the cheapest tier above without running here. Otherwise
+    the tier runs it and applies RecServe's confidence test, the beta-quantile:
+    a confident answer goes back to the user, and an unsure one escalates to
+    the cheapest tier above, which may be the next one. (After running, the
+    tier picks that tier again with the rates it holds then, since the OLT's
+    cost may have changed.) A margin delta, shown with the results, keeps an
+    escalation at the next tier unless jumping saves more than the margin,
+    and moves the policy all the way back to confidence alone at delta = 1.}
+  \note{Fala: Com essas definições em mente, a política de decisão pode ser
+    resumida com esse diagrama. Quando a pergunta chega numa camada i, a camada
+    compara duas opções: mandá-la direto para a camada mais barata acima, ou
+    rodá-la aqui, pagando a própria energia e, com probabilidade p, ainda tendo
+    que subir; é a comparação escrita na caixa vermelha. Se mandar pra cima for
+    mais barato, a pergunta vai direto para a camada mais barata acima, sem
+    rodar ali, e é assim que a gente pula camadas. Se não, a camada roda a
+    pergunta e aplica o teste do quantil beta: se a resposta estiver confiante,
+    ela volta para o usuário; se não, a pergunta sobe para a camada mais barata
+    acima, que pode ser a próxima. Tudo que está em vermelho é o que o
+    WattLadder acrescenta; o resto é o offloading recursivo por confiança que já
+    existia.}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Energy Model}
+  \placeholder{Where the energy rates of $E_j$ come from. One measurement
+    boundary for the three tiers; the OLT
+    measured on an NVIDIA L4 against batch size.
+    Figures: batch\_energy, prefill\_decode}
 \end{frame}
 
 \begin{frame}
@@ -257,13 +544,6 @@
     the PON downstream}\par\medskip
   \centering
   \resizebox{0.75\textwidth}{!}{\input{figures/pon_tree}}
-\end{frame}
-
-\begin{frame}
-  \frametitle{Energy Model}
-  \placeholder{One measurement boundary for the three tiers; the OLT
-    measured on an NVIDIA L4 against batch size.
-    Figures: batch\_energy, prefill\_decode}
 \end{frame}
 
 \begin{frame}
@@ -334,6 +614,10 @@
 \begin{frame}
   \frametitle{Thank you!}
   \InfContacts
+  \note{Fala: Muito obrigado pela atenção. Eu queria agradecer a todos pela
+    presença e aos meus orientadores, o professor Gabriel Nazar e o professor
+    Dennis Balreira, pelo auxílio durante o trabalho. Fico à disposição para
+    perguntas.}
 \end{frame}
 
 %------------------------------------------------------------------------------

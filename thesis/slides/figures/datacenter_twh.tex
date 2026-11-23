@@ -2,13 +2,14 @@
 % Japan's yearly consumption (IEA, Energy and AI, 2025). Every label stays
 % within the bars' width, so the chart centers on its caption.
 \begin{tikzpicture}[font=\footnotesize]
-  \def\tscale{0.0024}  % cm per TWh: 945 TWh is about 2.3 cm
+  \def\tscale{0.0027}  % cm per TWh: 945 TWh is about 2.5 cm
   \fill[InfGray] (0,0) rectangle (1.5, 415*\tscale);
   \fill[InfRed] (2.0,0) rectangle (3.5, 945*\tscale);
   \node[above, font=\footnotesize\bfseries, text=InfGray] at (0.75, 415*\tscale) {415 TWh};
   \node[below=3pt, font=\footnotesize\bfseries, text=white] at (2.75, 945*\tscale) {945 TWh};
   \draw[dashed, thick] (-0.1, 945*\tscale) -- (3.6, 945*\tscale);
-  \node[above=1pt, font=\scriptsize] at (0.75, 945*\tscale) {Japan's yearly use};
+  % The top label has no inner sep, so the picture's box starts at its ink
+  \node[above=4.33pt, inner sep=0pt, font=\scriptsize] at (0.75, 945*\tscale) {Japan's yearly use};
   \draw[thick] (-0.1,0) -- (3.6,0);
   \node[below] at (0.75,0) {2024};
   \node[below, align=center] at (2.75,0) {2030\\[-2pt]{\scriptsize projected}};

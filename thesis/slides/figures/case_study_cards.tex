@@ -1,0 +1,48 @@
+% The case study as three cards, one per tier, left to right in the order a
+% query escalates: device, model, GSM8K accuracy as the headline number, and
+% where the tier's energy comes from. The OLT's card is red: its energy is the
+% one we measured, and it is the tier that batches. A band below states the task.
+\begin{tikzpicture}[
+    card/.style={draw=#1, line width=1pt, rounded corners=4pt, minimum width=3.6cm,
+                 minimum height=4.4cm, fill=white, inner sep=0pt},
+    escalate/.style={-{Stealth[length=2.5mm]}, line width=1pt, InfGray}
+  ]
+  % #1 x, #2 tier, #3 device, #4 model, #5 quantization, #6 accuracy,
+  % #7 energy source, #8 card color
+  \newcommand{\tiercard}[8]{%
+    \node[card=#8] (c#2) at (#1, 0) {};
+    % Header strip: rounded at the top, square where it meets the body
+    \fill[#8, rounded corners=4pt] ([yshift=-0.65cm]c#2.north west)
+      -- (c#2.north west) -- (c#2.north east) -- ([yshift=-0.65cm]c#2.north east)
+      -- cycle;
+    \fill[#8] ([yshift=-0.65cm]c#2.north west) rectangle
+      ([yshift=-0.35cm]c#2.north east);
+    \node[text=white, font=\normalsize\bfseries] at ([yshift=-0.33cm]c#2.north) {#2};
+    \node[font=\small, text=InfGray, align=center] at ([yshift=-1.2cm]c#2.north) {#3};
+    \node[font=\small, align=center] at ([yshift=-2.05cm]c#2.north)
+      {\textbf{#4}\\[-1pt]{\footnotesize #5}};
+    \node[font=\fontsize{22}{24}\selectfont\bfseries, text=#8]
+      at ([yshift=-3.0cm]c#2.north) {#6};
+    \node[font=\scriptsize, text=InfGray] at ([yshift=-3.62cm]c#2.north)
+      {GSM8K accuracy};
+    \node[font=\scriptsize, text=#8] at ([yshift=0.27cm]c#2.south) {#7};
+  }
+  \tiercard{0}{Phone}{OnePlus 15}{Llama-3.2-1B}{4-bit}{47.2\%}
+    {energy: published}{InfBlack}
+  \tiercard{4.85}{ONU}{Raspberry Pi 5\\[-2pt]with Hailo-10H}{Qwen2.5-1.5B}{4-bit}{68.8\%}
+    {energy: published}{InfBlack}
+  \tiercard{9.7}{OLT}{Server with\\[-2pt]one NVIDIA L4}{Qwen2.5-7B}{8-bit}{91.7\%}
+    {energy: measured by us}{InfRed}
+  \draw[escalate] ([xshift=2pt]cPhone.east) -- ([xshift=-2pt]cONU.west);
+  \draw[escalate] ([xshift=2pt]cONU.east) -- ([xshift=-2pt]cOLT.west);
+
+  % The task, across the width of the three cards
+  \node[draw=InfLightGray, fill=InfLightGray!15, rounded corners=4pt, line width=0.6pt,
+        minimum width=13.3cm, minimum height=1.15cm, text width=12.8cm,
+        align=flush center, font=\small]
+    at (4.85, -3.12)
+    {\textbf{Task: GSM8K}, 1,319 grade-school math problems, graded exactly by the final
+     number. Every tier answered each once; the simulation replays those answers.};
+  \node[font=\tiny, text=InfGray, anchor=north east, inner sep=0pt]
+    at (11.5, -3.78) {Cobbe et al., 2021};
+\end{tikzpicture}

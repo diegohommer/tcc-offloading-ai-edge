@@ -1,31 +1,58 @@
 % The three tiers of the case study. \LadderEnergy switches the escalation
 % labels from confidence alone to WattLadder's and adds the skip arrow.
+% \LadderModels names each tier's model and accuracy (the case study);
+% without it the tiers say only small, medium and large model (the
+% introduction). \LadderHardware names each tier's device in gray at its
+% right, and \LadderLabels (on by default) labels the escalation arrows.
+% Outer labels have no inner sep, so the picture's box ends at its ink.
 \begin{tikzpicture}[
     font=\footnotesize,
     tier/.style={draw, thick, rounded corners=3pt, minimum width=3.3cm,
                  minimum height=0.8cm, fill=white, align=center},
     escalate/.style={-{Stealth[length=2mm]}, thick},
     answerline/.style={-{Stealth[length=2mm]}, thick, InfGray},
-    lbl/.style={font=\scriptsize, align=right}
+    lbl/.style={font=\scriptsize, align=right, inner sep=0pt, xshift=-5.33pt}
   ]
-  \node[tier] (olt) at (0,3.0)
-    {\textbf{OLT}\\[-2pt]{\scriptsize Qwen2.5-7B \,\textperiodcentered\, 91.7\%}};
-  \node[tier] (onu) at (0,1.5)
-    {\textbf{ONU}\\[-2pt]{\scriptsize Qwen2.5-1.5B \,\textperiodcentered\, 68.8\%}};
-  \node[tier] (usr) at (0,0)
-    {\textbf{Phone}\\[-2pt]{\scriptsize Llama-3.2-1B \,\textperiodcentered\, 47.2\%}};
+  \ifLadderModels
+    \def\oltmodel{Qwen2.5-7B \,\textperiodcentered\, 91.7\%}%
+    \def\onumodel{Qwen2.5-1.5B \,\textperiodcentered\, 68.8\%}%
+    \def\usrmodel{Llama-3.2-1B \,\textperiodcentered\, 47.2\%}%
+  \else
+    \def\oltmodel{large model}%
+    \def\onumodel{medium model}%
+    \def\usrmodel{small model}%
+  \fi
+  \node[tier] (olt) at (0,3.1) {\textbf{OLT}\\[-2pt]{\scriptsize\oltmodel}};
+  \node[tier] (onu) at (0,1.55) {\textbf{ONU}\\[-2pt]{\scriptsize\onumodel}};
+  \node[tier] (usr) at (0,0) {\textbf{Phone}\\[-2pt]{\scriptsize\usrmodel}};
 
-  \draw[escalate] (0,-1.0) node[below, font=\scriptsize] {query} -- (usr);
+  \draw[escalate] (0,-0.85) node[below=3.33pt, inner sep=0pt, font=\scriptsize] {query} -- (usr);
   \ifLadderEnergy
     \draw[escalate, InfRed] (usr) -- node[lbl, left, text=InfRed] {confidence\\+ energy} (onu);
     \draw[escalate, InfRed] (onu) -- node[lbl, left, text=InfRed] {confidence\\+ energy} (olt);
     \draw[escalate, InfRed, dashed] (usr.west) to[out=150, in=210]
       node[lbl, left, text=InfRed, pos=0.5, xshift=-2pt] {skip\\the ONU} (olt.west);
   \else
-    \draw[escalate] (usr) -- node[lbl, left] {not\\confident} (onu);
-    \draw[escalate] (onu) -- node[lbl, left] {not\\confident} (olt);
+    \ifLadderLabels
+      \draw[escalate] (usr) -- node[lbl, left] {not confident} (onu);
+      \draw[escalate] (onu) -- node[lbl, left] {not confident} (olt);
+    \else
+      \draw[escalate] (usr) -- (onu);
+      \draw[escalate] (onu) -- (olt);
+    \fi
   \fi
-  \foreach \t in {usr, onu, olt} {
-    \draw[answerline] (\t.east) -- ++(0.6,0) node[right, font=\scriptsize, text=InfGray] {answer};
-  }
+  \ifLadderAnswers
+    \foreach \t in {usr, onu, olt} {
+      \draw[answerline] (\t.east) -- ++(0.45,0)
+        node[right=3.33pt, inner sep=0pt, font=\scriptsize, text=InfGray] {answer};
+    }
+  \fi
+  \ifLadderHardware
+    \foreach \t/\device in {usr/{OnePlus 15 phone},
+                            onu/{Raspberry Pi 5\\with Hailo-10H},
+                            olt/{server with\\one NVIDIA L4}} {
+      \node[right=6pt, inner sep=0pt, font=\scriptsize, text=InfGray, align=left]
+        at (\t.east) {\device};
+    }
+  \fi
 \end{tikzpicture}

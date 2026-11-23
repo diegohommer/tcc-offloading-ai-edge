@@ -1,5 +1,6 @@
 % HFC and PON side by side: the cable network's CMTS, optical node and cable
 % modem against the PON's OLT, passive splitter and ONU. Coax turns into fiber.
+% Outer labels have no inner sep, so the picture's box ends at its ink.
 \begin{tikzpicture}[
     font=\footnotesize,
     endpoint/.style={draw, thick, rounded corners=2pt, minimum width=1.2cm,
@@ -8,23 +9,23 @@
                      fill=white},
     fiber/.style={line width=1.2pt, InfRed},
     coax/.style={line width=3pt, InfLightGray},
-    medium/.style={above=1pt, font=\tiny},
-    under/.style={below=2pt, font=\tiny, text=InfGray},
-    row/.style={anchor=east, font=\scriptsize\bfseries}
+    medium/.style={above=4.33pt, inner sep=0pt, font=\tiny},
+    under/.style={below=5.33pt, inner sep=0pt, font=\tiny, text=InfGray},
+    row/.style={anchor=east, inner sep=0pt, font=\scriptsize\bfseries}
   ]
-  \node[row] at (-0.8, 0.8) {HFC};
-  \node[endpoint] (cmts) at (0, 0.8) {CMTS};
-  \node[junction] (opticalnode) at (2.0, 0.8) {};
+  \node[row] at (-0.917, 1.0) {HFC};
+  \node[endpoint] (cmts) at (0, 1.0) {CMTS};
+  \node[junction] (opticalnode) at (1.85, 1.0) {};
   \node[under] at (opticalnode.south) {node};
-  \node[endpoint, minimum width=1.5cm] (modem) at (4.1, 0.8) {cable modem};
+  \node[endpoint, minimum width=1.5cm] (modem) at (3.75, 1.0) {cable modem};
   \draw[fiber] (cmts) -- node[medium, text=InfRed] {fiber} (opticalnode);
   \draw[coax] (opticalnode) -- node[medium, text=InfGray] {coax} (modem);
 
-  \node[row, text=InfRed] at (-0.8, -0.8) {PON};
-  \node[endpoint] (olt) at (0, -0.8) {OLT};
-  \node[junction] (splitter) at (2.0, -0.8) {};
+  \node[row, text=InfRed] at (-0.917, -1.0) {PON};
+  \node[endpoint] (olt) at (0, -1.0) {OLT};
+  \node[junction] (splitter) at (1.85, -1.0) {};
   \node[under] at (splitter.south) {splitter};
-  \node[endpoint, minimum width=1.5cm] (onu) at (4.1, -0.8) {ONU};
+  \node[endpoint, minimum width=1.5cm] (onu) at (3.75, -1.0) {ONU};
   \draw[fiber] (olt) -- node[medium, text=InfRed] {fiber} (splitter);
   \draw[fiber] (splitter) -- node[medium, text=InfRed] {fiber} (onu);
 \end{tikzpicture}

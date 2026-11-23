@@ -1,0 +1,36 @@
+% The two decisions WattLadder makes at a tier i: on arrival, whether sending
+% the query up costs less than running it here (red, the energy test WattLadder
+% adds); after running, whether the answer is confident enough to return
+% (black, the quantile test of RecServe); escalating straight to the cheapest tier
+% above is also WattLadder's, so it is red too. With the margin delta at 0, an
+% escalation always goes to k*, which may be the next tier. Each test shows the comparison it makes
+% (with the margin delta at 0, as in the main results), so the slide needs no
+% pseudocode. Outer labels have no inner sep, so the picture's box ends at its ink.
+\begin{tikzpicture}[
+    font=\footnotesize,
+    box/.style={draw, thick, rounded corners=3pt, minimum width=3.3cm,
+                 minimum height=0.6cm, fill=white, align=center},
+    flow/.style={-{Stealth[length=2mm]}, thick},
+    choice/.style={font=\scriptsize, inner sep=0pt},
+    outcome/.style={font=\scriptsize, inner sep=0pt, align=left}
+  ]
+  \node[inner sep=0pt, font=\scriptsize] (in) at (0,0) {query arrives at tier $i$};
+  \node[box, draw=InfRed, text=InfRed] (send) at (0,-0.95)
+    {cheaper to send it up?\\[1pt]{\scriptsize $C_{k^*} < E_i + p_i\,C_{k^*}$}};
+  \node[box] (run) at (0,-2.2) {run the query};
+  \node[box] (conf) at (0,-3.35)
+    {confident?\\[1pt]{\scriptsize ($\beta$-quantile test)}};
+  % Two centered lines, so the label sits under its arrow and stays narrow
+  \node[outcome, align=center, anchor=north] (esc) at (0,-4.3)
+    {\textcolor{InfRed}{escalate to $k^*$,}\\\textcolor{InfRed}{the cheapest tier above}};
+
+  \draw[flow] (in) -- (send);
+  \draw[flow] (send) -- node[choice, left=3pt] {no} (run);
+  \draw[flow] (run) -- (conf);
+  \draw[flow] (conf) -- node[choice, left=3pt] {no} (esc);
+
+  \draw[flow, InfRed] (send.east) -- node[choice, above=3pt, text=InfRed] {yes} ++(0.7,0)
+    node[outcome, right=4pt, text=InfRed] {send it to the\\cheapest tier above};
+  \draw[flow] (conf.east) -- node[choice, above=3pt] {yes} ++(0.7,0)
+    node[outcome, right=4pt] {answer the user};
+\end{tikzpicture}
