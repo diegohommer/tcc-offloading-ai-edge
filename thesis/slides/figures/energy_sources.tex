@@ -1,0 +1,38 @@
+% Where each tier's energy comes from (thesis Section "Energy Model", Table
+% "Energy of the three tiers"): what the source measures and the factor that
+% brings it to the one boundary, all the system draws to answer a query. One
+% card per tier, bottom to top in the order a query escalates; the OLT's card
+% is red, the tier we measured. Outer labels have no inner sep, so the
+% picture's box ends at its ink.
+\begin{tikzpicture}[
+    card/.style={draw=#1, line width=1pt, rounded corners=4pt, minimum width=6.75cm,
+                 minimum height=1.25cm, fill=white, inner sep=0pt}
+  ]
+  % #1 y, #2 tier, #3 what the source measures, #4 where the figure comes from,
+  % #5 factor to the boundary, #6 card color
+  \newcommand{\sourcecard}[6]{%
+    \node[card=#6] (s#2) at (0, #1) {};
+    % Tab on the left: rounded on the outer side, square where it meets the body
+    \fill[#6, rounded corners=4pt] ([xshift=1.45cm]s#2.north west)
+      -- (s#2.north west) -- (s#2.south west) -- ([xshift=1.45cm]s#2.south west)
+      -- cycle;
+    \fill[#6] ([xshift=1.15cm]s#2.north west) rectangle ([xshift=1.45cm]s#2.south west);
+    \node[text=white, font=\normalsize\bfseries] at ([xshift=0.725cm]s#2.west) {#2};
+    \node[anchor=west, font=\small\bfseries] at ([xshift=1.65cm, yshift=0.17cm]s#2.west)
+      {#3};
+    \node[anchor=west, font=\scriptsize, text=InfGray]
+      at ([xshift=1.65cm, yshift=-0.27cm]s#2.west) {#4};
+    % The factor in its own column on the right
+    \draw[InfLightGray, line width=0.6pt] ([xshift=-1.8cm, yshift=-0.22cm]s#2.north east)
+      -- ([xshift=-1.8cm, yshift=0.22cm]s#2.south east);
+    \node[font=\fontsize{16}{18}\selectfont\bfseries, text=#6]
+      at ([xshift=-0.9cm]s#2.east) {\texttimes#5};
+  }
+  \sourcecard{3.2}{OLT}{the GPU card}{measured by us}{2.44}{InfRed}
+  \sourcecard{1.5}{ONU}{the whole board}{published, at the plug}{1}{InfBlack}
+  \sourcecard{0}{Phone}{the chip}{published}{1}{InfBlack}
+  % What the OLT's factor adds, under its card
+  \node[font=\scriptsize, text=InfRed, anchor=north east, inner sep=0pt]
+    at ([yshift=-0.1cm]sOLT.south east)
+    {+ rest of the server, spare machines, building};
+\end{tikzpicture}

@@ -1,0 +1,74 @@
+% How the tiers learn the OLT's cost (thesis Sections "Cost per Query at the
+% OLT" and "Energy-Aware Recursive Offloading"): a band with the report the
+% OLT computes, then one card per strategy. The timetable card draws the
+% table's shape, one rate per hour and day type, with the thesis's example
+% cell; it holds no data. The broadcast card draws one report frame reaching
+% every ONU on a PON port. Both hold the same report, r_J.
+\begin{tikzpicture}[
+    card/.style={draw=InfBlack, line width=1pt, rounded corners=4pt,
+                 minimum width=6.6cm, minimum height=4.1cm, fill=white, inner sep=0pt},
+    cell/.style={draw=InfLightGray, line width=0.4pt, fill=InfLightGray!20,
+                 minimum width=0.19cm, minimum height=0.42cm, inner sep=0pt},
+    box/.style={draw, thick, rounded corners=2pt, minimum width=1.05cm,
+                minimum height=0.6cm, fill=white, font=\small},
+    report/.style={draw=InfRed, fill=InfRed, text=white, rounded corners=1pt,
+                   minimum size=0.46cm, inner sep=1pt, font=\small},
+    note/.style={font=\scriptsize, text=InfGray, inner sep=0pt}
+  ]
+  % #1 x, #2 name, #3 how it is learned
+  \newcommand{\strategycard}[3]{%
+    \node[card] (c#2) at (#1, -2.85) {};
+    \fill[InfBlack, rounded corners=4pt] ([yshift=-0.6cm]c#2.north west)
+      -- (c#2.north west) -- (c#2.north east) -- ([yshift=-0.6cm]c#2.north east)
+      -- cycle;
+    \fill[InfBlack] ([yshift=-0.6cm]c#2.north west) rectangle
+      ([yshift=-0.3cm]c#2.north east);
+    \node[text=white, font=\normalsize\bfseries, anchor=west]
+      at ([xshift=0.3cm, yshift=-0.3cm]c#2.north west) {#2};
+    \node[text=white, font=\small, anchor=east]
+      at ([xshift=-0.3cm, yshift=-0.3cm]c#2.north east) {#3};
+  }
+
+  % The report, across the width of both cards
+  \node[draw=InfLightGray, fill=InfLightGray!15, rounded corners=4pt, line width=0.6pt,
+        minimum width=13.6cm, minimum height=1.5cm] (band) at (0, 0.35) {};
+  \node[font=\small\bfseries, text=InfRed, anchor=west]
+    at ([xshift=0.35cm]band.west) {\begin{tabular}{@{}l@{}}what one more\\
+      query adds\end{tabular}};
+  \node[font=\Large] at (-0.85, 0.35) {$r_J = b\, r_{\mathrm{busy}} + (1 - b)\, r_{\mathrm{idle}}$};
+  \node[font=\footnotesize, text=InfGray, anchor=west, align=left]
+    at (2.95, 0.35) {$r_{\mathrm{busy}}$: joins a batch, $\approx$5~J\\[1pt]
+      $r_{\mathrm{idle}}$: finds it idle, $\approx$840~J\\[1pt]
+      $b$: share of the time busy};
+
+  %--- Timetable: one rate per hour, weekdays and weekends
+  \strategycard{-3.5}{Timetable}{learned in advance}
+  \foreach \row/\daytype in {0/weekday, 1/weekend} {
+    \node[note, anchor=east] at (-5.35, -1.75-\row*0.5) {\daytype};
+    \foreach \hour in {0,...,23} {
+      \node[cell] at (-5.3+0.095+\hour*0.19, -1.75-\row*0.5) {};
+    }
+  }
+  % The thesis's example: weekdays 14:00-15:00
+  \node[cell, draw=InfRed, fill=InfRed] (example) at (-5.3+0.095+14*0.19, -1.75) {};
+  \foreach \hour in {0,6,12,18,24} {
+    \node[note, anchor=north] at (-5.3+\hour*0.19, -2.53) {\hour h};
+  }
+  \node[font=\small, text=InfRed, align=center] at (-3.5, -3.4)
+    {weekdays 14--15h: the mean of\\ the calibration month's 20 such hours};
+  \node[note] at (-3.5, -4.4) {built in rounds over a calibration month};
+
+  %--- Broadcast: one frame on the port reaches every ONU
+  \strategycard{3.5}{Broadcast}{live, every 10 s}
+  \node[box] (olt) at (1.0, -2.75) {OLT};
+  \node[draw, thick, circle, minimum size=0.36cm, inner sep=0pt, fill=white]
+    (split) at (3.0, -2.75) {};
+  \draw[thick] (olt) -- (split);
+  \node[report] at (2.0, -2.75) {$r_J$};
+  \foreach \onu/\y in {1/-1.75, 2/-2.75, 3/-3.75} {
+    \node[box] (onu\onu) at (5.95, \y) {ONU};
+    \draw[thick] (split) -- (onu\onu.west);
+    \node[report] at ($(split)!0.6!(onu\onu.west)$) {$r_J$};
+  }
+  \node[note] at (3.5, -4.4) {one frame per PON port, from the last 5 minutes};
+\end{tikzpicture}

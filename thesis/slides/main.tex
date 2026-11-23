@@ -16,6 +16,8 @@
 \usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 \usetheme{Inf}
 
@@ -532,25 +534,69 @@
 
 \begin{frame}
   \frametitle{Energy Model}
-  \placeholder{Where the energy rates of $E_j$ come from. One measurement
-    boundary for the three tiers; the OLT
-    measured on an NVIDIA L4 against batch size.
-    Figures: batch\_energy, prefill\_decode}
+  % Where the rates of E_j come from: each source at one boundary on the left,
+  % and on the right the OLT's own measurement, which depends on the batch
+  \begin{panelrow}[2.85pt,-1.01pt,-1.85pt]
+    \panel{\input{figures/energy_sources}}
+      {every source brought to one boundary:\\ all the system draws to answer a query}
+      {\begin{tabular}{@{}c@{}}Cai et al., 2026; Renney et al., 2026;\\ Elsworth et al., 2025; Uptime Institute, 2025\end{tabular}}
+    \panel{\input{figures/olt_batch_energy}}
+      {at the OLT, a generated token costs\\ 50$\times$ less in a batch of 64}
+      {}
+  \end{panelrow}
+  \note{The rates in E come from here. Each tier's source measures something
+    different: the phone's only its chip, the ONU's the whole board at the
+    plug, and the OLT's GPU card we measured ourselves. To compare them we bring
+    each to one boundary, everything the system draws to answer a query: the
+    OLT's GPU energy is multiplied by 2.44 for the rest of its server, the spare
+    machines and the building. On the right, our measurement of the OLT: a
+    generated token costs 2.46 J alone and 0.047 J in a batch of 64, since a
+    decode step reads the model's weights once for the whole batch; the prompt
+    gains far less. The decisions count only the energy above idle, since the
+    hardware stays on wherever a query goes. Next: how the tiers learn what the
+    OLT costs right now.}
 \end{frame}
 
 \begin{frame}
   \frametitle{Learning the OLT's Cost}
-  \placeholder{Timetable learned in advance vs. cost report broadcast on
-    the PON downstream}\par\medskip
+  % The report the OLT computes, then the two ways it reaches the tiers below:
+  % learned in advance or sent live on the PON
   \centering
-  \resizebox{0.75\textwidth}{!}{\input{figures/pon_tree}}
+  \input{figures/olt_cost_report}\unskip
+  \note{A tier decides before the OLT has seen the query, so the OLT has to
+    tell the tiers below what one more query would cost it: about 5 J if it
+    joins a batch already running, about 840 J if it finds the OLT idle. It
+    weighs the two by the share of the time it has been busy. We compare two
+    ways of getting this report to the tiers. The timetable is learned in
+    advance, one rate per hour for weekdays and weekends, built in rounds over
+    a calibration month, since the rate depends on the table itself. The
+    broadcast is live: every 10 seconds the OLT sends the rate of its last
+    5 minutes downstream, and since a PON sends every downstream frame to
+    every ONU, one frame per port reaches all of them.}
 \end{frame}
 
 \begin{frame}
   \frametitle{Simulation and Evaluation}
-  \placeholder{Recorded conversation traffic with and without drift,
-    1,000 to 20,000 households, policies compared at the same accuracy.
-    Figures: simulator\_modules, traffic\_week, equal\_accuracy}
+  % The traffic each run replays on the left, and on the right how policies
+  % are compared: each read at the same accuracy
+  \begin{panelrow}[-7.34pt,0pt,7.34pt]
+    \panel{\input{figures/traffic_week}}
+      {chatbot traffic, with and without drift,\\ from 1,000 to 20,000 households}
+      {Zhao et al., 2024; Wang et al., 2025}
+    \panel{\input{figures/equal_accuracy}}
+      {each policy read at 80\% accuracy,\\ between its nearest $\beta$ values}
+      {}
+  \end{panelrow}
+  \note{The simulator follows one OLT and its households through a month. It
+    runs no model: every answer is the one recorded for its question, and each
+    tier is charged the energy of the energy model. The traffic comes from two
+    public chatbot logs: WildChat gives how people chat over the day, and
+    BurstGPT how the load drifts from the usual day, mildly or strongly. Each
+    run has a calibration month, where the timetable is learned, then a test
+    month, with three seeds, for 1,000 to 20,000 households. A policy that
+    escalates more answers more correctly, so we compare policies at the same
+    accuracy: each runs at nine values of beta, and we read the energy it
+    needs where its line crosses 80\%.}
 \end{frame}
 
 %------------------------------------------------------------------------------

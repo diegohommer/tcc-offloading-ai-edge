@@ -1,0 +1,32 @@
+% The OLT's GPU energy per token against the size of a static batch (thesis
+% Table "Energy of the OLT's GPU in static batches", Joules per token): the
+% decode (generated tokens) gets about 50 times cheaper from 1 to 64 queries,
+% the prefill (prompt tokens) about 2 times. Both axes are logarithmic.
+\begin{tikzpicture}
+  \begin{axis}[
+      width=6.5cm, height=5.0cm,
+      xmode=log, log basis x=2, ymode=log,
+      xmin=0.8, xmax=80, ymin=0.007, ymax=5,
+      xtick={1,2,4,8,16,32,64}, xticklabels={1,2,4,8,16,32,64},
+      ytick={0.01,0.1,1}, yticklabels={0.01,0.1,1},
+      tick label style={font=\scriptsize, text=InfGray},
+      label style={font=\small},
+      xlabel={queries in the batch}, ylabel={J per token, GPU card},
+      axis line style={InfGray}, tick style={InfGray},
+      axis lines=left, clip=false,
+      every axis plot/.append style={line width=1.4pt, mark size=1.6pt},
+    ]
+    % Generated tokens: the decode, limited by memory bandwidth
+    \addplot[InfRed, mark=*] coordinates {
+      (1,2.464) (2,1.228) (3,0.825) (4,0.618) (6,0.415) (8,0.313)
+      (12,0.211) (16,0.160) (24,0.110) (32,0.084) (48,0.060) (64,0.047)};
+    % Prompt tokens: the prefill, limited by computation
+    \addplot[InfGray, mark=*] coordinates {
+      (1,0.033) (2,0.039) (3,0.029) (4,0.024) (6,0.019) (8,0.017)
+      (12,0.016) (16,0.015) (24,0.015) (32,0.015) (48,0.014) (64,0.014)};
+    \node[anchor=south west, font=\small\bfseries, text=InfRed] at (axis cs:1.15,2.6) {2.46~J};
+    \node[anchor=west, font=\small\bfseries, text=InfRed] at (axis cs:72,0.047) {0.047~J};
+    \node[anchor=south west, font=\small, text=InfRed] at (axis cs:5,0.5) {generated token};
+    \node[anchor=south west, font=\small, text=InfGray] at (axis cs:5,0.022) {prompt token};
+  \end{axis}
+\end{tikzpicture}
