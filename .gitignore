@@ -241,7 +241,7 @@ thesis/*/*.synctex.gz
 thesis/*/*.nav
 thesis/*/*.snm
 thesis/*/*.vrb
-thesis/latex/tcc.pdf
+thesis/document/tcc.pdf
 thesis/slides/main.pdf
 
 # Reference papers: local only, never committed --
@@ -251,7 +251,7 @@ thesis/slides/main.pdf
 thesis/papers/
 
 # olcli (Overleaf sync) local state
-thesis/latex/.olcli.json
+thesis/document/.olcli.json
 thesis/slides/.olcli.json
 .claude/scheduled_tasks.lock
 implementation/results/study/parts/

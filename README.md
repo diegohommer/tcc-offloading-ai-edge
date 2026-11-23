@@ -95,11 +95,11 @@ implementation/
   src/analyze/       summary tables and figures
   tests/             pytest
   results/           every output, written by scripts and never by hand
-thesis/latex/        the thesis (infufrgs class, synced with Overleaf)
+thesis/document/        the thesis (infufrgs class, synced with Overleaf)
 thesis/slides/       the defense slides
 ```
 
-To build the thesis, run `latexmk -pdf tcc.tex` in `thesis/latex/`.
+To build the thesis, run `latexmk -pdf tcc.tex` in `thesis/document/`.
 
 ## Data
 

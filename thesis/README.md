@@ -2,7 +2,7 @@
 
 | Folder | What | Entry point |
 |---|---|---|
-| `latex/` | The thesis, UFRGS `infufrgs` class, ABNT author-date citations | `tcc.tex` |
+| `document/` | The thesis, UFRGS `infufrgs` class, ABNT author-date citations | `tcc.tex` |
 | `slides/` | The defense slides, Beamer with the INF theme | `main.tex` |
 
 Both folders are mirrors of Overleaf projects, so edits made there are pulled before any
@@ -11,13 +11,13 @@ local change.
 ## Building
 
 ```bash
-cd latex && latexmk -pdf tcc.tex
-cd slides && latexmk -pdf main.tex
+(cd document && latexmk -pdf tcc.tex)
+(cd slides && latexmk -pdf main.tex)
 ```
 
 ## Figures
 
-- `latex/figures/*.pdf` are copies of `implementation/results/study/figures/`, written by
+- `document/figures/*.pdf` are copies of `implementation/results/study/figures/`, written by
   `implementation/src/analyze/plot_study.py`. Regenerate them there and copy them over.
 - `*/figures/*.tex` are TikZ diagrams drawn by hand.
 - `pakpahan2026_fig1_tiered_continuum.jpg` is Figure 1 of Pakpahan and Hwang (IEEE Access,
