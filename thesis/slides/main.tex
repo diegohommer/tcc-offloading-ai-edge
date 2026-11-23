@@ -553,6 +553,23 @@
     gains far less. The decisions count only the energy above idle, since the
     hardware stays on wherever a query goes. Next: how the tiers learn what the
     OLT costs right now.}
+  \note{Fala: Agora, de onde vêm essas energias por token. Cada fonte mede uma
+    coisa diferente: a do celular mede só o chip; a da ONU mede a placa
+    inteira, na tomada; e a da OLT, que medimos nós mesmos, mede só a placa da
+    GPU. Para comparar as três, trazemos todas para a mesma fronteira, que é
+    toda a energia que o sistema gasta para responder uma pergunta. Por isso a
+    energia da GPU da OLT é multiplicada por 2,44, que acrescenta o resto do
+    servidor, as máquinas reserva e o prédio, a partir da divisão medida pelo
+    Google e do PUE médio da indústria; o celular fica um pouco abaixo dessa
+    fronteira, o que eu retomo nas limitações. À direita está a nossa medição
+    da OLT: rodamos lotes de 1 a 64 perguntas numa GPU L4 e lemos a energia da
+    placa. Um token gerado custa 2,46 joules quando a pergunta roda sozinha e
+    só 0,047 num lote de 64, cerca de 50 vezes menos, porque a geração é
+    limitada pela memória e o lote lê os pesos do modelo uma vez só para todas
+    as perguntas. Já o token do prompt quase não muda, porque essa fase é
+    limitada pela computação. E nas decisões contamos só a energia acima do
+    consumo ocioso, já que o hardware fica ligado de qualquer jeito, para onde
+    quer que a pergunta vá.}
 \end{frame}
 
 \begin{frame}
@@ -571,6 +588,24 @@
     broadcast is live: every 10 seconds the OLT sends the rate of its last
     5 minutes downstream, and since a PON sends every downstream frame to
     every ONU, one frame per port reaches all of them.}
+  \note{Fala: Só que a camada decide antes de a OLT ver a pergunta, então a
+    OLT precisa avisar as camadas de baixo quanto uma pergunta a mais custaria
+    para ela. E esse custo depende do momento: se a pergunta entra num lote
+    que já está rodando, ela acrescenta uns 5 joules; se encontra a OLT
+    ociosa, uns 840. Como a camada não sabe qual dos dois vai acontecer, a OLT
+    pondera os dois casos pela fração do tempo em que esteve ocupada, o b, e é
+    esse valor, o $r_J$ da faixa de cima, que ela informa. Comparamos duas
+    formas de fazer esse valor chegar às camadas. A primeira é uma tabela de
+    horários, o timetable, aprendida com antecedência: um valor para cada hora
+    do dia, separado entre dias úteis e fim de semana, calculado num mês de
+    calibração; o valor dos dias úteis das 14 às 15, por exemplo, é a média
+    das 20 horas desse tipo no mês. A tabela é construída em rodadas, porque o
+    custo depende da própria tabela: se ela diz que a OLT é cara, ninguém
+    manda pergunta para ela, a OLT fica ociosa e aí fica cara de verdade. A
+    segunda é o broadcast, ao vivo: a cada 10 segundos, a OLT envia o valor
+    dos seus últimos 5 minutos. E aqui a PON ajuda, porque tudo que a OLT
+    manda na descida já chega a todas as ONUs da porta, então uma única
+    mensagem por porta PON alcança todas as casas.}
 \end{frame}
 
 \begin{frame}
@@ -595,6 +630,24 @@
     escalates more answers more correctly, so we compare policies at the same
     accuracy: each runs at nine values of beta, and we read the energy it
     needs where its line crosses 80\%.}
+  \note{Fala: Para avaliar, construímos um simulador que acompanha uma OLT e
+    as casas que ela atende. Ele não roda nenhum modelo: cada resposta é a que
+    foi gravada para aquela pergunta, e cada camada é cobrada pela energia do
+    modelo de energia. O tráfego vem de dois registros públicos de uso de
+    chatbots: o WildChat dá o formato do dia, ou seja, como as pessoas
+    conversam ao longo do dia, e o BurstGPT dá o quanto a carga foge desse dia
+    típico. Com isso temos os três cenários da esquerda: sem drift, em que
+    todo dia segue o dia médio, e com drift leve e forte, em que algumas horas
+    ficam mais movimentadas ou mais calmas que o normal; a linha cinza por
+    trás é o dia médio. Cada execução tem um mês de calibração, em que o
+    timetable é aprendido, e um mês de teste, com três sementes, de mil a 20
+    mil casas. E como comparar as políticas? Uma política que sobe mais
+    perguntas acerta mais, mas também gasta mais, então comparar no mesmo beta
+    misturaria energia com acurácia. Por isso comparamos na mesma acurácia:
+    cada política roda com nove valores de beta, cada ponto do gráfico é um
+    beta, e lemos a energia onde a linha cruza os 80\% de acurácia,
+    interpolando entre os dois betas mais próximos. É essa leitura, nos
+    círculos, que eu uso nos resultados.}
 \end{frame}
 
 %------------------------------------------------------------------------------
