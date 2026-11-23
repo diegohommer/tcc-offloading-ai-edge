@@ -1,0 +1,38 @@
+% The three tiers of the case study (Section 3.1), one card per tier, left to
+% right in the order a query escalates: device, model and quantization, GSM8K
+% accuracy, and where the tier's energy comes from.
+\begin{tikzpicture}[
+    font=\small,
+    card/.style={draw, thick, rounded corners=3pt, minimum width=4.2cm,
+                 minimum height=4.9cm, fill=white, inner sep=0pt},
+    escalate/.style={-{Stealth[length=2.5mm]}, thick, black!60}
+  ]
+  % #1 node name, #2 x, #3 tier, #4 device, #5 model, #6 accuracy, #7 energy source
+  \newcommand{\tiercard}[7]{%
+    \node[card] (#1) at (#2, 0) {};
+    % Header strip: rounded at the top, square where it meets the body
+    \fill[black, rounded corners=3pt] ([yshift=-0.6cm]#1.north west)
+      -- (#1.north west) -- (#1.north east) -- ([yshift=-0.6cm]#1.north east)
+      -- cycle;
+    \fill[black] ([yshift=-0.6cm]#1.north west) rectangle
+      ([yshift=-0.3cm]#1.north east);
+    \node[text=white, font=\normalsize\bfseries] at ([yshift=-0.3cm]#1.north) {#3};
+    \node[text=black!65, align=center] at ([yshift=-1.2cm]#1.north) {#4};
+    \node[align=center] at ([yshift=-2.25cm]#1.north) {#5};
+    \node[font=\LARGE\bfseries] at ([yshift=-3.2cm]#1.north) {#6};
+    \node[font=\footnotesize, text=black!65] at ([yshift=-3.8cm]#1.north)
+      {GSM8K accuracy};
+    \node[font=\footnotesize, text=black!65] at ([yshift=0.32cm]#1.south) {#7};
+  }
+  \tiercard{user}{0}{User device}{OnePlus 15 phone}
+    {\textbf{Llama-3.2-1B}\\[-1pt]{\footnotesize 4-bit}}{47.2\%}
+    {energy: published}
+  \tiercard{onu}{5.2}{ONU}{Raspberry Pi 5\\[-2pt]with Hailo-10H}
+    {\textbf{Qwen2.5-1.5B}\\[-1pt]{\footnotesize 4-bit}}{68.8\%}
+    {energy: published}
+  \tiercard{olt}{10.4}{OLT}{Server with\\[-2pt]one NVIDIA L4}
+    {\textbf{Qwen2.5-7B}\\[-1pt]{\footnotesize 8-bit}}{91.7\%}
+    {energy: measured by us}
+  \draw[escalate] ([xshift=2pt]user.east) -- ([xshift=-2pt]onu.west);
+  \draw[escalate] ([xshift=2pt]onu.east) -- ([xshift=-2pt]olt.west);
+\end{tikzpicture}

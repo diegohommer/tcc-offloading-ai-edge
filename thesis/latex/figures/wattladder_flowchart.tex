@@ -1,0 +1,35 @@
+% The decision of tier i under WattLadder (Algorithm 1, Section 3.2). In red,
+% what WattLadder adds to confidence-only escalation: the test made when the
+% query arrives, and the jump of an escalation straight to the cheapest tier
+% above. In black, the quantile test of RecServe and the escalation to the next
+% tier. Both comparisons carry the margin delta, as in the algorithm.
+\begin{tikzpicture}[
+    font=\small,
+    box/.style={draw, thick, rounded corners=3pt, minimum width=5.4cm,
+                minimum height=0.7cm, fill=white, align=center},
+    flow/.style={-{Stealth[length=2mm]}, thick},
+    choice/.style={font=\footnotesize, inner sep=0pt},
+    outcome/.style={font=\small, inner sep=0pt, align=left}
+  ]
+  \node[inner sep=0pt] (in) at (0,0) {query arrives at tier $i$};
+  % Arrows of about 0.8 cm between the boxes, so each "no" sits beside its own
+  % arrow with room above and below it
+  \node[box, draw=red, text=red] (send) at (0,-1.15)
+    {cheaper to send it up?\\[1pt]$C_{k^*} < (1-\delta)\,(E_i + p_i\,C_{k^*})$};
+  \node[box] (run) at (0,-2.75) {run the query};
+  \node[box] (conf) at (0,-4.25)
+    {confident?\\[1pt]{\footnotesize ($\beta$-quantile test)}};
+  \node[outcome, align=center, anchor=north] (esc) at (0,-5.55)
+    {\textcolor{red}{escalate to $k^*$ if $C_{k^*} < (1-\delta)\,C_{i+1}$,}\\
+     otherwise to tier $i+1$};
+
+  \draw[flow] (in) -- (send);
+  \draw[flow] (send) -- node[choice, left=3pt] {no} (run);
+  \draw[flow] (run) -- (conf);
+  \draw[flow, shorten >=3pt] (conf) -- node[choice, left=3pt] {no} (esc);
+
+  \draw[flow, red] (send.east) -- node[choice, above=3pt, text=red] {yes} ++(0.8,0)
+    node[outcome, right=4pt, text=red] {send it to the\\cheapest tier above, $k^*$};
+  \draw[flow] (conf.east) -- node[choice, above=3pt] {yes} ++(0.8,0)
+    node[outcome, right=4pt] {answer the user};
+\end{tikzpicture}
