@@ -16,8 +16,6 @@
 \usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
 
 \usetheme{Inf}
 
@@ -536,7 +534,7 @@
   \frametitle{Energy Model}
   % Where the rates of E_j come from: each source at one boundary on the left,
   % and on the right the OLT's own measurement, which depends on the batch
-  \begin{panelrow}[2.85pt,-1.01pt,-1.85pt]
+  \begin{panelrow}[2.85pt,-1.00pt,-1.85pt]
     \panel{\input{figures/energy_sources}}
       {every source brought to one boundary:\\ all the system draws to answer a query}
       {\begin{tabular}{@{}c@{}}Cai et al., 2026; Renney et al., 2026;\\ Elsworth et al., 2025; Uptime Institute, 2025\end{tabular}}
@@ -579,7 +577,7 @@
   \frametitle{Simulation and Evaluation}
   % The traffic each run replays on the left, and on the right how policies
   % are compared: each read at the same accuracy
-  \begin{panelrow}[-7.34pt,0pt,7.34pt]
+  \begin{panelrow}[-7.99pt,1.28pt,6.71pt]
     \panel{\input{figures/traffic_week}}
       {chatbot traffic, with and without drift,\\ from 1,000 to 20,000 households}
       {Zhao et al., 2024; Wang et al., 2025}

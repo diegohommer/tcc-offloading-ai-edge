@@ -1,8 +1,9 @@
 % Messages per hour over one test week of 10,000 households, in each traffic
 % scenario (thesis Figure "Messages per hour over one test week", data from
-% implementation/results/study/figures/data/traffic_week.csv, in thousands).
-% The no-drift week, which follows the average day, is drawn faint behind the
-% two drifting ones so their departures show.
+% implementation/results/study/figures/data/traffic_week.csv: days, and
+% thousands of messages). The no-drift week, which follows the average day,
+% is drawn faint behind the two drifting ones so their departures show.
+% Plain TikZ in data units: one day per 0.857 cm, 5,300 messages per 0.8 cm.
 \def\weeknodrift{
     (0.000,1.00) (0.042,1.04) (0.083,0.76) (0.125,0.71) (0.167,0.55) (0.208,0.39)
     (0.250,0.47) (0.292,0.76) (0.333,1.06) (0.375,1.50) (0.417,1.92) (0.458,2.15)
@@ -90,30 +91,28 @@
     (6.250,0.39) (6.292,0.64) (6.333,0.76) (6.375,0.84) (6.417,1.13) (6.458,1.31)
     (6.500,1.32) (6.542,1.11) (6.583,1.65) (6.625,1.79) (6.667,1.99) (6.708,1.56)
     (6.750,1.99) (6.792,1.71) (6.833,1.86) (6.875,2.22) (6.917,2.28) (6.958,2.25)}
-\begin{tikzpicture}
-  \pgfplotsset{week/.style={
-      width=6.0cm, height=0.8cm, scale only axis,
-      xmin=0, xmax=7, ymin=0, ymax=5.3,
-      axis lines=left, axis line style={InfGray}, tick style={InfGray},
-      ytick={0,5}, yticklabels={0,5k}, xtick={0,1,...,7}, xticklabels={},
-      tick label style={font=\scriptsize, text=InfGray},
-      label style={font=\small}, clip=false,
-      every axis plot/.append style={no markers}}}
-  \tikzset{usual/.style={line width=0.8pt, InfLightGray},
-           drawn/.style={line width=0.9pt, InfBlack},
-           rowlabel/.style={anchor=south west, font=\small, inner sep=0pt}}
-  \begin{axis}[week, yshift=2.7cm]
-    \addplot[drawn] coordinates {\weeknodrift};
-    \node[rowlabel] at (axis cs:0,6.0) {no drift};
-  \end{axis}
-  \begin{axis}[week, yshift=1.35cm]
-    \addplot[usual] coordinates {\weeknodrift};
-    \addplot[drawn] coordinates {\weekmild};
-    \node[rowlabel] at (axis cs:0,6.0) {mild drift};
-  \end{axis}
-  \begin{axis}[week, xticklabels={0,1,2,3,4,5,6,7}, xlabel={day of a test week}]
-    \addplot[usual] coordinates {\weeknodrift};
-    \addplot[drawn] coordinates {\weekstrong};
-    \node[rowlabel] at (axis cs:0,6.0) {strong drift};
-  \end{axis}
+\begin{tikzpicture}[x=0.857cm, y=0.151cm,
+    tick/.style={font=\scriptsize, text=InfGray},
+    usual/.style={line width=0.8pt, InfLightGray},
+    drawn/.style={line width=0.9pt, InfBlack}]
+  % #1 row offset (in thousands of messages), #2 label, #3 week drawn, #4 the
+  % no-drift week behind it (\weeknodrift) or nothing
+  \newcommand{\weekrow}[4]{%
+    \begin{scope}[yshift=#1]
+      \draw[InfGray, -{Stealth[length=1.4mm]}] (0,0) -- (7.15,0);
+      \draw[InfGray, -{Stealth[length=1.4mm]}] (0,0) -- (0,5.9);
+      \foreach \day in {0,...,7} { \draw[InfGray] (\day,0) -- (\day,-0.45); }
+      \foreach \thousands/\label in {0/0,5/5k} {
+        \draw[InfGray] (0,\thousands) -- (-0.08,\thousands);
+        \node[tick, anchor=east] at (-0.11,\thousands) {\label};
+      }
+      \ifx\relax#4\relax\else \draw[usual] plot coordinates {#4}; \fi
+      \draw[drawn] plot coordinates {#3};
+      \node[anchor=south west, font=\small, inner sep=0pt] at (0,6.3) {#2};
+    \end{scope}}
+  \weekrow{2.7cm}{no drift}{\weeknodrift}{}
+  \weekrow{1.35cm}{mild drift}{\weekmild}{\weeknodrift}
+  \weekrow{0cm}{strong drift}{\weekstrong}{\weeknodrift}
+  \foreach \day in {0,...,7} { \node[tick, anchor=north] at (\day,-0.75) {\day}; }
+  \node[font=\small, anchor=north] at (3.5,-3.4) {day of a test week};
 \end{tikzpicture}

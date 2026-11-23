@@ -2,31 +2,39 @@
 % with no drift and 10,000 households (thesis Figure "equal_accuracy", data
 % from implementation/results/study/figures/data/equal_accuracy.csv). Each
 % policy is read where its line crosses the 80% target. WattLadder is shown
-% with the timetable; the broadcast comes with the results.
-\begin{tikzpicture}
-  \begin{axis}[
-      width=6.8cm, height=5.0cm,
-      xmin=0.48, xmax=0.94, ymin=0, ymax=400,
-      xtick={0.5,0.6,0.7,0.8,0.9}, xticklabels={50,60,70,80,90},
-      ytick={0,100,200,300,400},
-      tick label style={font=\scriptsize, text=InfGray},
-      label style={font=\small},
-      xlabel={accuracy (\%)}, ylabel={J per query},
-      axis line style={InfGray}, tick style={InfGray},
-      axis lines=left, clip=false,
-      every axis plot/.append style={line width=1.4pt, mark size=1.6pt},
-    ]
-    \draw[InfGray, dashed, line width=0.8pt] (axis cs:0.8,0) -- (axis cs:0.8,400);
-    \node[anchor=south, font=\small, text=InfGray] at (axis cs:0.8,400) {target 80\%};
-    \addplot[InfBlack, mark=*] coordinates {(0.510,64.6) (0.566,112.3) (0.607,156.2) (0.651,203.2) (0.697,245.6) (0.748,285.3) (0.796,319.1) (0.833,347.9) (0.873,373.8)};
-    \addplot[InfRed, mark=*] coordinates {(0.606,97.4) (0.785,174.1) (0.823,198.3) (0.854,218.0) (0.867,231.7) (0.884,243.8) (0.899,252.0) (0.911,255.5) (0.916,257.2)};
+% with the timetable; the broadcast comes with the results. Plain TikZ in data
+% units: x in accuracy (%) from 48, y in joules per query.
+\begin{tikzpicture}[x=0.11cm, y=0.0088cm,
+    tick/.style={font=\scriptsize, text=InfGray},
+    line/.style={line width=1.4pt}]
+  \begin{scope}[xshift=-48*0.11cm]
+    % Axes and ticks
+    \draw[InfGray, -{Stealth[length=1.6mm]}] (48,0) -- (94.5,0);
+    \draw[InfGray, -{Stealth[length=1.6mm]}] (48,0) -- (48,415);
+    \foreach \accuracy in {50,60,70,80,90} {
+      \draw[InfGray] (\accuracy,0) -- (\accuracy,-7);
+      \node[tick, anchor=north] at (\accuracy,-9) {\accuracy};
+    }
+    \foreach \joules in {0,100,200,300,400} {
+      \draw[InfGray] (48,\joules) -- (47.2,\joules);
+      \node[tick, anchor=east] at (46.9,\joules) {\joules};
+    }
+    \node[font=\small, anchor=north] at (71,-42) {accuracy (\%)};
+    \node[font=\small, rotate=90, anchor=south] at (40,200) {J per query};
+    % The target
+    \draw[InfGray, dashed, line width=0.8pt] (80,0) -- (80,400);
+    \node[anchor=south, font=\small, text=InfGray] at (80,405) {target 80\%};
+    \draw[line, InfBlack] plot[mark=*, mark size=1.6pt] coordinates {
+      (51.0,64.6) (56.6,112.3) (60.7,156.2) (65.1,203.2) (69.7,245.6) (74.8,285.3)
+      (79.6,319.1) (83.3,347.9) (87.3,373.8)};
+    \draw[line, InfRed] plot[mark=*, mark size=1.6pt] coordinates {
+      (60.6,97.4) (78.5,174.1) (82.3,198.3) (85.4,218.0) (86.7,231.7) (88.4,243.8)
+      (89.9,252.0) (91.1,255.5) (91.6,257.2)};
     % Where each crosses the target, interpolated between its two nearest betas
-    \addplot[only marks, mark=o, mark size=4pt, line width=1.2pt, InfBlack]
-      coordinates {(0.800,322.3)};
-    \addplot[only marks, mark=o, mark size=4pt, line width=1.2pt, InfRed]
-      coordinates {(0.800,183.3)};
-    \node[anchor=south east, align=right, font=\small, text=InfBlack] at (axis cs:0.695,262)
+    \draw[InfBlack, line width=1.2pt, fill=white, fill opacity=0] (80.0,322.3) circle[radius=4pt];
+    \draw[InfRed, line width=1.2pt] (80.0,183.3) circle[radius=4pt];
+    \node[anchor=south east, align=right, font=\small, text=InfBlack] at (69.5,262)
       {confidence\\ alone};
-    \node[anchor=north west, font=\small\bfseries, text=InfRed] at (axis cs:0.67,140) {WattLadder};
-  \end{axis}
+    \node[anchor=north west, font=\small\bfseries, text=InfRed] at (67,140) {WattLadder};
+  \end{scope}
 \end{tikzpicture}
