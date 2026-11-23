@@ -75,15 +75,18 @@ them on [Modal](https://modal.com) instead.
 The GPU measurements are already in `results/measurements/`. To redo them on Modal:
 
 ```bash
-modal run src/measure/measure_gpu_energy_static.py      # the OLT's energy curve
-modal run src/measure/collect_answers.py                # every tier's GSM8K answers
-modal run src/measure/measure_gpu_energy_continuous.py  # checks the simulated batching
+modal deploy src/measure/measure_gpu_energy_one_card.py
+python src/measure/measure_gpu_energy_one_card.py launch   # the OLT's energy curve and the batching check, ~3 h
+modal run src/measure/collect_answers.py                   # every tier's GSM8K answers
 ```
+
+How each number was measured and where it comes from is in [`implementation/METHODS.md`](implementation/METHODS.md).
 
 ## Repository layout
 
 ```
 implementation/
+  METHODS.md         what was measured, how, and the source of every number
   config/            published energy figures, simulator and study settings
   data/              load traces derived from WildChat and BurstGPT
   src/measure/       GPU measurements on Modal
@@ -94,7 +97,6 @@ implementation/
   results/           every output, written by scripts and never by hand
 thesis/latex/        the thesis (infufrgs class, synced with Overleaf)
 thesis/slides/       the defense slides
-energy_tests.md      methods, measurements and the sources of each figure
 ```
 
 To build the thesis, run `latexmk -pdf tcc.tex` in `thesis/latex/`.

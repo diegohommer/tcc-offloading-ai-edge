@@ -1,4 +1,4 @@
-# The case study's settings (energy_tests.md §9): RecServe, the timetable and the
+# The case study's settings (METHODS.md §9): RecServe, the timetable and the
 # broadcast policy (the OLT's cost broadcast on the PON). Everything not listed here is
 # config/simulation.yaml's default, which is also where the realism settings live
 # (published answer lengths, escalation at beta, one RecServe window per household,

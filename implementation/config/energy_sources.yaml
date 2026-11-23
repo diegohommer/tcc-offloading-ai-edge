@@ -3,7 +3,7 @@
 # that prices energy; the OLT's own figures are first-party, in
 # results/measurements/gpu_energy_*.json (src/measure/measure_gpu_energy_static.py).
 #
-# Every number below was checked against its paper's text (energy_tests.md §5-§7).
+# Every number below was checked against its paper's text (METHODS.md §5-§7).
 #
 # Boundary: tiers are compared at the SYSTEM boundary -- what the device (and for
 # the OLT, its server and building) draws to answer a query. The user and ONU
@@ -12,7 +12,7 @@
 
 user:
   # Stands for a light device running a ~1B model (mid-range phone, smart speaker,
-  # glasses); priced as a phone, where careful measurements exist (energy_tests.md §6).
+  # glasses); priced as a phone, where careful measurements exist (METHODS.md §6).
   device: "OnePlus 15 phone (Snapdragon 8 Elite Gen 5, SM8850)"
   model: "Llama-3.2-1B-Instruct, 4-bit weights (w4), llama.cpp on the CPU"
   source: "Cai et al., Is Your NPU Ready for LLMs?, arXiv:2607.05475, Table 5 (Llama3.2-1B, CPU, llama.cpp, w4, OnePlus 15 column)"
@@ -31,7 +31,7 @@ onu:
   device: "Raspberry Pi 5 (8 GB) with the Raspberry Pi AI HAT+ 2: Hailo-10H NPU, 40 TOPS (INT4), 8 GB on-module memory"
   why: >
     An M.2-class edge NPU (<5 W) of the kind an AI home gateway would carry; the
-    host is a Raspberry Pi 5 standing in for the gateway's own SoC (energy_tests.md §5).
+    host is a Raspberry Pi 5 standing in for the gateway's own SoC (METHODS.md §5).
   model: "Qwen2.5-1.5B-Instruct, 4-bit (the source states Q4_K_M), Hailo Ollama on the NPU"
   source: "Cloud to Edge: Benchmarking LLM Inference On Hardware-Accelerated Single-Board Computers, arXiv:2604.24785, Table 3 (qwen2.5:1.5b-instruct row, RPi 5 + HAT+ column)"
   J_per_generated_token_all_in: 0.88      # printed as 0.88 MJ/Mtok
@@ -82,7 +82,7 @@ olt_boundary:
     x 1.59 x 1.54 = x 2.44. Google's overhead share is left out and the site's
     own PUE applied instead. The same factor is used under both accountings.
   marginal: >
-    Under marginal accounting (a query pays only what it adds, energy_tests.md
+    Under marginal accounting (a query pays only what it adds, METHODS.md
     §8.4) the OLT's card figure is its net-of-idle rate at each batch size and the
     ONU loses its idle draw (onu.idle_W). The conversion stays x 2.44: Google's
     share for spare machines, which one query does not strictly add, is kept for

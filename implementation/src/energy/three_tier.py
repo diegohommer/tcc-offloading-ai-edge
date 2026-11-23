@@ -1,7 +1,7 @@
 """The energy model of the three-tier case study: what each tier costs per query.
 
 Every script that prices energy reads it through this module, so the simulator and the
-tables always use the same numbers. Where each number comes from: energy_tests.md §3-§7.
+tables always use the same numbers. Where each number comes from: METHODS.md §3-§7.
 """
 
 from __future__ import annotations
@@ -140,7 +140,7 @@ def olt_factor(which: str = "system", accounting: str = "average") -> float:
 # OLT measurements
 # ==========================================
 # The OLT sweeps (measure/measure_gpu_energy_static.py), in the order they were run. Run 1's
-# prefill figures are unreliable (the energy counter's resolution, energy_tests.md §3.4);
+# prefill figures are unreliable (the energy counter's resolution, METHODS.md §3.4);
 # its decode figures replicate the others. onecard ran on the same L4 as the continuous
 # batching runs it is validated against (measure_gpu_energy_one_card.py).
 OLT_RUN_FILES = {
@@ -210,7 +210,7 @@ class OltCurve:
         """Return each sequence's share, per token, of what a batch this size draws above idle.
 
         Read off the measured net-of-idle curve, so a batch of n draws n times this per
-        step, as the GPU did (energy_tests.md §3.5, §8.4).
+        step, as the GPU did (METHODS.md §3.5, §8.4).
 
         Args:
             batch: Sequences in the batch.

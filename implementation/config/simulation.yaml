@@ -25,7 +25,7 @@ recserve:
   window: 1000
   # Confidence signal. mean = exp(mean token logprob), RecServe's definition.
   # min = exp(min token logprob): separates right from wrong better on this
-  # data (energy_tests.md §4), but is not RecServe's. [source: RecServe]
+  # data (METHODS.md §4), but is not RecServe's. [source: RecServe]
   confidence: mean
 
 traffic:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The case study (energy_tests.md §9): every run behind the thesis's simulation
+# The case study (METHODS.md §9): every run behind the thesis's simulation
 # results, config/study.yaml, each over the subscriber counts it lists and seeds 7-9.
 #   main          the study's settings, every day following the average day  x 3 seeds
 #   bursts        the load drifting around the timetable as BurstGPT's does
