@@ -5,7 +5,7 @@
 % is red, the tier we measured. Outer labels have no inner sep, so the
 % picture's box ends at its ink.
 \begin{tikzpicture}[
-    card/.style={draw=#1, line width=1pt, rounded corners=4pt, minimum width=6.75cm,
+    card/.style={draw=#1, line width=1pt, rounded corners=4pt, minimum width=6.6cm,
                  minimum height=1.25cm, fill=white, inner sep=0pt}
   ]
   % #1 y, #2 tier, #3 what the source measures, #4 where the figure comes from,
@@ -23,10 +23,10 @@
     \node[anchor=west, font=\scriptsize, text=InfGray]
       at ([xshift=1.65cm, yshift=-0.27cm]s#2.west) {#4};
     % The factor in its own column on the right
-    \draw[InfLightGray, line width=0.6pt] ([xshift=-1.8cm, yshift=-0.22cm]s#2.north east)
-      -- ([xshift=-1.8cm, yshift=0.22cm]s#2.south east);
-    \node[font=\fontsize{16}{18}\selectfont\bfseries, text=#6]
-      at ([xshift=-0.9cm]s#2.east) {\texttimes#5};
+    \draw[InfLightGray, line width=0.6pt] ([xshift=-1.6cm, yshift=-0.22cm]s#2.north east)
+      -- ([xshift=-1.6cm, yshift=0.22cm]s#2.south east);
+    \node[font=\fontsize{15}{17}\selectfont\bfseries, text=#6]
+      at ([xshift=-0.8cm]s#2.east) {\texttimes#5};
   }
   \sourcecard{3.2}{OLT}{the GPU card}{measured by us}{2.44}{InfRed}
   \sourcecard{1.5}{ONU}{the whole board}{published, at the plug}{1}{InfBlack}
