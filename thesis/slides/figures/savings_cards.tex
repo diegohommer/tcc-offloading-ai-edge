@@ -1,0 +1,25 @@
+% The saving in absolute terms and the energy of the network itself (thesis
+% Sections "Energy at the Same Accuracy" and "Energy Model"), as cards with a
+% headline number, in the style of the conclusion's cards.
+\begin{tikzpicture}[
+    card/.style={draw=#1, line width=1pt, rounded corners=4pt, minimum width=4.4cm,
+                 minimum height=3.5cm, fill=white, inner sep=0pt}
+  ]
+  % #1 x, #2 node name, #3 title, #4 number, #5 label, #6 color
+  \newcommand{\numbercard}[6]{%
+    \node[card=#6] (c#2) at (#1, 0) {};
+    \fill[#6, rounded corners=4pt] ([yshift=-0.6cm]c#2.north west)
+      -- (c#2.north west) -- (c#2.north east) -- ([yshift=-0.6cm]c#2.north east) -- cycle;
+    \fill[#6] ([yshift=-0.6cm]c#2.north west) rectangle ([yshift=-0.3cm]c#2.north east);
+    \node[text=white, font=\normalsize\bfseries] at ([yshift=-0.3cm]c#2.north) {#3};
+    \node[font=\fontsize{22}{24}\selectfont\bfseries, text=#6] at ([yshift=-1.4cm]c#2.north) {#4};
+    \node[text width=4.0cm, align=center, font=\small, text=InfGray, anchor=north]
+      at ([yshift=-2.05cm]c#2.north) {#5};
+  }
+  \numbercard{0}{ten}{10,000 homes}{39 kWh}
+    {saved per test month\\ by one OLT, timetable\\ (27 with the broadcast)}{InfRed}
+  \numbercard{4.7}{twenty}{20,000 homes}{69 kWh}
+    {saved per test month\\ by one OLT, timetable\\ (62 with the broadcast)}{InfRed}
+  \numbercard{9.4}{network}{The network}{$\approx$3 mJ}
+    {to carry a query and its\\ answer over the PON,\\ against hundreds of J}{InfBlack}
+\end{tikzpicture}

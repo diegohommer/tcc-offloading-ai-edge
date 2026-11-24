@@ -1,0 +1,30 @@
+% The quantile test of RecServe (thesis Section "LLM Inference"): the
+% confidence of an answer, and the window of the tier's last 1,000
+% confidences cut at their beta-quantile. The bell is a sketch of a window,
+% not data; it only shows where the cut falls.
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % The confidence of one answer
+  \node[font=\large] at (4.0,4.05)
+    {$s = \Bigl(\prod_{t=1}^{L} p_t\Bigr)^{1/L} = \dfrac{1}{\text{perplexity}}$};
+  \node[font=\small, text=InfGray] at (4.0,3.25)
+    {$p_t$: probability the model gave its $t$-th generated token};
+  % The window, as bars, cut at the beta-quantile (beta = 0.3 here)
+  \foreach \x/\h in {0.2/0.15,0.6/0.3,1.0/0.55,1.4/0.85,1.8/1.2,2.2/1.5,2.6/1.75,3.0/1.9,
+                     3.4/1.95,3.8/1.9,4.2/1.8,4.6/1.6,5.0/1.4,5.4/1.15,5.8/0.9,6.2/0.7,
+                     6.6/0.5,7.0/0.35,7.4/0.2,7.8/0.1} {
+    \ifdim\x pt<2.7pt
+      \fill[InfRed!70] (\x-0.17,0) rectangle (\x+0.17,\h);
+    \else
+      \fill[InfLightGray] (\x-0.17,0) rectangle (\x+0.17,\h);
+    \fi
+  }
+  \draw[InfGray] (-0.1,0) -- (8.2,0);
+  \draw[InfRed, dashed, line width=1pt] (2.8,-0.1) -- (2.8,2.3);
+  \node[font=\small\bfseries, text=InfRed, anchor=south] at (2.8,2.3) {$\beta$-quantile};
+  \node[font=\small, text=InfRed, anchor=north, align=center] at (1.2,-0.15)
+    {a fraction $\beta$\\ escalates};
+  \node[font=\small, anchor=north, align=center] at (5.5,-0.15)
+    {answered: back\\ to the user};
+  \node[font=\small, text=InfGray, anchor=north] at (4.0,-1.05)
+    {confidences of the tier's last 1,000 answers};
+\end{tikzpicture}
