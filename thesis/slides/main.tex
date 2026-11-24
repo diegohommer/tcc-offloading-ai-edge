@@ -657,36 +657,157 @@
 
 \begin{frame}
   \frametitle{Energy at the Same Accuracy}
-  \placeholder{Saving grows with the households: under 1\% up to 2,000,
-    about half at 20,000. Figure: saving\_over\_recserve}
+  % The headline number beside the households sweep it comes from
+  \begin{panelrow}[-0.32pt,-2.97pt,3.29pt]
+    \stat{$-$52\%}{energy against confidence alone\\ at 20,000 households}{}
+    \panel{\input{figures/saving_households}}
+      {the saving appears once the OLT batches:\\ under 1\% up to 2,000 households}
+      {}
+  \end{panelrow}
+  \note{All results are read at 80\% accuracy and averaged over three seeds.
+    Up to 2,000 households the OLT almost never holds two queries at once, so
+    moving work to it gains nothing and WattLadder saves under 1\%. From 5,000
+    on, the OLT batches: 10\% at 5,000, 43\% and 30\% at 10,000, and 52\% and
+    46\% at 20,000 with the timetable and the broadcast. The seeds differ by
+    at most 1.2 points.}
+  \note{Fala: Agora, os resultados. Este gráfico mostra quanta energia o
+    WattLadder economiza em relação à decisão só por confiança, sempre na
+    mesma acurácia de 80\%, conforme o número de casas que a OLT atende. Com
+    mil e 2 mil casas, a economia fica abaixo de 1\%: a OLT quase nunca tem
+    duas perguntas ao mesmo tempo, então cada resposta dela paga o custo de
+    uma pergunta sozinha, e mandar trabalho para ela não compensa. A partir de
+    5 mil casas a OLT começa a fazer batching e a economia aparece: cerca de
+    10\% com 5 mil casas, 43\% com 10 mil usando o timetable, e com 20 mil
+    casas o WattLadder gasta cerca de metade da energia, 52\% a menos com o
+    timetable e 46\% a menos com o broadcast. E as três sementes diferem em no
+    máximo 1,2 ponto percentual.}
 \end{frame}
 
 \begin{frame}
   \frametitle{Where the Saving Comes From}
-  \placeholder{Less phone and ONU energy on queries that end at the OLT,
-    and more queries reaching the OLT while it batches.
-    Figure: energy\_split}
+  % The split by tier, and what changes at each tier
+  \begin{panelrow}[1.41pt,-2.45pt,1.05pt]
+    \panel{\input{figures/energy_split}}
+      {energy per query at 80\% accuracy,\\ 10,000 households, broadcast}
+      {}
+    \panel[c]{{\normalsize\begin{tabular}{@{}l@{\hspace{12pt}}r@{\hspace{6pt}}c@{\hspace{6pt}}l@{}}
+        \multicolumn{4}{@{}l@{}}{\color{InfGray}\bfseries Joules per query} \\[6pt]
+        Phone & 34 & $\to$ & {\color{InfRed}\bfseries 17} \\[6pt]
+        ONU & 74 & $\to$ & {\color{InfRed}\bfseries 20} \\[6pt]
+        OLT & 214 & $\to$ & {\color{InfRed}\bfseries 188} \\[10pt]
+        \multicolumn{4}{@{}l@{}}{\color{InfGray}\small the OLT answers more,}\\
+        \multicolumn{4}{@{}l@{}}{\color{InfGray}\small in larger batches}
+      \end{tabular}}}{}{}
+  \end{panelrow}
+  \note{Under confidence alone, a query that ends at the OLT has already been
+    run by the phone and the ONU, and that work is wasted: the ONU alone takes
+    74 of the 322 J. WattLadder sends those queries up early, so the phone and
+    the ONU spend 17 and 20 J. The OLT spends less too, even though it answers
+    more queries, because they fill larger batches. It is not only skipping
+    the ONU: confidence alone without the ONU still needs 260 J.}
+  \note{Fala: E de onde vem essa economia? Aqui está a energia por pergunta
+    separada por camada, com 10 mil casas. Na decisão só por confiança, uma
+    pergunta que termina na OLT já passou pelo celular e pela ONU, e esse
+    trabalho é desperdiçado: só a ONU gasta 74 dos 322 joules. Com o
+    WattLadder, o celular e a ONU gastam 17 e 20 joules, em vez de 34 e 74,
+    porque as perguntas que iam subir de qualquer jeito vão direto para a OLT.
+    E a OLT também gasta menos, 188 joules em vez de 214, mesmo respondendo
+    mais perguntas, porque essas perguntas formam lotes maiores e cada uma
+    custa menos. E não é só pular a ONU: a decisão só por confiança indo
+    direto do celular para a OLT ainda gasta 260 joules, mais do que o
+    WattLadder.}
 \end{frame}
 
 \begin{frame}
-  \frametitle{Timetable vs. Broadcast}
-  \placeholder{The timetable saves more in most scenarios; the broadcast
-    follows drift and needs no training.
-    Figures: broadcast\_over\_timetable, drift}
+  \frametitle{Timetable vs.\ Broadcast}
+  % Energy under each drift scenario, and when each strategy wins
+  \begin{panelrow}[-1.40pt,-0.80pt,2.20pt]
+    \panel{\input{figures/drift_bars}}
+      {energy per query at 80\% accuracy,\\ 10,000 households}
+      {}
+    \panel[c]{\input{figures/strategy_cards}}{}{}
+  \end{panelrow}
+  \note{The OLT's cost depends on the load the policy itself sends it, so
+    it has two self-consistent states: idle and expensive, busy and cheap. A
+    live report from an idle OLT keeps it idle; the timetable starts from a
+    busy OLT and keeps it busy. Without drift the timetable needs 183 J and
+    the broadcast 224 J. Strong drift reverses it, 224 J against 197 J, since
+    only the broadcast sees each rise and fall. The timetable is learned on
+    the same OLT it is tested on, its best case.}
+  \note{Fala: Comparando as duas formas de aprender o custo da OLT, o
+    timetable economiza mais na maioria dos cenários: sem drift, com 10 mil
+    casas, ele precisa de 183 joules, contra 224 do broadcast. O motivo é que
+    o custo da OLT depende da carga que a própria política manda para ela. Com
+    o broadcast, quando pouca coisa sobe, a OLT está ociosa e informa,
+    corretamente, que está cara; então ninguém manda pergunta para ela, e ela
+    continua ociosa e cara. O timetable começa supondo uma OLT ocupada e
+    barata, as casas mandam trabalho para ela desde o início, e ela de fato
+    fica ocupada e barata. Com drift, isso se inverte: o timetable erra mais
+    quando a carga foge do normal, enquanto o broadcast enxerga cada subida e
+    descida na hora, e com drift forte o broadcast precisa de 197 joules e o
+    timetable de 224. Além disso, o timetable foi aprendido nessa mesma OLT,
+    que é o melhor caso para ele, enquanto o broadcast não precisa de
+    treinamento.}
 \end{frame}
 
 \begin{frame}
   \frametitle{Latency and Traffic}
-  \placeholder{Shorter wait, somewhat more traffic between the tiers; the
-    margin $\delta$ trades energy for traffic.
-    Figures: latency, bandwidth, delta}
+  % The wait against the households, and the margin delta's trade-off
+  \begin{panelrow}[-0.77pt,-1.61pt,2.38pt]
+    \panel{\input{figures/latency}}
+      {a shorter wait: fewer queries\\ pass through the slow ONU}
+      {}
+    \panel{\input{figures/delta}}
+      {the margin $\delta$ trades energy for traffic,\\ at 10,000 households}
+      {}
+  \end{panelrow}
+  \note{The ONU takes about 44 s per answer, so under confidence alone a
+    message waits about 48 s. WattLadder skips the ONU more often as the OLT
+    gets busy: 12.7 s with the timetable and 18.5 s with the broadcast at
+    10,000 households, against 8.8 s for the OLT alone. It carries about 9\%
+    more traffic between the tiers. The margin delta: with delta above 0, a
+    query moves past the next tier only when that saves more than the margin.
+    delta = 0.5 still saves 12\% with 4\% less traffic, and delta = 1 is
+    confidence alone exactly.}
+  \note{Fala: A economia de energia também não custa tempo de espera. À
+    esquerda está o tempo médio até a resposta: na decisão só por confiança,
+    uma mensagem espera cerca de 48 segundos, porque muitas perguntas passam
+    pela ONU, que leva uns 44 segundos para gerar uma resposta. O WattLadder
+    pula a ONU com mais frequência à medida que a OLT fica ocupada, e com 10
+    mil casas a espera cai para cerca de 13 segundos com o timetable e 19 com
+    o broadcast. O custo é um pouco mais de tráfego entre as camadas, cerca de
+    9\% a mais. E aqui entra a margem delta: com delta maior que zero, uma
+    camada só move uma pergunta para uma camada mais alta se a economia
+    esperada for maior que essa margem; senão, a escalada fica na camada
+    seguinte. À direita: com delta igual a zero, economizamos 30\% da energia
+    com 9\% a mais de tráfego; com delta 0,5, ainda economizamos 12\% com 4\%
+    menos tráfego; e com delta igual a 1 voltamos exatamente à decisão só por
+    confiança. Então o operador escolhe o beta pela acurácia e o delta pelo
+    equilíbrio entre energia e tráfego.}
 \end{frame}
 
 \begin{frame}
   \frametitle{Limitations}
-  \placeholder{The phone's and the ONU's energy from published
-    measurements, the OLT's conversion, the traffic, what the simulation
-    holds still, one task and one set of models}
+  % One card per limitation, in the thesis's order
+  \centering
+  \input{figures/limitations_cards}\unskip
+  \note{The phone's source covers the chip only and gives no idle power. No
+    commercial ONU runs an LLM, so a board stands in for it, and it is slow.
+    The OLT's factor of 2.44 is an estimate, but the saving stays between 22
+    and 59\% in every sensitivity run. The traffic comes from WildChat and the
+    drift from BurstGPT. The simulation holds the devices' energy per token
+    still and lets the broadcast reach every device for free. One task, one
+    set of models, and perplexity as the confidence.}
+  \note{Fala: Esse trabalho tem algumas limitações. A energia do celular cobre
+    só o chip e não tem consumo ocioso para descontar. Nenhuma ONU comercial
+    roda um LLM hoje, então usamos uma placa no lugar dela, e ela é lenta,
+    cerca de 44 segundos por resposta. O fator de 2,44 da OLT é uma
+    estimativa, mas nos testes de sensibilidade a economia ficou sempre entre
+    22\% e 59\%. O tráfego vem de usuários do WildChat, que não são exatamente
+    casas, e o drift vem do BurstGPT. A simulação mantém fixa a energia por
+    token dos dispositivos e supõe que o broadcast chega a todos sem custo. E
+    usamos uma única tarefa, o GSM8K, com um único conjunto de modelos e a
+    perplexidade como confiança.}
 \end{frame}
 
 %------------------------------------------------------------------------------
@@ -696,14 +817,41 @@
 
 \begin{frame}
   \frametitle{Conclusion}
-  \placeholder{Weighing energy matters where a tier batches. Same accuracy
-    with less energy, about half at 20,000 households, and a shorter wait}
+  \centering
+  \input{figures/conclusion_cards}\unskip
+  \takeaway{Weighing energy matters where a tier batches:\\ there, a query's
+    cost depends on the load.}
+  \note{WattLadder brings energy into recursive tiered inference. At the same
+    accuracy it spends less wherever the OLT can batch, about half at 20,000
+    households, shortens the wait, and adds a little traffic that delta can
+    remove.}
+  \note{Fala: Para concluir: integramos a consciência de energia no offloading
+    recursivo em camadas com o WattLadder. Na mesma acurácia, ele gasta menos
+    energia sempre que a OLT tem carga suficiente para fazer batching,
+    chegando a cerca de metade com 20 mil casas; reduz a espera, porque menos
+    perguntas passam pela ONU lenta; e aumenta um pouco o tráfego entre as
+    camadas, o que a margem delta pode remover. A principal lição é que levar
+    a energia em conta importa onde uma camada faz batching, porque ali o
+    custo de uma pergunta depende da carga, e uma regra só por confiança
+    ignora isso.}
 \end{frame}
 
 \begin{frame}
   \frametitle{Future Work}
-  \placeholder{Timetable and broadcast together, sudden drops in load, a
-    cloud tier, ONUs that batch, measuring a faster gateway}
+  \centering
+  \input{figures/future_work_cards}\unskip
+  \note{On the OLT's cost: the two strategies together, sudden drops in load,
+    and stale or shared timetables. On the tiers: a cloud tier, ONUs that
+    batch, and a gateway fast enough for interactive use.}
+  \note{Fala: Como trabalhos futuros, do lado de aprender o custo da OLT: usar
+    o timetable e o broadcast juntos, seguindo a tabela e passando para o
+    valor ao vivo quando a carga foge do normal; testar quedas súbitas de
+    carga, como uma porta PON que falha ou uma queda de energia; e ver o que
+    acontece com uma tabela desatualizada ou compartilhada entre várias OLTs.
+    Do lado das camadas: acrescentar a nuvem acima da OLT; ONUs que fazem
+    batching, como a de uma empresa ou de uma universidade, que atende muitos
+    usuários; e medir um gateway mais rápido, que consiga responder em tempo
+    interativo.}
 \end{frame}
 
 \section*{}
@@ -725,18 +873,26 @@
 
 \begin{frame}
   \frametitle{Sensitivity}
-  \placeholder{OLT conversion factor. Figure: sensitivity}
+  % The thesis's figure, as the committee may ask about the OLT's factor
+  \centering
+  \includegraphics[height=0.72\textheight]{sensitivity}
+  \source{Energy saved over confidence alone at 80\% accuracy, 10,000 households}
 \end{frame}
 
 \begin{frame}
   \frametitle{Batching Validation}
-  \placeholder{Measured batch energy against continuous batching.
-    Figure: batching\_validation}
+  \centering
+  \includegraphics[width=0.92\textwidth]{batching_validation}
+  \source{(a) energy per generated token on one L4, static and continuous
+    batching; (b) energy the simulator predicts against what the GPU measured}
 \end{frame}
 
 \begin{frame}
   \frametitle{Traffic Profiles}
-  \placeholder{Figure: traffic\_profiles}
+  \centering
+  \includegraphics[width=0.92\textwidth]{traffic_profiles}
+  \source{Conversations starting in each hour of weekdays (a) and weekends
+    (b); Zhao et al., 2024; Wang et al., 2025}
 \end{frame}
 
 \end{document}

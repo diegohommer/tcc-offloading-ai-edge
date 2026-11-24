@@ -1,0 +1,30 @@
+% The study's limitations (thesis Section "Limitations") as six cards, one
+% per subsection, in the thesis's order. The OLT's card is red: it carries the
+% sensitivity range, the only number on the slide.
+\begin{tikzpicture}[
+    card/.style={draw=#1, line width=1pt, rounded corners=4pt, minimum width=4.4cm,
+                 minimum height=2.75cm, fill=white, inner sep=0pt}
+  ]
+  % #1 x, #2 y, #3 name (node), #4 title, #5 text, #6 color
+  \newcommand{\limitcard}[6]{%
+    \node[card=#6] (#3) at (#1, #2) {};
+    \fill[#6, rounded corners=4pt] ([yshift=-0.55cm]#3.north west)
+      -- (#3.north west) -- (#3.north east) -- ([yshift=-0.55cm]#3.north east) -- cycle;
+    \fill[#6] ([yshift=-0.55cm]#3.north west) rectangle ([yshift=-0.3cm]#3.north east);
+    \node[text=white, font=\small\bfseries] at ([yshift=-0.28cm]#3.north) {#4};
+    \node[text width=4.15cm, align=center, font=\small] at ([yshift=-0.28cm]#3.center) {#5};
+  }
+  \limitcard{0}{0}{phone}{The phone's energy}
+    {the chip alone, with\\ no idle power to subtract}{InfBlack}
+  \limitcard{4.7}{0}{onu}{The ONU}
+    {a board stands in for it,\\ and it takes about 44~s\\ per answer}{InfBlack}
+  \limitcard{9.4}{0}{olt}{The OLT's energy}
+    {$\times$2.44 is an estimate:\\ across the sensitivity runs,\\
+     {\color{InfRed}\bfseries the saving stays at 22--59\%}}{InfRed}
+  \limitcard{0}{-3.0}{traffic}{The traffic}
+    {WildChat's users stand in\\ for households; the drift\\ comes from BurstGPT}{InfBlack}
+  \limitcard{4.7}{-3.0}{still}{What is held still}
+    {fixed energy per token,\\ and a broadcast that\\ reaches every device free}{InfBlack}
+  \limitcard{9.4}{-3.0}{task}{Task and models}
+    {GSM8K and three models,\\ with perplexity\\ as the confidence}{InfBlack}
+\end{tikzpicture}

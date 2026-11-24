@@ -1,0 +1,27 @@
+% Mean wait for an answer against the number of households, no drift (thesis
+% Figure "Mean wait for an answer", data from implementation/results/study/
+% figures/data/latency.csv). Plain TikZ: x one household count per 1.3 cm,
+% y in seconds, 0.07 cm per second.
+\begin{tikzpicture}[y=0.07cm,
+    tick/.style={font=\scriptsize, text=InfGray},
+    line/.style={line width=1.4pt}]
+  \draw[InfGray, -{Stealth[length=1.6mm]}] (-0.4,0) -- (5.65,0);
+  \draw[InfGray, -{Stealth[length=1.6mm]}] (-0.4,0) -- (-0.4,56);
+  \foreach \seconds in {0,10,20,30,40,50} {
+    \draw[InfGray] (-0.4,\seconds) -- (-0.47,\seconds);
+    \node[tick, anchor=east] at (-0.5,\seconds) {\seconds};
+  }
+  \foreach \label [count=\index from 0] in {1k,2k,5k,10k,20k} {
+    \draw[InfGray] (\index*1.3,0) -- (\index*1.3,-1);
+    \node[tick, anchor=north] at (\index*1.3,-1.5) {\label};
+  }
+  \node[font=\small, anchor=north] at (2.6,-6.5) {households};
+  \node[font=\small, rotate=90, anchor=south] at (-1.2,28) {mean wait (s)};
+  \draw[line, InfGray, dashed] plot coordinates {(0.00,8.6) (1.30,8.7) (2.60,8.7) (3.90,8.8) (5.20,9.0)};
+  \draw[line, InfBlack] plot[mark=*, mark size=1.6pt] coordinates {(0.00,47.3) (1.30,47.5) (2.60,47.6) (3.90,47.6) (5.20,47.7)};
+  \draw[line, InfRed!40] plot[mark=*, mark size=1.6pt] coordinates {(0.00,46.9) (1.30,45.3) (2.60,25.3) (3.90,18.5) (5.20,13.4)};
+  \draw[line, InfRed] plot[mark=*, mark size=1.6pt] coordinates {(0.00,47.2) (1.30,45.5) (2.60,23.1) (3.90,12.7) (5.20,10.2)};
+  \node[font=\small, anchor=south] at (2.6,49) {confidence alone};
+  \node[font=\small, text=InfGray, anchor=north east] at (5.3,8.2) {OLT alone};
+  \node[font=\small\bfseries, text=InfRed, anchor=south west] at (2.75,27) {WattLadder};
+\end{tikzpicture}

@@ -1,0 +1,30 @@
+% Future work (thesis Chapter "Conclusion") as two cards: how the tiers learn
+% the OLT's cost, and the tiers themselves, three numbered items each.
+\begin{tikzpicture}[
+    card/.style={draw=InfBlack, line width=1pt, rounded corners=4pt, minimum width=6.6cm,
+                 minimum height=4.2cm, fill=white, inner sep=0pt}
+  ]
+  % #1 x, #2 name (node), #3 title, #4 items
+  \newcommand{\futurecard}[4]{%
+    \node[card] (#2) at (#1, 0) {};
+    \fill[InfBlack, rounded corners=4pt] ([yshift=-0.6cm]#2.north west)
+      -- (#2.north west) -- (#2.north east) -- ([yshift=-0.6cm]#2.north east) -- cycle;
+    \fill[InfBlack] ([yshift=-0.6cm]#2.north west) rectangle ([yshift=-0.3cm]#2.north east);
+    \node[text=white, font=\normalsize\bfseries] at ([yshift=-0.3cm]#2.north) {#3};
+    \node[anchor=north west, font=\small] at ([xshift=0.35cm, yshift=-0.85cm]#2.north west)
+      {\begin{tabular}{@{}r@{\hspace{6pt}}l@{}}#4\end{tabular}};
+  }
+  \futurecard{0}{learn}{Learning the OLT's cost}
+    {{\color{InfRed}\bfseries 1.} & timetable and broadcast together, \\
+       & live only when the load departs \\[7pt]
+     {\color{InfRed}\bfseries 2.} & sudden drops: a failed PON port, \\
+       & a power cut \\[7pt]
+     {\color{InfRed}\bfseries 3.} & a stale timetable, or one shared \\
+       & across OLTs}
+  \futurecard{7.0}{tiers}{The tiers}
+    {{\color{InfRed}\bfseries 4.} & a cloud tier above the OLT \\[7pt]
+     {\color{InfRed}\bfseries 5.} & ONUs that batch, at a company \\
+       & or a university \\[7pt]
+     {\color{InfRed}\bfseries 6.} & a gateway fast enough to answer \\
+       & at an interactive pace}
+\end{tikzpicture}

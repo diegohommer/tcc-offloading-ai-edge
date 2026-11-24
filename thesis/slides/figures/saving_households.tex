@@ -1,0 +1,45 @@
+% Energy WattLadder saves over confidence alone at 80% accuracy, with no
+% drift, by number of households (thesis Figure "Energy saved over confidence
+% alone", data from implementation/results/study/figures/data/
+% saving_over_recserve.csv, mean of three seeds). Plain TikZ: x in cm, one
+% group per household count; y in percent, 0.068 cm per point.
+\begin{tikzpicture}[y=0.068cm,
+    tick/.style={font=\scriptsize, text=InfGray},
+    value/.style={anchor=south, font=\scriptsize\bfseries, inner sep=1.5pt}]
+  \draw[InfGray, -{Stealth[length=1.6mm]}] (-0.75,0) -- (5.95,0);
+  \draw[InfGray, -{Stealth[length=1.6mm]}] (-0.75,0) -- (-0.75,62);
+  \foreach \percent in {0,25,50} {
+    \draw[InfGray] (-0.75,\percent) -- (-0.82,\percent);
+    \node[tick, anchor=east] at (-0.85,\percent) {\percent\%};
+  }
+  \fill[InfRed] (-0.43,0) rectangle (-0.01,0.03);
+  \fill[InfRed!40] (0.01,0) rectangle (0.43,0.10);
+  \node[value, text=InfRed] at (0.00,0.10) {$<$1};
+  \node[tick, anchor=north] at (0.00,-1.5) {1k};
+  \fill[InfRed] (0.87,0) rectangle (1.29,0.62);
+  \fill[InfRed!40] (1.31,0) rectangle (1.73,0.79);
+  \node[value, text=InfRed] at (1.30,0.79) {$<$1};
+  \node[tick, anchor=north] at (1.30,-1.5) {2k};
+  \fill[InfRed] (2.17,0) rectangle (2.59,10.34);
+  \fill[InfRed!40] (2.61,0) rectangle (3.03,11.10);
+  \node[value, text=InfRed] at (2.38,10.34) {10};
+  \node[value, text=InfRed!70] at (2.82,11.10) {11};
+  \node[tick, anchor=north] at (2.60,-1.5) {5k};
+  \fill[InfRed] (3.47,0) rectangle (3.89,43.11);
+  \fill[InfRed!40] (3.91,0) rectangle (4.33,30.43);
+  \node[value, text=InfRed] at (3.68,43.11) {43};
+  \node[value, text=InfRed!70] at (4.12,30.43) {30};
+  \node[tick, anchor=north] at (3.90,-1.5) {10k};
+  \fill[InfRed] (4.77,0) rectangle (5.19,51.82);
+  \fill[InfRed!40] (5.21,0) rectangle (5.63,46.46);
+  \node[value, text=InfRed] at (4.98,51.82) {52};
+  \node[value, text=InfRed!70] at (5.42,46.46) {46};
+  \node[tick, anchor=north] at (5.20,-1.5) {20k};
+  \node[font=\small, anchor=north] at (2.6,-6.5) {households};
+  \node[font=\small, rotate=90, anchor=south] at (-1.75,31) {energy saved};
+  % Key
+  \fill[InfRed] (-0.4,57) rectangle (-0.15,61);
+  \node[font=\small, anchor=west] at (-0.08,59) {timetable};
+  \fill[InfRed!40] (1.75,57) rectangle (2.0,61);
+  \node[font=\small, anchor=west] at (2.07,59) {broadcast};
+\end{tikzpicture}

@@ -1,0 +1,22 @@
+% When each way of learning the OLT's cost wins (thesis Section "The
+% Timetable and the Broadcast"), one card each, stacked, the timetable in the
+% full red of its bars and the broadcast in their light red.
+\begin{tikzpicture}[
+    card/.style={draw=#1, line width=1pt, rounded corners=4pt, minimum width=5.8cm,
+                 minimum height=2.15cm, fill=white, inner sep=0pt}
+  ]
+  % #1 y, #2 name, #3 when it wins, #4 note, #5 color
+  \newcommand{\strategycard}[5]{%
+    \node[card=#5] (c#2) at (0, #1) {};
+    \fill[#5, rounded corners=4pt] ([xshift=0.35cm]c#2.north west)
+      -- (c#2.north west) -- (c#2.south west) -- ([xshift=0.35cm]c#2.south west) -- cycle;
+    \fill[#5] ([xshift=0.2cm]c#2.north west) rectangle ([xshift=0.35cm]c#2.south west);
+    \node[anchor=north west, font=\normalsize\bfseries] at ([xshift=0.6cm, yshift=-0.2cm]c#2.north west) {#2};
+    \node[anchor=north west, font=\small, align=left] at ([xshift=0.6cm, yshift=-0.7cm]c#2.north west) {#3};
+    \node[anchor=south west, font=\scriptsize, text=InfGray] at ([xshift=0.6cm, yshift=0.15cm]c#2.south west) {#4};
+  }
+  \strategycard{1.25}{Timetable}{wins without drift:\\ starts from a busy, cheap OLT}
+    {learned on this OLT: its best case}{InfRed}
+  \strategycard{-1.25}{Broadcast}{wins under strong drift:\\ sees each rise and fall}
+    {needs no training}{InfRed!40}
+\end{tikzpicture}

@@ -1,0 +1,25 @@
+% Energy saved and traffic added over confidence alone against the margin
+% delta, with the broadcast at 10,000 households and 80% accuracy (thesis
+% Figure "Energy saved, burden and latency against delta", data from
+% implementation/results/study/figures/data/delta.csv). Plain TikZ: x is
+% delta, 5 cm from 0 to 1; y in percent, 0.098 cm per point.
+\begin{tikzpicture}[y=0.098cm,
+    tick/.style={font=\scriptsize, text=InfGray},
+    line/.style={line width=1.4pt}]
+  \draw[InfGray, -{Stealth[length=1.6mm]}] (-0.3,-8) -- (-0.3,36);
+  \draw[InfGray] (-0.3,0) -- (5.25,0);
+  \foreach \percent in {0,10,20,30} {
+    \draw[InfGray] (-0.3,\percent) -- (-0.37,\percent);
+    \node[tick, anchor=east] at (-0.4,\percent) {\percent\%};
+  }
+  \foreach \delta/\at in {0/0, 0.5/2.5, 1/5} {
+    \draw[InfGray] (\at,-8) -- (\at,-8.7);
+    \node[tick, anchor=north] at (\at,-9) {\delta};
+  }
+  \draw[InfGray] (-0.3,-8) -- (5.25,-8);
+  \node[font=\small, anchor=north] at (2.5,-13) {margin $\delta$};
+  \draw[line, InfRed] plot[mark=*, mark size=1.6pt] coordinates {(0.00,30.4) (0.25,29.5) (0.50,28.0) (1.00,25.0) (1.50,21.7) (2.50,12.3) (3.50,3.5) (5.00,-0.0)};
+  \draw[line, InfBlack] plot[mark=*, mark size=1.6pt] coordinates {(0.00,9.3) (0.25,9.0) (0.50,8.3) (1.00,6.7) (1.50,3.7) (2.50,-3.7) (3.50,-1.6) (5.00,0.0)};
+  \node[font=\small\bfseries, text=InfRed, anchor=south west] at (0.1,31) {energy saved};
+  \node[font=\small, text=InfBlack, anchor=south west] at (0.15,10.5) {traffic added};
+\end{tikzpicture}

@@ -1,0 +1,40 @@
+% Energy per query at 80% accuracy with no, mild and strong drift, 10,000
+% households (thesis Figure "Energy per query with no, mild and strong
+% drift", data from implementation/results/study/figures/data/drift.csv,
+% mean of three seeds). Plain TikZ: y in joules, 0.011 cm per joule. The
+% first group's bars carry the series' names, so the chart needs no key.
+\begin{tikzpicture}[y=0.011cm,
+    tick/.style={font=\scriptsize, text=InfGray},
+    value/.style={anchor=south, font=\scriptsize\bfseries, inner sep=1.5pt}]
+  \draw[InfGray, -{Stealth[length=1.6mm]}] (-0.85,0) -- (4.35,0);
+  \draw[InfGray, -{Stealth[length=1.6mm]}] (-0.85,0) -- (-0.85,370);
+  \foreach \joules in {0,100,200,300} {
+    \draw[InfGray] (-0.85,\joules) -- (-0.92,\joules);
+    \node[tick, anchor=east] at (-0.95,\joules) {\joules};
+  }
+  \node[font=\small, rotate=90, anchor=south] at (-1.6,175) {J per query};
+  \fill[InfBlack] (-0.67,0) rectangle (-0.25,322.3);
+  \node[value, text=InfBlack] at (-0.46,322.3) {322};
+  \node[rotate=90, anchor=west, font=\small, text=white, inner sep=0pt] at (-0.46,12) {confidence alone};
+  \fill[InfRed] (-0.21,0) rectangle (0.21,183.3);
+  \node[value, text=InfRed] at (0.00,183.3) {183};
+  \node[rotate=90, anchor=west, font=\small, text=white, inner sep=0pt] at (0.00,12) {timetable};
+  \fill[InfRed!40] (0.25,0) rectangle (0.67,224.2);
+  \node[value, text=InfRed!70] at (0.46,224.2) {224};
+  \node[rotate=90, anchor=west, font=\small, text=InfBlack, inner sep=0pt] at (0.46,12) {broadcast};
+  \node[font=\small, anchor=north] at (0.00,-12) {no drift};
+  \fill[InfBlack] (1.08,0) rectangle (1.50,317.9);
+  \node[value, text=InfBlack] at (1.29,317.9) {318};
+  \fill[InfRed] (1.54,0) rectangle (1.96,196.9);
+  \node[value, text=InfRed] at (1.75,196.9) {197};
+  \fill[InfRed!40] (2.00,0) rectangle (2.42,216.7);
+  \node[value, text=InfRed!70] at (2.21,216.7) {217};
+  \node[font=\small, anchor=north] at (1.75,-12) {mild drift};
+  \fill[InfBlack] (2.83,0) rectangle (3.25,306.0);
+  \node[value, text=InfBlack] at (3.04,306.0) {306};
+  \fill[InfRed] (3.29,0) rectangle (3.71,224.3);
+  \node[value, text=InfRed] at (3.50,224.3) {224};
+  \fill[InfRed!40] (3.75,0) rectangle (4.17,197.4);
+  \node[value, text=InfRed!70] at (3.96,197.4) {197};
+  \node[font=\small, anchor=north] at (3.50,-12) {strong drift};
+\end{tikzpicture}
