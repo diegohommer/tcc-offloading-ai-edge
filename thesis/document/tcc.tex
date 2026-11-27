@@ -1180,7 +1180,7 @@ would spend even without it. Like every decision in this work, it counts only th
 above idle, since the hardware stays on wherever a query goes. Queries differ in length, so
 the OLT reports this energy per token rather than per query, as its energy rates
 $r^{\text{p}}_J$ and $r^{\text{g}}_J$, which each tier multiplies by the lengths of its own
-query in Equation~\eqref{eq:expected-energy} to obtain $E_J$. A tier cannot know whether its
+query to obtain $E_J$, as Equation~\eqref{eq:expected-energy} does for any tier. A tier cannot know whether its
 query will find the OLT idle or busy, so the OLT weights the two cases by the fraction $b$ of
 the last 5 minutes it spent busy, with at least one query generating, and computes each rate as
 \begin{equation}
@@ -1435,8 +1435,8 @@ would count as drift. For the mild drift, each day's timetable is therefore firs
 how busy its week was, the mean ratio between the counts and the timetable over the seven
 days around it. In a week whose days run 30\% above the timetable, for example, an hour that
 usually has 50 conversations is expected to have 65, so a count of 70 is a departure of 8\%
-rather than 40\%, and only the surprises within each week count as drift. This gives
-$\sigma = 0.253$ and $\tau = 2.6$ hours, so a typical hour, with $z_k$
+rather than 40\%, and only the surprises within each week count as drift.
+Equation~\eqref{eq:drift-size} then gives $\sigma = 0.253$ and $\tau = 2.6$ hours, so a typical hour, with $z_k$
 one $\sigma$ above or below zero, runs about 25\% busier or quieter than its timetable, since
 $e^{0.253 - 0.032} = 1.25$ and $e^{-0.253 - 0.032} = 0.75$, and such a departure lasts about
 two and a half hours. Without this weekly scaling, $\sigma = 0.477$ and $\tau = 9.4$ hours, so a
