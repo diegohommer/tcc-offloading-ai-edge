@@ -1923,21 +1923,17 @@ conversation traffic, with and without drift in the load. Section~\ref{sec:chall
 four gaps in the works closest to ours, and we return to each of them below.
 
 The first gap was that energy has no part in recursive tiered inference, and bringing it in
-saves energy once the OLT serves enough households to batch their queries. At 1,000 and 2,000
-households the OLT almost never holds two queries at once and WattLadder saves less than 1\%,
-but the saving then grows with the load, reaching 43.1\% with the timetable and 30.4\% with
-the broadcast at 10,000 households, where escalation by confidence alone needs 322~J per query
-against 183~J and 224~J, and about half at 20,000. Skipping the ONU explains only part of it,
-since WattLadder still spends 30\% and 14\% less than the same confidence rule without the
-ONU. Most of the saving comes from no longer spending the phone's and the ONU's energy on
-queries that end at the OLT anyway, and the rest from sending queries to the OLT while it
-batches, so that each of them costs less.
+saves energy once the OLT serves enough households to batch their queries. At 1,000 and 2,000 households the
+saving is under 1\%, but it then grows with the load, reaching 43.1\% with the timetable and
+30.4\% with the broadcast at 10,000 households and about half at 20,000, and only part of it
+comes from skipping the ONU. Most of the saving comes from no longer spending the phone's and
+the ONU's energy on queries that end at the OLT anyway, and the rest from sending queries to
+the OLT while it batches, so that each of them costs less.
 
 This saving comes with a shorter wait for an answer rather than a longer one, since fewer
-queries pass through the slow ONU, and at 10,000 households a message waits 12.7~s with the
-timetable and 18.5~s with the broadcast instead of about 48~s. It does carry 9\% more traffic
-between the tiers, and the margin $\delta$ trades part of the saving for less traffic, with
-$\delta = 0.5$ still saving 12.3\% while carrying 4\% less traffic than the confidence rule.
+queries pass through the slow ONU, and at 10,000 households a message waits under 20~s instead
+of about 48~s. It does carry 9\% more traffic between the tiers, which the margin $\delta$ can
+remove in exchange for part of the saving.
 
 The second gap was that the energy of the tiers is not measured at a common boundary, which
 the energy model of Section~\ref{sec:energy-model} addresses, and the saving holds across the
@@ -1968,12 +1964,23 @@ and turning to the broadcast's live report when the load departs from its usual 
 hybrid and both strategies would be worth testing on scenarios our study leaves out. Sudden and
 deep drops in load, such as a failed PON port or a power cut, would show how much the live report
 is worth, and a timetable that is out of date or shared across OLTs would show how quickly its
-advantage fades. The hierarchy itself could be extended with a cloud tier above the OLT, while
+advantage fades.
+
+The hierarchy itself could be extended with a cloud tier above the OLT, while
 further down, the ONU of a company or a university serves many users and would batch their
 queries as the OLT does. Its cost would then change with the load too, and the same strategies
-could share it with the tiers below. Finally, for the ONU of a single home, measuring a gateway
+could share it with the tiers below. For the ONU of a single home, measuring a gateway
 with faster memory would show whether it can answer at an interactive pace and would replace
 the approximate figures this work uses for it.
+
+Other directions follow from the limitations of Section~\ref{sec:limitations}. Measuring the
+phone with its memory, and at rest, would tell how far the two errors in its figure cancel.
+Repeating the study on other tasks and sets of models would show how the size of the saving and
+the load at which it appears change, and open-ended tasks, whose answers have no single correct
+form, would call for an escalation test that tracks correctness better than perplexity, such as
+a separate scoring model, which WattLadder could use without other changes. Finally, predicting
+the length of each answer from its query, instead of using a model's mean length, would sharpen
+the energy each tier expects to spend.
 
 %==============================================================================
 % References
