@@ -304,7 +304,7 @@ while each ONU can only speak in its own slot (Figure~\ref{fig:pon}).
 \begin{figure}[htb]
   \centering
   \caption[Downstream broadcast and upstream TDMA in a PON]{Downstream broadcast and upstream TDMA in a PON.
-  (a) Every frame the OLT sends passes the splitter to all ONUs, and each ONU keeps only its own; (b) upstream, each ONU sends only in the time slot the DBA assigns to it}
+  (a) Every frame the OLT sends reaches all ONUs through the splitter, and each ONU keeps only its own; (b) each ONU sends only in the time slot the DBA assigns to it}
   \label{fig:pon}
   \vspace{6pt}
   \input{figures/pon_broadcast_tdma}
@@ -345,7 +345,7 @@ reported separately for each phase (Section~\ref{sec:metrics}).
 \begin{figure}[htb]
   \centering
   \caption[Prefill and decode phases of LLM inference]{Prefill and decode phases of LLM inference.
-  The prefill reads every prompt token at once and stores them in the KV cache, and each decode step then generates one token, reading the cache and appending to it}
+  The prefill reads every prompt token at once into the KV cache, and each decode step generates one token, reading the cache and appending to it}
   \label{fig:prefill-decode}
   \vspace{6pt}
   \input{figures/prefill_decode}
@@ -513,7 +513,7 @@ the decision rests on confidence alone.
 \begin{figure}[!htb]
   \centering
   \caption[Tiered LLM inference continuum on a PON]{Tiered LLM inference continuum on a PON.
-  User devices, ONUs, OLTs at the central office and the cloud run progressively larger models, mapped onto a TWDM-PON}
+  User devices, ONUs, OLTs at the central office and the cloud run progressively larger models over a TWDM-PON}
   \label{fig:pakpahan}
   \includegraphics[width=\textwidth]{figures/pakpahan2026_fig1_tiered_continuum.jpg}
   \legend{Source: \cite{pakpahan2026continuum}}
@@ -863,7 +863,7 @@ idle, which is why the tiers need a current estimate of the OLT's cost.
 \begin{table}[htb]
   \centering
   \caption[Algorithm~\ref{alg:decision} on one query, with hypothetical energies and $\beta = 0.5$]{Algorithm~\ref{alg:decision} on one query, with hypothetical energies and $\beta = 0.5$.
-  When the OLT is busy, both lower tiers send the query straight to it; when it is idle, each tier runs the query, since that costs less than sending it up}
+  The test of each lower tier when the OLT is busy and when it is idle, and the route the query takes}
   \label{tab:example}
   \begin{tabular}{lll}
     \toprule
@@ -928,11 +928,8 @@ times a day. We compare two strategies for giving the tiers a current estimate o
 
 \begin{figure}[htb]
   \centering
-  \caption[The two strategies for sharing the OLT's cost]{The two strategies for sharing the OLT's cost $r_J$
-  (Equation~\eqref{eq:olt-report}) with the tiers below. The timetable holds one rate per
-  hour, for weekdays and for weekends, learned in rounds over a calibration month; the
-  broadcast sends the rate of the last 5 minutes every 10 seconds, in one frame that reaches
-  every ONU on a PON port}
+  \caption[The two strategies for sharing the OLT's cost]{The two strategies for sharing the OLT's cost.
+  The timetable holds one rate $r_J$ per hour for weekdays and weekends, learned over a calibration month, and the broadcast sends the current $r_J$ every 10~s to every ONU on a PON port}
   \label{fig:olt-strategies}
   \vspace{6pt}
   \input{figures/olt_cost_strategies}
@@ -979,7 +976,7 @@ range, which Sections~\ref{sec:olt-energy} and~\ref{sec:accounting} explain.
 \begin{table}[htb]
   \centering
   \caption[Energy of the three tiers at the system boundary]{Energy of the three tiers at the system boundary.
-  For each tier, what its source measures, the factor that brings it to the boundary and the joules of a query of mean GSM8K lengths under both accountings; the OLT's energy is a range because it depends on how many queries it batches}
+  For each tier, what its source measures, the factor that brings it to the boundary and the joules of a query of mean GSM8K lengths under both accountings, as a range for the OLT}
   \label{tab:energy}
   \begin{tabular}{lllrr}
     \toprule
@@ -1027,7 +1024,7 @@ whose models are both Qwen, is 122 tokens, shorter than the phone's 126.
 \begin{table}[htb]
   \centering
   \caption[Values behind the energy of the user device and the ONU]{Values behind the energy of the user device and the ONU.
-  Energy per token, in total and above idle, speeds, idle power and mean GSM8K lengths, from the published measurements of each device; the phone's source gives no idle power}
+  Energy per token, in total and above idle, speeds, idle power and mean GSM8K lengths of each device, from published measurements; dots mark values the phone's source does not give}
   \label{tab:user-onu}
   \begin{tabular}{lrr}
     \toprule
@@ -1091,7 +1088,7 @@ to about 0.015~J by a batch of 16 and staying there.
 \begin{table}[htb]
   \centering
   \caption[Energy of the OLT's GPU in static batches]{Energy of the OLT's GPU in static batches.
-  Measured by us on the NVIDIA L4: for each batch size, its power, its generation speed and the energy per prompt and generated token, in total and above idle}
+  Power, generation speed and energy per prompt and generated token, in total and above idle, of the NVIDIA L4 at each batch size, as measured by us}
   \label{tab:olt-sweep}
   \begin{tabular}{rrrrrrr}
     \toprule
@@ -1136,7 +1133,7 @@ in for it.
 \begin{figure}[htb]
   \centering
   \caption[The OLT's energy under static and continuous batching]{The OLT's energy under static and continuous batching.
-  (a) Energy per generated token against the number of requests generating together, for static batches and continuous batching; (b) the GPU's energy predicted by the simulator against the energy measured over the runs with random arrivals, under both accountings}
+  (a) Energy per generated token against the number of requests generating together, for static batches and continuous batching; (b) the GPU's energy predicted by the simulator against the energy measured, under both accountings}
   \label{fig:batching}
   \includegraphics[width=\textwidth]{figures/batching_validation.pdf}
   \legend{Source: The author}
@@ -1210,7 +1207,7 @@ at small batches and, for such a query, stays between about 4 and 6~J above four
 \begin{figure}[htb]
   \centering
   \caption[Energy above idle per prompt token (a) and generated token (b)]{Energy above idle per prompt token (a) and generated token (b).
-  The energy above idle of a whole batch per token of one query, against batch size, with the least-squares line whose slope gives $r_{\text{busy}}$; its first point gives $r_{\text{idle}}$}
+  The energy above idle of a whole batch per token of one query, against batch size, with the least-squares line; the slope gives $r_{\text{busy}}$ and the first measured point $r_{\text{idle}}$}
   \label{fig:batch-energy}
   \includegraphics[width=\textwidth]{figures/batch_energy.pdf}
   \legend{Source: The author}
@@ -1401,7 +1398,7 @@ arrives.
 \begin{figure}[htb]
   \centering
   \caption[Messages per hour over one test week of 10,000 households]{Messages per hour over one test week of 10,000 households.
-  The same week with no, mild and strong drift; under drift, some hours run busier or quieter than the average day}
+  The same test week with no, mild and strong drift}
   \label{fig:traffic-week}
   \includegraphics[width=\textwidth]{figures/traffic_week.pdf}
   \legend{Source: The author}
@@ -1565,7 +1562,8 @@ confidence alone delivers.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy saved over confidence alone, by number of households}
+  \caption[Energy saved over confidence alone, by number of households]{Energy saved over confidence alone, by number of households.
+  WattLadder's saving with each strategy as the OLT serves from 1,000 to 20,000 households; error bars span the three seeds}
   \label{fig:saving-households}
   \includegraphics[width=\textwidth]{figures/saving_over_recserve.pdf}
   \legend{Source: The author}
@@ -1589,7 +1587,8 @@ the two when the OLT is idle and spends less than both when the OLT batches.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy per query against accuracy at 10,000 households}
+  \caption[Energy per query against accuracy at 10,000 households]{Energy per query against accuracy at 10,000 households.
+  Each marker is one $\beta$, from 0.1 to 0.9; circles mark 80\% accuracy, and crosses each tier answering every query alone}
   \label{fig:equal-accuracy}
   \includegraphics[width=\textwidth]{figures/equal_accuracy.pdf}
   \legend{Source: The author}
@@ -1609,7 +1608,8 @@ energy buys is less traffic, 4\% more than confidence alone against 9\% with $\d
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy per query spent at each tier at 10,000 households}
+  \caption[Energy per query spent at each tier at 10,000 households]{Energy per query spent at each tier at 10,000 households.
+  Energy of the phone, the ONU and the OLT under confidence alone and under WattLadder with the broadcast at $\delta = 0.3$ and $\delta = 0$}
   \label{fig:energy-split}
   \includegraphics[width=\textwidth]{figures/energy_split.pdf}
   \legend{Source: The author}
@@ -1632,7 +1632,8 @@ households, and with strong drift by 3.3\% at 2,000, 9.1\% at 5,000 and 11.9\% a
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy the broadcast saves over the timetable, by households and drift}
+  \caption[Energy the broadcast saves over the timetable, by households and drift]{Energy the broadcast saves over the timetable, by households and drift.
+  Positive values mean the broadcast spends less; error bars span the three seeds}
   \label{fig:broadcast-timetable}
   \includegraphics[width=\textwidth]{figures/broadcast_over_timetable.pdf}
   \legend{Source: The author}
@@ -1660,7 +1661,8 @@ and the ONU first.
 
 \begin{figure}[htb]
   \centering
-  \caption{Accuracy (a) and energy per query (b) against $\beta$ at 10,000 households}
+  \caption[Accuracy (a) and energy per query (b) against $\beta$ at 10,000 households]{Accuracy (a) and energy per query (b) against $\beta$ at 10,000 households.
+  Confidence alone and WattLadder with each strategy, with dotted lines for each tier answering every query alone}
   \label{fig:beta-knob}
   \includegraphics[width=\textwidth]{figures/beta_knob.pdf}
   \legend{Source: The author}
@@ -1690,7 +1692,8 @@ a dip, where the broadcast should gain most, although our scenarios do not inclu
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy per query with no, mild and strong drift at 10,000 households}
+  \caption[Energy per query with no, mild and strong drift at 10,000 households]{Energy per query with no, mild and strong drift at 10,000 households.
+  Confidence alone and WattLadder with each strategy; error bars span the three seeds}
   \label{fig:drift}
   \includegraphics[width=\textwidth]{figures/drift.pdf}
   \legend{Source: The author}
@@ -1729,7 +1732,8 @@ energy than the broadcast but carries 13\% more traffic (13.7~MB against 12.1~MB
 
 \begin{figure}[htb]
   \centering
-  \caption{Communication burden against accuracy (a), and change in energy and burden against confidence alone (b), at 10,000 households}
+  \caption[Communication burden at 10,000 households]{Communication burden at 10,000 households.
+  (a) Megabytes between the tiers per 1,000 queries against accuracy, each marker one $\beta$; (b) change in energy and burden against confidence alone; error bars span the three seeds}
   \label{fig:bandwidth}
   \includegraphics[width=\textwidth]{figures/bandwidth.pdf}
   \legend{Source: The author}
@@ -1747,7 +1751,8 @@ remains a limitation for the queries it does answer (Section~\ref{sec:limitation
 
 \begin{figure}[htb]
   \centering
-  \caption{Mean wait for an answer against number of households}
+  \caption[Mean wait for an answer against number of households]{Mean wait for an answer against number of households.
+  Confidence alone without the ONU and the OLT answering every query serve as references; error bars span the three seeds}
   \label{fig:latency}
   \includegraphics[width=\textwidth]{figures/latency.pdf}
   \legend{Source: The author}
@@ -1770,7 +1775,8 @@ at no cost in traffic or as much as possible.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy saved (a), burden and latency (b) against $\delta$ at 10,000 households}
+  \caption[Energy saved (a), burden and latency (b) against $\delta$ at 10,000 households]{Energy saved (a), burden and latency (b) against $\delta$ at 10,000 households.
+  WattLadder with the broadcast, from weighing energy alone ($\delta = 0$) to confidence alone ($\delta = 1$); error bars span the three seeds}
   \label{fig:delta}
   \includegraphics[width=\textwidth]{figures/delta.pdf}
   \legend{Source: The author}
@@ -1793,7 +1799,8 @@ idle energy to every query's charge, raises it to 46.9\% and 34.0\%.
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy saved over confidence alone per scenario at 10,000 households}
+  \caption[Energy saved over confidence alone per scenario at 10,000 households]{Energy saved over confidence alone per scenario at 10,000 households.
+  The main runs, drift, average accounting, the ONU's energy halved and the OLT's conversion at $\times 1.0$, $\times 1.72$ and $\times 3.35$; error bars span the three seeds}
   \label{fig:sensitivity}
   \includegraphics[width=\textwidth]{figures/sensitivity.pdf}
   \legend{Source: The author}
