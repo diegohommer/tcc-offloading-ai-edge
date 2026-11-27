@@ -303,7 +303,8 @@ while each ONU can only speak in its own slot (Figure~\ref{fig:pon}).
 
 \begin{figure}[htb]
   \centering
-  \caption{Downstream broadcast and upstream TDMA in a PON}
+  \caption[Downstream broadcast and upstream TDMA in a PON]{Downstream broadcast and upstream TDMA in a PON.
+  (a) Every frame the OLT sends passes the splitter to all ONUs, and each ONU keeps only its own; (b) upstream, each ONU sends only in the time slot the DBA assigns to it}
   \label{fig:pon}
   \vspace{6pt}
   \input{figures/pon_broadcast_tdma}
@@ -343,7 +344,8 @@ reported separately for each phase (Section~\ref{sec:metrics}).
 
 \begin{figure}[htb]
   \centering
-  \caption{Prefill and decode phases of LLM inference}
+  \caption[Prefill and decode phases of LLM inference]{Prefill and decode phases of LLM inference.
+  The prefill reads every prompt token at once and stores them in the KV cache, and each decode step then generates one token, reading the cache and appending to it}
   \label{fig:prefill-decode}
   \vspace{6pt}
   \input{figures/prefill_decode}
@@ -510,7 +512,8 @@ the decision rests on confidence alone.
 
 \begin{figure}[!htb]
   \centering
-  \caption{Tiered LLM inference continuum on a PON}
+  \caption[Tiered LLM inference continuum on a PON]{Tiered LLM inference continuum on a PON.
+  User devices, ONUs, OLTs at the central office and the cloud run progressively larger models, mapped onto a TWDM-PON}
   \label{fig:pakpahan}
   \includegraphics[width=\textwidth]{figures/pakpahan2026_fig1_tiered_continuum.jpg}
   \legend{Source: \cite{pakpahan2026continuum}}
@@ -589,7 +592,8 @@ in the last row, is designed to close the gaps discussed below.
 
 \begin{table}[htb]
   \centering
-  \caption{Related works compared with WattLadder}
+  \caption[Related works compared with WattLadder]{Related works compared with WattLadder.
+  A check marks a work that spans network tiers, lets a query move up after a model has answered it, weighs energy in its decision, or lets that energy change with the load}
   \label{tab:related}
   \footnotesize
   \setlength{\tabcolsep}{5pt}
@@ -710,7 +714,8 @@ the OLT gets wrong.
 
 \begin{figure}[htb]
   \centering
-  \caption{The three tiers of the case study, in the order a query escalates}
+  \caption[The three tiers of the case study, in the order a query escalates]{The three tiers of the case study, in the order a query escalates.
+  Each card gives the tier's device, its model and quantization, its accuracy on GSM8K and where its energy comes from}
   \label{fig:case-study}
   \vspace{6pt}
   \input{figures/case_study_tiers}
@@ -811,7 +816,8 @@ running a query is wasted.
 
 \begin{figure}[htb]
   \centering
-  \caption{WattLadder's decision at tier $i$}
+  \caption[WattLadder's decision at tier $i$]{WattLadder's decision at tier $i$.
+  In red, what WattLadder adds to escalation by confidence alone: the test made when the query arrives and the jump to the cheapest tier above}
   \label{fig:decision}
   \vspace{6pt}
   \input{figures/wattladder_flowchart}
@@ -856,8 +862,8 @@ idle, which is why the tiers need a current estimate of the OLT's cost.
 
 \begin{table}[htb]
   \centering
-  \caption{Algorithm~\ref{alg:decision} on one query, with hypothetical energies and
-  $\beta = 0.5$}
+  \caption[Algorithm~\ref{alg:decision} on one query, with hypothetical energies and $\beta = 0.5$]{Algorithm~\ref{alg:decision} on one query, with hypothetical energies and $\beta = 0.5$.
+  When the OLT is busy, both lower tiers send the query straight to it; when it is idle, each tier runs the query, since that costs less than sending it up}
   \label{tab:example}
   \begin{tabular}{lll}
     \toprule
@@ -972,7 +978,8 @@ range, which Sections~\ref{sec:olt-energy} and~\ref{sec:accounting} explain.
 
 \begin{table}[htb]
   \centering
-  \caption{Energy of the three tiers at the system boundary}
+  \caption[Energy of the three tiers at the system boundary]{Energy of the three tiers at the system boundary.
+  For each tier, what its source measures, the factor that brings it to the boundary and the joules of a query of mean GSM8K lengths under both accountings; the OLT's energy is a range because it depends on how many queries it batches}
   \label{tab:energy}
   \begin{tabular}{lllrr}
     \toprule
@@ -1019,7 +1026,8 @@ whose models are both Qwen, is 122 tokens, shorter than the phone's 126.
 
 \begin{table}[htb]
   \centering
-  \caption{Values behind the energy of the user device and the ONU}
+  \caption[Values behind the energy of the user device and the ONU]{Values behind the energy of the user device and the ONU.
+  Energy per token, in total and above idle, speeds, idle power and mean GSM8K lengths, from the published measurements of each device; the phone's source gives no idle power}
   \label{tab:user-onu}
   \begin{tabular}{lrr}
     \toprule
@@ -1082,7 +1090,8 @@ to about 0.015~J by a batch of 16 and staying there.
 
 \begin{table}[htb]
   \centering
-  \caption{Energy of the OLT's GPU in static batches}
+  \caption[Energy of the OLT's GPU in static batches]{Energy of the OLT's GPU in static batches.
+  Measured by us on the NVIDIA L4: for each batch size, its power, its generation speed and the energy per prompt and generated token, in total and above idle}
   \label{tab:olt-sweep}
   \begin{tabular}{rrrrrrr}
     \toprule
@@ -1126,7 +1135,8 @@ in for it.
 
 \begin{figure}[htb]
   \centering
-  \caption{The OLT's energy under static and continuous batching}
+  \caption[The OLT's energy under static and continuous batching]{The OLT's energy under static and continuous batching.
+  (a) Energy per generated token against the number of requests generating together, for static batches and continuous batching; (b) the GPU's energy predicted by the simulator against the energy measured over the runs with random arrivals, under both accountings}
   \label{fig:batching}
   \includegraphics[width=\textwidth]{figures/batching_validation.pdf}
   \legend{Source: The author}
@@ -1199,7 +1209,8 @@ at small batches and, for such a query, stays between about 4 and 6~J above four
 
 \begin{figure}[htb]
   \centering
-  \caption{Energy above idle per prompt token (a) and generated token (b)}
+  \caption[Energy above idle per prompt token (a) and generated token (b)]{Energy above idle per prompt token (a) and generated token (b).
+  The energy above idle of a whole batch per token of one query, against batch size, with the least-squares line whose slope gives $r_{\text{busy}}$; its first point gives $r_{\text{idle}}$}
   \label{fig:batch-energy}
   \includegraphics[width=\textwidth]{figures/batch_energy.pdf}
   \legend{Source: The author}
@@ -1241,7 +1252,8 @@ energy rates and speeds they need (Section~\ref{sec:energy-model}).
 
 \begin{figure}[htb]
   \centering
-  \caption{Modules of the simulator and what passes between them}
+  \caption[Modules of the simulator and what passes between them]{Modules of the simulator and what passes between them.
+  Solid boxes are the simulator's modules and dashed boxes the data they use}
   \label{fig:simulator}
   \vspace{6pt}
   \input{figures/simulator_modules}
@@ -1331,7 +1343,8 @@ worldwide WildChat traffic stands in for Brazilian households.
 
 \begin{figure}[htb]
   \centering
-  \caption{Conversations starting in each hour of weekdays (a) and weekends (b)}
+  \caption[Conversations starting in each hour of weekdays (a) and weekends (b)]{Conversations starting in each hour of weekdays (a) and weekends (b).
+  Share of the day's conversations that start in each hour, for WildChat's users worldwide and in Brazil and for BurstGPT's users}
   \label{fig:traffic-profiles}
   \includegraphics[width=\textwidth]{figures/traffic_profiles.pdf}
   \legend{Source: The author, with data from \citeonline{zhao2024wildchat} and
@@ -1387,7 +1400,8 @@ arrives.
 
 \begin{figure}[htb]
   \centering
-  \caption{Messages per hour over one test week of 10,000 households}
+  \caption[Messages per hour over one test week of 10,000 households]{Messages per hour over one test week of 10,000 households.
+  The same week with no, mild and strong drift; under drift, some hours run busier or quieter than the average day}
   \label{fig:traffic-week}
   \includegraphics[width=\textwidth]{figures/traffic_week.pdf}
   \legend{Source: The author}
