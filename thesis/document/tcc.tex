@@ -1914,47 +1914,29 @@ changing the rest of the policy.
 \section{Summary and Findings}
 \label{sec:findings}
 
-This work integrated energy awareness into recursive tiered LLM inference through WattLadder,
-a policy in which each tier also weighs the energy that answering a query, or passing it up,
-would cost. We studied it over a PON, with the user's phone, the ONU and the OLT as the three
-tiers, counted their energy at a single boundary, with the OLT's measured by us on a GPU, and
-compared every policy at the same target accuracy of 80\% in simulations driven by recorded
-conversation traffic, with and without drift in the load. Section~\ref{sec:challenges} named
-four gaps in the works closest to ours, and we return to each of them below.
+This work set out to bring energy into the decisions of recursive tiered LLM inference, where
+each tier has so far chosen between answering a query and passing it up from confidence alone.
+We proposed WattLadder for this, studied it on a three-tier PON with the OLT's energy measured
+on a GPU, and compared it with the confidence rule at the same accuracy on recorded traffic.
 
-The first gap was that energy has no part in recursive tiered inference, and bringing it in
-saves energy once the OLT serves enough households to batch their queries. At 1,000 and 2,000 households the
-saving is under 1\%, but it then grows with the load, reaching 43.1\% with the timetable and
-30.4\% with the broadcast at 10,000 households and about half at 20,000, and only part of it
-comes from skipping the ONU. Most of the saving comes from no longer spending the phone's and
-the ONU's energy on queries that end at the OLT anyway, and the rest from sending queries to
-the OLT while it batches, so that each of them costs less.
+The main finding is that weighing energy pays off once the OLT has enough load to batch. For a
+small OLT the saving is negligible, but at 10,000 households WattLadder needs 30 to 43\% less
+energy than the confidence rule, depending on the strategy, and about half at 20,000. Most of
+it comes from not spending the phone's and the ONU's energy on queries that would reach the OLT
+anyway, and it costs no waiting time, since answers arrive sooner, while the traffic between
+the tiers grows by about a tenth.
 
-This saving comes with a shorter wait for an answer rather than a longer one, since fewer
-queries pass through the slow ONU, and at 10,000 households a message waits under 20~s instead
-of about 48~s. It does carry 9\% more traffic between the tiers, which the margin $\delta$ can
-remove in exchange for part of the saving.
+Of the two ways of telling the tiers what the OLT costs, neither is better everywhere. A
+timetable learned in advance suits a load that keeps to its usual pattern, while the live
+broadcast suits a load that drifts, or an OLT whose clients change, since it needs no training.
 
-The second gap was that the energy of the tiers is not measured at a common boundary, which
-the energy model of Section~\ref{sec:energy-model} addresses, and the saving holds across the
-choices this model rests on. At 10,000 households WattLadder saves energy in every sensitivity
-run, between 22.4\% and 58.9\% depending on the strategy, on how much of the server and the
-building is added to the OLT's GPU, on how the energy is accounted for and on the ONU's energy.
-These figures still rest on preprint measurements of the phone and the ONU and on an estimated
-conversion for the OLT, whose effects Section~\ref{sec:limitations} discusses.
-
-The third gap was that the OLT's cost changes with its load while the tiers below cannot
-observe it. Of the two ways we compared of letting them know it, the timetable saves more in
-most of our scenarios, since it leads the households to keep the OLT busy and cheap, and with
-no drift the broadcast spends 22.3\% more than the timetable at 10,000 households. The broadcast
-does better when drift moves the OLT between batching and idling, spending 11.9\% less than the
-timetable under strong drift at the same size, and since it needs no training, it also suits an
-OLT whose number of clients changes, where a timetable would first have to be relearned.
-
-The fourth gap was how such policies are compared, and comparing them at the same accuracy
-rather than at the same $\beta$ is what shows that the saving does not come from answering fewer
-queries correctly. Across these results, weighing energy matters most where a tier batches, since there the
-cost of a query depends on the load, which a rule based on confidence alone ignores.
+These conclusions hold across the choices our energy model rests on, as the saving stays above
+a fifth in every sensitivity run, although the figures for the phone and the ONU come from
+preprints and the OLT's conversion is an estimate (Section~\ref{sec:limitations}). Together,
+they answer the gaps raised in Section~\ref{sec:challenges}: energy can enter the decision at
+every tier, be counted at one boundary, be learned from the OLT as its load changes, and be
+compared at equal accuracy. It matters most where a tier batches, since there the cost of a
+query depends on the load, which a rule based on confidence alone ignores.
 
 \section{Future Work}
 \label{sec:future-work}
