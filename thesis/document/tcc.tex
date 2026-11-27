@@ -249,10 +249,10 @@ The contributions of this work are:
   escalation in energy per query, latency and communication burden.
 \end{itemize}
 
-The remainder of this work is organized as follows. Chapter~\ref{chap:review}
+The remainder of this work is organized as follows. Chapter~\ref{chap:background}
 presents the background on PONs, LLM inference and how its energy is measured, and
-reviews the work on tiered LLM inference and on energy-aware LLM serving.
-Chapter~\ref{chap:methodology} presents the case study and WattLadder, with its two strategies
+Chapter~\ref{chap:related} reviews the work on tiered LLM inference and on energy-aware
+LLM serving. Chapter~\ref{chap:methodology} presents the case study and WattLadder, with its two strategies
 for learning the OLT's cost, then the energy model of the three tiers, the simulator and how the
 policies are compared. Chapter~\ref{chap:results} compares the energy each policy needs to reach
 the same accuracy, the two strategies, and the latency and traffic that come with the saving,
@@ -268,31 +268,22 @@ text and write the code of the measurements and of the simulation. The author re
 it produced, and is responsible for everything this work states and concludes.
 
 %==============================================================================
-\chapter{Background and Related Work}
-\label{chap:review}
+\chapter{Background}
+\label{chap:background}
 %==============================================================================
 
-% Layout: 2.1 Background holds the concepts the work builds on (PON, LLM
-% inference, confidence, cascades and tiers, energy measurement), with no competing
-% work; 2.2 Related Work groups the competing works by what they share (one
-% paragraph per work: problem, mechanism, evaluation, headline number, limitation
-% for this work; each group closed by a short synthesis); 2.3 states the gaps this
-% work addresses. Cited once per claim or per paragraph, not per sentence.
+% Layout: the concepts the work builds on (PON, LLM inference, confidence,
+% cascades and tiers, energy measurement), with no competing work, which is left
+% to Chapter "Related Work". Cited once per claim or per paragraph, not per sentence.
 
-This chapter presents the concepts this work builds on and the works closest to it. The background in
-Section~\ref{sec:background} starts with PONs and their downstream broadcast, which one
-of the strategies evaluated in this work relies on (Section~\ref{sec:pon}). It then
-covers how an LLM answers a query and how its confidence in the answer is measured
-(Section~\ref{sec:llm-background}), how cascades of models are spread across network
-tiers (Section~\ref{sec:cascades-tiers}), and how the energy of LLM inference is measured
-(Section~\ref{sec:metrics}). Section~\ref{sec:related} then reviews the work on
-tiered LLM inference and on energy-aware LLM serving, and Section~\ref{sec:challenges}
-closes the chapter with the gaps this work addresses.
+This chapter presents the concepts this work builds on. It starts with PONs and their
+downstream broadcast, which one of the strategies evaluated in this work relies on
+(Section~\ref{sec:pon}). It then covers how an LLM answers a query and how its confidence
+in the answer is measured (Section~\ref{sec:llm-background}), how cascades of models are
+spread across network tiers (Section~\ref{sec:cascades-tiers}), and how the energy of LLM
+inference is measured (Section~\ref{sec:metrics}).
 
-\section{Background}
-\label{sec:background}
-
-\subsection{Passive Optical Networks}
+\section{Passive Optical Networks}
 \label{sec:pon}
 A PON is an access network technology that uses a shared fiber architecture, where a
 single fiber coming out of one of the OLT's ports is split passively to serve several
@@ -327,7 +318,7 @@ same fiber~\cite{luo2013twdm}, and it is the setting in which
 the downstream broadcast, since a single message on each of the OLT's ports reaches every
 ONU behind it with no extra upstream traffic (Chapter~\ref{chap:methodology}).
 
-\subsection{LLM Inference}
+\section{LLM Inference}
 \label{sec:llm-background}
 
 LLMs are scaled Pre-trained Language Models (PLMs), Transformer models with
@@ -382,7 +373,7 @@ confidence between 0 and 1 as $1/(1+\text{perplexity})$, and we refer to it as t
 test. We score an answer by the geometric mean of the probabilities of its tokens, which is one
 over the perplexity, so it orders answers the same way and the test makes the same decisions.
 
-\subsection{Model Cascades and Tiered Inference}
+\section{Model Cascades and Tiered Inference}
 \label{sec:cascades-tiers}
 
 A model cascade places several models one after the other, from the cheapest to the most
@@ -406,7 +397,7 @@ traffic, and a cascade over the device, the edge and the cloud that escalates wi
 quantile test reduces the communication burden by over 50\% compared with serving every
 query in the cloud~\cite{wu2025recserve}.
 
-\subsection{Measuring LLM Inference Energy}
+\section{Measuring LLM Inference Energy}
 \label{sec:metrics}
 \label{sec:measurements}
 
@@ -474,10 +465,21 @@ rails~\cite{tummalapalli2026edge}. Since each tool covers a different part of th
 system, Chapter~\ref{chap:methodology} converts every tier of this work to a single
 boundary.
 
-\section{Related Work}
-\label{sec:related}
+%==============================================================================
+\chapter{Related Work}
+\label{chap:related}
+%==============================================================================
 
-\subsection{Tiered LLM Inference}
+% Layout: the competing works grouped by what they share (one paragraph per work:
+% problem, mechanism, evaluation, headline number, limitation for this work; each
+% group closed by a short synthesis), then the gaps this work addresses.
+
+This chapter reviews the works closest to ours, first those that place a cascade of LLMs
+on the tiers of a network (Section~\ref{sec:tiered}) and then those that bring energy into
+how LLM queries are served and routed (Section~\ref{sec:energy-routing}).
+Section~\ref{sec:challenges} closes the chapter with the gaps this work addresses.
+
+\section{Tiered LLM Inference}
 \label{sec:tiered}
 
 The works closest to ours place a cascade of LLMs on the tiers of a network.
@@ -531,7 +533,7 @@ Of the works above, only RecServe and the architecture of
 or pass it up, and both decide from confidence alone, so none of these works, those two
 included, uses the energy spent at each tier to decide where a query is answered.
 
-\subsection{Energy-Aware LLM Serving and Routing}
+\section{Energy-Aware LLM Serving and Routing}
 \label{sec:energy-routing}
 
 Other works bring energy into the decision itself, choosing where, or by which model, a
@@ -619,7 +621,7 @@ in the last row, is designed to close are taken up in Section~\ref{sec:challenge
 \label{sec:challenges}
 
 The works reviewed above leave four gaps, and each contribution listed in
-Chapter~\ref{chap:introduction} addresses one of them.
+Section~\ref{sec:proposal} addresses one of them.
 
 The first is that energy has no part in recursive tiered inference, since in RecServe
 and in the architecture of \citeonline{pakpahan2026continuum} every tier decides from the
