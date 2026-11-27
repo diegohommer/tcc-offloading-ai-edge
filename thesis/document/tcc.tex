@@ -575,14 +575,17 @@ tokens at a fixed throughput, and the energy models of
 model by a single accuracy figure, so the answer to a particular query plays no part in
 their decision.
 
+\section{Challenges Addressed in This Work}
+\label{sec:challenges}
+
 In the tiered works, the decision is made at every tier from the confidence of an
 answer but leaves energy out, while the energy-aware works use energy but decide once
 per query, on a single system or over two tiers at most, before any model has answered,
 and none of them lets the energy of a query depend on how busy the tier serving it is.
 Table~\ref{tab:related} marks, for each work, whether it spans network tiers, whether a
 query can still move up after a model has answered it, whether energy enters the
-decision and whether that energy changes with the load, and the gaps that WattLadder,
-in the last row, is designed to close are taken up in Section~\ref{sec:challenges}.
+decision and whether that energy changes with the load, and WattLadder,
+in the last row, is designed to close the gaps discussed below.
 
 \begin{table}[htb]
   \centering
@@ -617,10 +620,7 @@ in the last row, is designed to close are taken up in Section~\ref{sec:challenge
   \legend{Source: The author}
 \end{table}
 
-\section{Challenges Addressed in This Work}
-\label{sec:challenges}
-
-The works reviewed above leave four gaps, and each contribution listed in
+Together, these works leave four gaps, and each contribution listed in
 Section~\ref{sec:proposal} addresses one of them.
 
 The first is that energy has no part in recursive tiered inference, since in RecServe
