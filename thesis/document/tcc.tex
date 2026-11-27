@@ -892,7 +892,8 @@ The energy rates of the user device and the ONU do not change, and answers carry
 the same way, so the rates a tier hears on past answers stay valid. The OLT's rate, however,
 depends on how many other queries the OLT is serving at the moment
 (Section~\ref{sec:olt-energy}), and a household hears it on its own answers only a few
-times a day. We compare two strategies for giving the tiers a current estimate of it:
+times a day. We compare two strategies for giving the tiers a current estimate of it
+(Figure~\ref{fig:olt-strategies}):
 
 \begin{itemize}
   \item \textbf{Timetable.} Every device receives in advance a table with one OLT rate for
@@ -918,6 +919,19 @@ times a day. We compare two strategies for giving the tiers a current estimate o
   OLT's first message, a tier has no figure to use, so it runs every query that reaches it
   and escalates by confidence alone.
 \end{itemize}
+
+\begin{figure}[htb]
+  \centering
+  \caption{The two strategies for sharing the OLT's cost $r_J$
+  (Equation~\eqref{eq:olt-report}) with the tiers below. The timetable holds one rate per
+  hour, for weekdays and for weekends, learned in rounds over a calibration month; the
+  broadcast sends the rate of the last 5 minutes every 10 seconds, in one frame that reaches
+  every ONU on a PON port}
+  \label{fig:olt-strategies}
+  \vspace{6pt}
+  \input{figures/olt_cost_strategies}
+  \legend{Source: The author}
+\end{figure}
 
 \section{Energy Model}
 \label{sec:energy-model}

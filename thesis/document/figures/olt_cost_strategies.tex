@@ -1,0 +1,63 @@
+% The two strategies for sharing the OLT's cost (Section 4.2), one card each, in
+% the card style of the case study's tiers. The timetable card draws the table's
+% shape, one rate per hour and day type, with the example cell of Section 4.3.3
+% in red; it holds no data. The broadcast card draws one report frame reaching
+% every ONU on a PON port. Both hold the same report, r_J (Equation olt-report).
+\begin{tikzpicture}[
+    font=\small,
+    card/.style={draw, thick, rounded corners=3pt, minimum width=6.8cm,
+                 minimum height=4.3cm, fill=white, inner sep=0pt},
+    cell/.style={draw=black!30, line width=0.4pt, fill=black!5,
+                 minimum width=0.19cm, minimum height=0.42cm, inner sep=0pt},
+    box/.style={draw, thick, rounded corners=2pt, minimum width=1.05cm,
+                minimum height=0.6cm, fill=white},
+    report/.style={draw=red, fill=red!12, text=red, rounded corners=1pt,
+                   minimum size=0.46cm, inner sep=1pt, font=\footnotesize},
+    note/.style={font=\footnotesize, text=black!65, inner sep=0pt}
+  ]
+  % #1 x, #2 name, #3 how the report is obtained
+  \newcommand{\strategycard}[3]{%
+    \node[card] (c#2) at (#1, -2.85) {};
+    % Header strip: rounded at the top, square where it meets the body
+    \fill[black, rounded corners=3pt] ([yshift=-0.6cm]c#2.north west)
+      -- (c#2.north west) -- (c#2.north east) -- ([yshift=-0.6cm]c#2.north east)
+      -- cycle;
+    \fill[black] ([yshift=-0.6cm]c#2.north west) rectangle
+      ([yshift=-0.3cm]c#2.north east);
+    \node[text=white, font=\normalsize\bfseries, anchor=west]
+      at ([xshift=0.3cm, yshift=-0.3cm]c#2.north west) {#2};
+    \node[text=white, anchor=east]
+      at ([xshift=-0.3cm, yshift=-0.3cm]c#2.north east) {#3};
+  }
+
+  %--- Timetable: one rate per hour, for weekdays and weekends
+  \strategycard{-3.6}{Timetable}{learned in advance}
+  \foreach \row/\daytype in {0/weekday, 1/weekend} {
+    \node[note, anchor=east] at (-5.4, -1.65-\row*0.5) {\daytype};
+    \foreach \hour in {0,...,23} {
+      \node[cell] at (-5.35+0.095+\hour*0.19, -1.65-\row*0.5) {};
+    }
+  }
+  % The example of Section 4.3.3: weekdays from 14:00 to 15:00
+  \node[cell, draw=red, fill=red!60] at (-5.35+0.095+14*0.19, -1.65) {};
+  \foreach \hour in {0,6,12,18,24} {
+    \node[note, anchor=north] at (-5.35+\hour*0.19, -2.43) {\hour h};
+  }
+  \node[text=red, align=center] at (-3.6, -3.3)
+    {weekdays 14--15h: $r_J$ over the\\ calibration month's 20 such hours};
+  \node[note] at (-3.6, -4.55) {built in rounds over a calibration month};
+
+  %--- Broadcast: one frame on the port reaches every ONU
+  \strategycard{3.6}{Broadcast}{live, every 10\,s}
+  \node[box] (olt) at (1.1, -2.75) {OLT};
+  \node[draw, thick, circle, minimum size=0.36cm, inner sep=0pt, fill=white]
+    (split) at (3.1, -2.75) {};
+  \draw[thick] (olt) -- (split);
+  \node[report] at (2.1, -2.75) {$r_J$};
+  \foreach \onu/\y in {1/-1.65, 2/-2.75, 3/-3.85} {
+    \node[box] (onu\onu) at (6.05, \y) {ONU};
+    \draw[thick] (split) -- (onu\onu.west);
+    \node[report] at ($(split)!0.6!(onu\onu.west)$) {$r_J$};
+  }
+  \node[note] at (3.6, -4.55) {one frame per PON port, over the last 5 min};
+\end{tikzpicture}
